@@ -9,11 +9,11 @@
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/v1/*", "/admin/api/*", "/health"]
   },
+  // Production D1: no database_id → wrangler auto-provisions on first deploy.
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "mygateway-db",
-      "database_id": "local-dev-placeholder"
+      "database_name": "mygateway-db"
     }
   ],
   "triggers": {
@@ -26,5 +26,18 @@
     "MAX_CHANNEL_ATTEMPTS": "3",
     "UPSTREAM_HEADER_TIMEOUT_MS": "30000",
     "USAGE_RETENTION_DAYS": "30"
+  },
+  "env": {
+    // Local development: keep the placeholder ID so `wrangler dev -e local`
+    // uses the on-disk SQLite without provisioning errors.
+    "local": {
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "mygateway-db",
+          "database_id": "local-dev-placeholder"
+        }
+      ]
+    }
   }
 }

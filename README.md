@@ -6,8 +6,39 @@
 >
 > MVP 原则：先完成最小可部署、可调用、可回退、可观测的完整闭环。
 
-## 1. 产品定义
+## 0. 一键部署
 
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Leon00x/mygateway)
+
+### 部署步骤
+
+1. 点击上方按钮，登录 Cloudflare 账号并授权 GitHub 仓库；
+2. Cloudflare 自动创建 Worker 与 D1 数据库（`mygateway-db`）；
+3. 首次部署完成后，在 Cloudflare Dash → Worker → **Settings → Variables and Secrets** 配置两个 Secret：
+
+   | Secret | 用途 | 建议 |
+   |---|---|---|
+   | `ADMIN_TOKEN` | 管理后台登录 | ≥32 字节随机字符串 |
+   | `MASTER_KEY` | Provider Key 加密（AES-GCM） | ≥32 字节随机，建议 base64（如 `openssl rand -base64 32`） |
+
+4. 打开 Worker 的 `workers.dev` 域名，用 `ADMIN_TOKEN` 登录管理后台；
+5. 在 Channels 页添加 Provider 渠道、Models 页创建模型、API Keys 页创建 Gateway Key；
+6. 用 Gateway Key 调用 `/v1/chat/completions`。
+
+### 手动部署（本地命令行）
+
+```bash
+wrangler login          # 登录 Cloudflare
+npx wrangler secret put ADMIN_TOKEN
+npx wrangler secret put MASTER_KEY
+npm run deploy          # 构建前端 → wrangler deploy → 自动创建 D1 并跑 migrations
+```
+
+详细机制见 [docs/DEPLOY.md](docs/DEPLOY.md)。
+
+---
+
+## 1. 产品定义
 Cloudflare AI Aggregation Gateway 是一个部署在用户自己 Cloudflare 账号中的轻量 AI 网关。
 
 用户可以配置多个 OpenAI Compatible 渠道，用一个统一的模型 ID 和 Gateway API Key 调用模型。网关按照管理员保存的固定顺序选择渠道，并在上游尚未开始向客户端返回响应时执行 Fallback。
