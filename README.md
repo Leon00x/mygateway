@@ -467,3 +467,36 @@ MVP 的具体模块、数据表、API、转发流程、安全边界和部署设�
 | cc-switch | 固定渠道切换和配置交互思路 |
 
 参考项目只用于设计参考。MVP 是否复用其代码，需要在实现前单独完成许可证、代码质量和 Cloudflare 运行时兼容性评估。
+
+## 验证（E2E 测试）
+
+MVP 使用 Playwright 做真实浏览器端到端验证，覆盖 README 第 9 节的验收闭环。
+
+前置条件：
+
+```bash
+npm run build:dashboard   # 构建前端（首次或改前端后）
+npx wrangler dev --port 8799   # 启动本地 Worker（另一个终端）
+```
+
+运行：
+
+```bash
+npm run test:e2e            # 无头模式
+npm run test:e2e:headed     # 带浏览器窗口（可观察交互）
+```
+
+测试内容（`e2e/journey.spec.ts`，串行执行）：
+
+1. 未登录访问 → 跳转登录页
+2. 错误 Admin Token → 显示错误
+3. 正确 Token → 登录进入 Dashboard
+4. Channels：预设弹窗添加 DeepSeek 渠道
+5. 创建模型卡片 + 绑定渠道实例（API）
+6. API Keys：创建 Key，明文一次性展示
+7. 真实 HTTP 调用 `/v1/models` 与 `/v1/chat/completions`（Bearer Key → 上游错误透传）
+8. 无认证 → 401
+9. Dashboard 显示渠道与模型
+10. 退出登录 → 回登录页
+
+测试自动清理数据库（删除全部渠道/Key/模型），可重复运行。

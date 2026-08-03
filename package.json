@@ -1,0 +1,33 @@
+{
+  "name": "mygateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "npm run build:dashboard && npm run db:migrate:remote && wrangler deploy",
+    "build": "npm run build:dashboard && wrangler deploy --dry-run",
+    "build:dashboard": "vite build --config dashboard/vite.config.ts",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.18.8",
+    "@cloudflare/workers-types": "^5.20260727.1",
+    "@playwright/test": "^1.62.1",
+    "@solidjs/router": "^0.16.2",
+    "@tailwindcss/vite": "^4.3.3",
+    "solid-js": "^1.9.14",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.1.5",
+    "vite-plugin-solid": "^2.11.13",
+    "vitest": "^4.1.10",
+    "wrangler": "^4.114.0"
+  }
+}

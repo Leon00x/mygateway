@@ -1,0 +1,30 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mygateway",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-07-27",
+  "assets": {
+    "directory": "./dashboard/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/v1/*", "/admin/api/*", "/health"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "mygateway-db",
+      "database_id": "local-dev-placeholder"
+    }
+  ],
+  "triggers": {
+    "crons": ["17 3 * * *"]
+  },
+  "vars": {
+    "APP_VERSION": "0.1.0",
+    "DEFAULT_TIMEZONE": "Asia/Shanghai",
+    "MAX_REQUEST_BYTES": "2097152",
+    "MAX_CHANNEL_ATTEMPTS": "3",
+    "UPSTREAM_HEADER_TIMEOUT_MS": "30000",
+    "USAGE_RETENTION_DAYS": "30"
+  }
+}
