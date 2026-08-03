@@ -7,7 +7,15 @@ import { Page, expect, APIRequestContext } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-export const ADMIN_TOKEN = 'FDBmqO0xSiCNQ17ys6z2OPkkcB10FRkNuclmSU1Xwzo';
+// Admin token is read from env/.dev.vars — NEVER hardcode it in the repo.
+// Tests will fail fast if it's missing so we don't silently run unauthenticated.
+export const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? devVar('ADMIN_TOKEN') ?? '';
+
+if (!ADMIN_TOKEN) {
+  throw new Error(
+    'ADMIN_TOKEN not found. Add it to .dev.vars (or set env) before running E2E tests.',
+  );
+}
 
 /**
  * Read a secret from .dev.vars (local dev only). Returns undefined if missing.
