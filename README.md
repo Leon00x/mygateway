@@ -470,33 +470,57 @@ MVP 的具体模块、数据表、API、转发流程、安全边界和部署设�
 
 ## 验证（E2E 测试）
 
-MVP 使用 Playwright 做真实浏览器端到端验证，覆盖 README 第 9 节的验收闭环。
+MVP 使用 Playwright 驱动真实 Chromium 浏览器做端到端验证，覆盖 README 第 9 节的验收闭环。测试分两层：
 
-前置条件：
+| 套件 | 文件 | 依赖 | 覆盖 |
+|---|---|---|---|
+| UI 旅程 | `e2e/journey.spec.ts`（10 例） | 无外部依赖（dummy key） | 登录鉴权、渠道/模型/Key 管理页交互、网关调用、登出 |
+| 真实集成 | `e2e/realtime.spec.ts`（7 例） | `.dev.vars` 的 `DEEPSEEK_TEST_KEY`（缺失自动跳过） | 真实 DeepSeek 渠道、连接测试、非流式/流式调用、usage 落库 |
+
+### 前置条件
 
 ```bash
 npm run build:dashboard   # 构建前端（首次或改前端后）
 npx wrangler dev --port 8799   # 启动本地 Worker（另一个终端）
 ```
 
-运行：
+### 运行
 
 ```bash
-npm run test:e2e            # 无头模式
+npm run test:e2e            # 全部（无头）
 npm run test:e2e:headed     # 带浏览器窗口（可观察交互）
+npx playwright test e2e/journey.spec.ts    # 仅 UI 旅程
+npx playwright test e2e/realtime.spec.ts   # 仅真实集成
 ```
 
-测试内容（`e2e/journey.spec.ts`，串行执行）：
+### UI 旅程（10 例，全部通过真实页面操作）
 
-1. 未登录访问 → 跳转登录页
+1. 未登录访问 → 跳转登录页（鉴权守卫）
 2. 错误 Admin Token → 显示错误
 3. 正确 Token → 登录进入 Dashboard
-4. Channels：预设弹窗添加 DeepSeek 渠道
-5. 创建模型卡片 + 绑定渠道实例（API）
-6. API Keys：创建 Key，明文一次性展示
+4. Channels：**UI 操作**——预设弹窗选 DeepSeek → 填 API Key → 确认 → 列表出现渠道
+5. Models：**UI 操作**——创建模型表单 → 展开实例 → 选渠道下拉 → 填上游 ID/别名 → 提交
+6. API Keys：**UI 操作**——创建 Key → 明文一次性展示 → 列表出现
 7. 真实 HTTP 调用 `/v1/models` 与 `/v1/chat/completions`（Bearer Key → 上游错误透传）
 8. 无认证 → 401
 9. Dashboard 显示渠道与模型
 10. 退出登录 → 回登录页
 
-测试自动清理数据库（删除全部渠道/Key/模型），可重复运行。
+### 真实集成（7 例，真实 DeepSeek key）
+
+1. 添加真实 key 渠道
+2. 渠道连接测试 → 200 OK
+3. 创建模型卡片 + 绑定实例
+4. 创建 Gateway Key
+5. 非流式调用 → 真实 completion + usage
+6. 流式调用 → `[DONE]` + usage chunk
+7. admin usage 看板反映调用量
+
+测试自动清理数据库（删除全部渠道/Key/模型），可重复运行。真实 key 只存于 `.dev.vars`（已 gitignore），测试从环境读取，不硬编码。
+
+### E2E 抓出的真实 Bug（已修复）
+
+- 非流式 usage 写入丢失：`__waitUntil` hack 从未生效，改为 `ctx.waitUntil` 贯通
+- usage 看板漏当前分钟：`endMinute` 边界差一，`<` 排除当前分钟，改为 `+60`
+- 删除 model card 后 `unified_model_id` UNIQUE 被软删行占住：删除时改写为 `deleted:<id>:<ts>` 释放约束
+- 删除 channel 后 alias 被占住：级联硬删 instances + identifiers
