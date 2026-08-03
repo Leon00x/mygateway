@@ -51,6 +51,53 @@ MVP 只支持：
 
 ## 2. 总体架构
 
+### 2.0 Cloudflare 组件一览
+
+MVP 只使用以下 Cloudflare 组件：
+
+| 组件 | 数量 | 用途 | 计费/限制（2026 免费档） |
+|---|---|---|---|
+| Cloudflare Worker | 1 | 承载网关 API + 管理 API + 静态资源 | 10ms CPU / 请求 |
+| Worker Static Assets | 1 | 托管 SolidJS 管理后台构建产物 | 包含在 Worker 内 |
+| D1 数据库 | 1（mygateway-db） | 配置、加密密钥、分钟级用量统计 | 5M 行读 / 100k 行写 / 天 |
+| Worker Secrets | 2（ADMIN_TOKEN / MASTER_KEY） | 管理员登录凭证 + Provider Key 加密密钥 | — |
+| Cron Trigger | 1（每日 03:17） | 清理 30 天前用量数据 | — |
+| workers.dev 子域名 | 1 | 部署后访问入口 | 100k 请求 / 天 |
+
+不使用的组件：Pages、KV、R2、Durable Objects、Queues、Vectorize、GitHub Actions（部署用 Cloudflare 自家 Builds）。
+
+### 2.1 部署形态总览
+
+```text
+                            ┌─────────────────────────────────────┐
+                            │     用户自己的 Cloudflare 账号      │
+                            │                                     │
+ 浏览器 / OpenAI SDK        │   ┌─────────────────────────────┐   │
+      │                     │   │   Cloudflare Worker         │   │
+      ▼                     │   │   (mygateway)               │   │
+  workers.dev 子域名 ───────┼─▶ │                             │   │
+      │                     │   │  Static Assets              │   │
+      │                     │   │  └─ SolidJS 管理后台         │   │
+      │                     │   │                             │   │
+      │                     │   │  /v1/*   网关 API           │   │
+      │                     │   │  /admin/* 管理 API          │   │
+      │                     │   │  /health 存活检查            │   │
+      │                     │   └──────────┬──────────┬───────┘   │
+      │                     │              │          │           │
+      │                     │   ┌──────────▼──┐   ┌───▼────────┐  │
+      │                     │   │  D1 数据库   │   │ AI Provider│  │
+      │                     │   │ mygateway-db │   │ (DeepSeek/ │  │
+      │                     │   │ 7 张表       │   │  OpenAI 等)│  │
+      │                     │   │ Secrets:     │   │ OpenAI 兼容│  │
+      │                     │   │ ADMIN_TOKEN  │   └────────────┘  │
+      │                     │   │ MASTER_KEY   │                   │
+      │                     │   └──────────────┘                   │
+      │                     │   Cron: 每日 03:17 清理用量          │
+      └─────────────────────┴─────────────────────────────────────┘
+```
+
+### 2.2 模块与数据流
+
 ```text
                          Cloudflare Edge
 
@@ -61,30 +108,41 @@ MVP 只支持：
 │                   单个 Cloudflare Worker                 │
 │                                                          │
 │  Static Assets                                           │
-│  └── SolidJS 管理后台                                    │
+│  └── SolidJS 管理后台 (Dashboard/Channels/Models/        │
+│      ApiKeys/System)                                     │
 │                                                          │
 │  /admin/api/*                                            │
-│  ├── Admin Session 认证                                  │
+│  ├── Admin Session 认证 (HMAC-SHA256 Cookie)             │
 │  ├── Channels / Models / Keys CRUD                       │
-│  └── Usage 查询                                          │
+│  └── Usage 查询 (今日/7天/30天)                           │
 │                                                          │
 │  /v1/*                                                   │
-│  ├── Gateway Key 认证                                    │
-│  ├── Model Resolver                                      │
-│  ├── Fixed Router                                        │
-│  ├── OpenAI Provider Adapter                             │
-│  ├── Pre-response Fallback                               │
-│  └── SSE / Usage Collector                               │
+│  ├── Gateway Key 认证 (SHA-256 hash 比对)                │
+│  ├── Model Resolver (统一 ID / 完整别名)                 │
+│  ├── Fixed Priority Router (sort_order 升序)             │
+│  ├── Pre-response Fallback (最多 3 个渠道)               │
+│  ├── Provider Key 解密 (AES-256-GCM)                    │
+│  └── SSE / Usage Collector (ctx.waitUntil 落库)          │
 │                                                          │
-│  /health                                                 │
+│  /health  (无认证存活检查)                                │
 └──────────────────────┬───────────────────┬───────────────┘
                        │                   │
-                       ▼                   ▼
-                    D1 数据库          AI Provider
-                配置、密钥、统计      OpenAI Compatible
+          D1 数据库    │                   │   AI Provider
+     ┌─────────────────▼───┐   ┌───────────▼────────────┐
+     │ channels            │   │ OpenAI Compatible      │
+     │ model_cards         │   │ (OpenAI / DeepSeek /   │
+     │ channel_models      │   │  SiliconFlow / Moonshot│
+     │ model_identifiers   │   │  / Zhipu)              │
+     │ gateway_api_keys    │   │ /chat/completions      │
+     │ usage_minutes       │   │ /models                │
+     │ system_settings     │   └────────────────────────┘
+     └─────────────────────┘
+
+  Cron (每日 03:17)
+     └── DELETE FROM usage_minutes WHERE timestamp < now-30d
 ```
 
-### 2.1 请求安全边界
+### 2.3 请求安全边界
 
 ```text
 /admin/*      使用管理员 Session Cookie，不接受 Gateway Key 代替管理认证
@@ -93,7 +151,7 @@ MVP 只支持：
 静态资源       无认证；页面可加载，但管理数据必须经过 /admin/api/* 认证
 ```
 
-### 2.2 为什么不使用 Pages
+### 2.4 为什么不使用 Pages
 
 Deploy to Cloudflare Button 当前只部署 Workers 应用。把 SolidJS 构建结果作为 Worker Static Assets 可以：
 
@@ -1217,6 +1275,8 @@ WHERE timestamp_minute >= ? AND timestamp_minute < ?;
 
 ### 16.1 Wrangler 配置示意
 
+生产配置不含 `database_id`（wrangler 首次部署自动 provision D1），本地开发用 `env.local` 占位符：
+
 ```jsonc
 {
   "$schema": "node_modules/wrangler/config-schema.json",
@@ -1229,12 +1289,9 @@ WHERE timestamp_minute >= ? AND timestamp_minute < ?;
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/v1/*", "/admin/api/*", "/health"]
   },
+  // 生产：无 database_id → wrangler deploy 时自动创建并绑定
   "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "mygateway-db",
-      "database_id": "<deploy-button-provisioned>"
-    }
+    { "binding": "DB", "database_name": "mygateway-db" }
   ],
   "triggers": {
     "crons": ["17 3 * * *"]
@@ -1246,54 +1303,76 @@ WHERE timestamp_minute >= ? AND timestamp_minute < ?;
     "MAX_CHANNEL_ATTEMPTS": "3",
     "UPSTREAM_HEADER_TIMEOUT_MS": "30000",
     "USAGE_RETENTION_DAYS": "30"
+  },
+  "env": {
+    // 本地开发：用占位符避免 auto-provision 提示
+    "local": {
+      "d1_databases": [
+        { "binding": "DB", "database_name": "mygateway-db", "database_id": "local-dev-placeholder" }
+      ]
+    }
   }
 }
 ```
-
-具体 Wrangler 字段应在实现时用当前 CLI schema 校验，不能只凭文档示意直接发布。
 
 ### 16.2 package scripts
 
 ```json
 {
   "scripts": {
-    "dev": "vite",
+    "dev": "wrangler dev",
     "build": "npm run build:dashboard && wrangler deploy --dry-run",
     "build:dashboard": "vite build --config dashboard/vite.config.ts",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
-    "deploy": "npm run build:dashboard && npm run db:migrate:remote && wrangler deploy",
+    "deploy": "npm run build:dashboard && wrangler deploy && npm run db:migrate:remote",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "typecheck": "tsc --noEmit"
   }
 }
 ```
 
-Deploy Button 通过仓库 URL工作，读取 Wrangler 资源绑定，并使用 `deploy` script 执行 migration 和部署。
+Deploy 顺序说明：`wrangler deploy` 在前（触发 D1 自动 provision），migration 在后（对已创建的库建表）。Deploy Button 通过仓库 URL 工作，读取 Wrangler 资源绑定，并使用 `deploy` script 执行构建、部署和迁移。
 
 ### 16.3 部署流程
 
 ```text
-Deploy to Cloudflare
-  → 克隆公共仓库
-  → 用户确认 Worker 名称和 D1 名称
-  → 用户填写 ADMIN_TOKEN、MASTER_KEY
-  → 自动创建 D1 binding
-  → 安装依赖
-  → 构建 SolidJS
-  → 执行 D1 migrations
-  → 部署 Worker + Static Assets
-  → 打开 /admin 登录
+ 用户点击 Deploy Button（deploy.workers.cloudflare.com/?url=<repo>）
+        │
+        ▼
+ 登录 Cloudflare + 授权 GitHub
+        │
+        ▼
+ Workers Builds（Git 集成）
+   ├─ 读取仓库 wrangler.jsonc（识别 Worker/D1/Assets 绑定）
+   ├─ 自动创建 Worker `mygateway`
+   ├─ 自动创建 D1 `mygateway-db`（wrangler auto-provision）
+   ├─ npm install
+   ├─ npm run build:dashboard（Vite 构建 SolidJS → dashboard/dist）
+   ├─ wrangler deploy（上传 Worker + Static Assets，写入真实 database_id）
+   └─ wrangler d1 migrations apply DB --remote（建 7 张表）
+        │
+        ▼
+ 部署完成，获得 workers.dev 子域名
+        │
+        ▼
+ 用户在 Dash → Settings → Variables and Secrets 手动配置：
+   ├─ ADMIN_TOKEN（管理后台登录）
+   └─ MASTER_KEY（Provider Key AES-GCM 加密）
+        │
+        ▼
+ 打开 workers.dev → 登录 → 添加渠道/模型/Key → 网关可用
 ```
 
-仓库根目录提供：
+仓库根目录提供 `.dev.vars.example` 模板（仅字段名，空值）：
 
 ```dotenv
 ADMIN_TOKEN=
 MASTER_KEY=
 ```
 
-Deploy Button 根据 `.dev.vars.example` 把这两个值作为 Worker Secrets 收集，不能把示例文件替换成带真实值的 `.dev.vars` 并提交到 Git。
+Secrets 由用户在部署后通过 Dash 手动配置（Deploy Button 不会自动提示），不能把示例文件替换成带真实值的 `.dev.vars` 并提交到 Git。
 
 ### 16.4 Secret 生成说明
 

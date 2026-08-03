@@ -488,7 +488,32 @@ MVP 必须满足：
 
 ## 11. 技术架构
 
-MVP 的具体模块、数据表、API、转发流程、安全边界和部署设计见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+MVP 只用 5 类 Cloudflare 组件：**1 个 Worker + Static Assets + 1 个 D1 数据库 + 2 个 Secrets + 1 个 Cron**，不依赖 Pages/KV/R2/GitHub Actions。
+
+```text
+     浏览器 / OpenAI SDK
+           │
+           ▼
+ workers.dev ───────────▶ 单个 Cloudflare Worker（mygateway）
+                                │
+        ┌───────────────────────┼──────────────────────────┐
+        │                       │                          │
+ Static Assets            /admin/api/*                /v1/*
+ SolidJS 管理后台         Session Cookie 认证          Gateway Key 认证
+ (登录/渠道/模型/          Channels/Models/Keys        Model Resolver
+  Keys/看板)               CRUD + Usage 查询           Fixed Router
+        │                       │                    Fallback + SSE
+        └───────────┬───────────┴──────────┬──────────┘
+                    │                      │
+              D1 数据库                 AI Provider
+             (7 张表：配置、          (OpenAI Compatible:
+              加密密钥、用量统计)       DeepSeek/OpenAI 等)
+
+ Secrets: ADMIN_TOKEN + MASTER_KEY（Dash 手动配置）
+ Cron: 每日 03:17 清理 30 天前用量
+```
+
+具体模块、数据表、API、转发流程、安全边界和部署设计见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
 ## 12. 参考项目
 

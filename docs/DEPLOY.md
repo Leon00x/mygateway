@@ -28,7 +28,7 @@ Cloudflare Dash 读取仓库的 `wrangler.jsonc`，走 **Workers Builds（Git �
    - wrangler 源码 `provisionBindings()` → `collectPendingResources()` → `D1Handler`（`HANDLERS` 注册表包含 `d1`），缺 ID 时自动执行创建流程
 4. **执行 Build 命令 + Deploy 命令**：
    - Deploy 命令默认 `npx wrangler deploy`，可自定义（官方文档确认）
-   - 我们已在 `package.json` 配好 `"deploy": "npm run build:dashboard && npm run db:migrate:remote && wrangler deploy"`
+   - 我们已在 `package.json` 配好 `"deploy": "npm run build:dashboard && wrangler deploy && npm run db:migrate:remote"`
 5. **构建产物上传**：`wrangler deploy` 自动上传 `assets.directory`（`./dashboard/dist`）作为 Worker Static Assets
 
 ## 3. 需要改动的文件
@@ -85,12 +85,10 @@ Cloudflare Dash 读取仓库的 `wrangler.jsonc`，走 **Workers Builds（Git �
 ### 3.3 `package.json` deploy 脚本（已就绪）
 
 ```json
-"deploy": "npm run build:dashboard && npm run db:migrate:remote && wrangler deploy"
+"deploy": "npm run build:dashboard && wrangler deploy && npm run db:migrate:remote"
 ```
 
-问题：`wrangler d1 migrations apply DB --remote` 在 D1 刚 auto-provision 后执行是否成功？
-- **需要实测**。若 migrations apply 早于 D1 provision 完成，会报数据库不存在。
-- 备选：Deploy 命令只跑 `wrangler deploy`（D1 自动创建），migrations 由用户 Dash 上手动跑一次，或后续 build 触发。
+顺序说明：`wrangler deploy` 在前（触发 D1 auto-provision），migration 在后（对已创建/已绑定的库建表）。若 Deploy Button 实测发现 migration 早于 provision 完成，可把 migration 改为 deploy 后单独触发或 Dash 手动执行。
 
 ### 3.4 Secrets —— ADMIN_TOKEN / MASTER_KEY
 
