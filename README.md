@@ -6,6 +6,9 @@
 >
 > MVP 原则：先完成最小可部署、可调用、可回退、可观测的完整闭环。
 
+文档入口：[更新日志](CHANGELOG.md) · [下一阶段路线图](docs/ROADMAP.md) ·
+[架构设计](docs/ARCHITECTURE.md) · [部署指南](docs/DEPLOY.md)
+
 ## 0. 一键部署
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Leon00x/mygateway)
@@ -68,7 +71,8 @@ npm run dev          # 启动本地 Worker（http://localhost:8799）
 npm run db:migrate:local
 ```
 
-详细机制见 [docs/DEPLOY.md](docs/DEPLOY.md)。
+详细机制见 [docs/DEPLOY.md](docs/DEPLOY.md)，已上线变化见
+[CHANGELOG.md](CHANGELOG.md)。
 
 ---
 
@@ -507,6 +511,8 @@ MVP 必须满足：
 - [ ] 代表性负载测试不持续触发 Workers 1102 或 D1 配额错误。
 
 ## 10. 后续版本方向
+
+下一开发项的范围、非目标和验收条件见 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
 ### v0.2：协议和 Provider 扩展
 
