@@ -20,6 +20,7 @@ import {
   ModelCardRow,
   ChannelModelRow,
 } from '../db/models.ts';
+import { invalidateModelRouteCache } from '../gateway/access-resolver.ts';
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -68,6 +69,7 @@ export async function handleModelsCollection(
       // Create model card + identifier (sequential, not batch — D1 batch can hang in local dev)
       await createModelCard(env.DB, { id, unified_model_id: body.unified_model_id, display_name: body.display_name });
       await createIdentifier(env.DB, { identifier: body.unified_model_id, identifier_type: 'unified', model_card_id: id, channel_model_id: null });
+      invalidateModelRouteCache();
 
       const card = await getModelCard(env.DB, id);
       return json({ ...card, instances: [] }, 201);
@@ -100,6 +102,7 @@ export async function handleModelItem(
     try {
       const body = (await request.json()) as { display_name?: string; status?: string };
       await updateModelCard(env.DB, id, body);
+      invalidateModelRouteCache();
       const updated = await getModelCard(env.DB, id);
       const instances = await listChannelModels(env.DB, id);
       return json({ ...updated, instances });
@@ -120,6 +123,7 @@ export async function handleModelItem(
     await env.DB.prepare('UPDATE channel_models SET deleted_at = ?, updated_at = ? WHERE model_card_id = ?')
       .bind(now, now, id)
       .run();
+    invalidateModelRouteCache();
     return new Response(null, { status: 204 });
   }
 
@@ -182,6 +186,7 @@ export async function handleModelInstances(
       plan_expires_at: null,
     });
     await createIdentifier(env.DB, { identifier: body.public_model_alias, identifier_type: 'alias', model_card_id: modelId, channel_model_id: instanceId });
+    invalidateModelRouteCache();
 
     const instances = await listChannelModels(env.DB, modelId);
     return json({ ...card, instances }, 201);
@@ -210,6 +215,7 @@ export async function handleReorderInstances(
     }
 
     await reorderInstances(env.DB, modelId, body.instance_ids);
+    invalidateModelRouteCache();
     const card = await getModelCard(env.DB, modelId);
     const instances = await listChannelModels(env.DB, modelId);
     return json({ ...card, instances });

@@ -317,6 +317,8 @@ GET  /v1/models
 - 清理 Cookie、Cloudflare Header、客户端凭据等不应转发的 Header；
 - 将客户端取消信号传递给上游；
 - 返回 Gateway Request ID 便于排查。
+- 冷请求用一次 D1 batch 同时完成 Gateway Key 鉴权和模型路由；
+- 热请求使用有界 isolate 内存 TTL 缓存，不引入 KV、Queues 或 Durable Objects；
 
 `/v1/models` 根据已启用的统一模型和完整公开别名生成兼容模型列表。
 
@@ -454,6 +456,8 @@ MVP 必须满足：
 
 - 网关响应体必须采用流式转发，不能缓存完整 SSE；
 - 典型请求的 Workers CPU P95 目标小于 8ms；
+- Key/路由缓存仅作为可丢失的软缓存，D1 始终是唯一权威数据源；
+- Gateway Key 跨 isolate 最长约 30 秒失效，渠道/模型配置最长约 60 秒收敛；
 - 上线前必须对长 SSE、JSON 解析、Fallback 和密钥解密做 CPU 实测；
 - 达不到 Workers Free 10ms CPU 约束时，应优化实现或明确要求 Workers Paid，不能静默牺牲正确性。
 

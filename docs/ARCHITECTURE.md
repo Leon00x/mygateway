@@ -125,6 +125,8 @@ mygateway/
 │   │   └── gateway-key.ts          # Gateway Key hash 验证（SHA-256）
 │   ├── crypto/
 │   │   └── provider-key.ts         # Provider Key AES-256-GCM 加解密
+│   ├── cache/
+│   │   └── ttl-lru.ts              # 有容量上限的 isolate 内存 TTL/LRU 缓存
 │   ├── admin/
 │   │   ├── router.ts               # /admin/api/* 路由 + Session 鉴权
 │   │   ├── channels.ts             # 渠道 CRUD + 连接测试
@@ -134,8 +136,8 @@ mygateway/
 │   │   └── system.ts               # 系统状态 + Provider 预设
 │   ├── gateway/
 │   │   ├── hono.ts                 # /v1/* Hono + OpenAPI 路由 + Bearer 鉴权中间件
+│   │   ├── access-resolver.ts      # Key 鉴权 + 模型路由单次 D1 batch 与软缓存
 │   │   ├── chat-completions.ts     # Chat Completions 代理（含 Fallback + 用量采集）
-│   │   ├── model-resolver.ts       # 统一模型 ID / 完整别名解析
 │   │   ├── models-list.ts          # /v1/models 列表
 │   │   └── fallback-policy.ts      # 上游错误分类（可回退/不可回退）
 │   ├── streaming/
@@ -433,12 +435,13 @@ WHERE key_hash = ?
 LIMIT 1;
 ```
 
-统一模型候选查询：
+模型标识符与候选渠道通过一条 LEFT JOIN 查询解析。LEFT JOIN 会在所有候选停用时保留标识符行，用于区分“不存在”和“暂不可用”：
 
 ```sql
 SELECT
-  mc.id AS model_card_id,
-  mc.unified_model_id,
+  mi.identifier_type,
+  mi.model_card_id,
+  mi.channel_model_id AS direct_channel_model_id,
   cm.id AS channel_model_id_pk,
   cm.channel_model_id,
   cm.public_model_alias,
@@ -451,44 +454,25 @@ SELECT
   c.api_key_ciphertext,
   c.api_key_iv,
   c.api_key_version
-FROM model_cards mc
-JOIN channel_models cm ON cm.model_card_id = mc.id
-JOIN channels c ON c.id = cm.channel_id
-WHERE mc.id = ?
-  AND mc.status = 'active'
-  AND mc.deleted_at IS NULL
-  AND cm.status = 'active'
-  AND cm.deleted_at IS NULL
-  AND c.status = 'active'
-  AND c.deleted_at IS NULL
+FROM model_identifiers mi
+JOIN model_cards mc
+  ON mc.id = mi.model_card_id
+LEFT JOIN channel_models cm
+  ON cm.model_card_id = mi.model_card_id
+ AND mc.status = 'active'
+ AND mc.deleted_at IS NULL
+ AND cm.status = 'active'
+ AND cm.deleted_at IS NULL
+ AND (mi.identifier_type = 'unified' OR cm.id = mi.channel_model_id)
+LEFT JOIN channels c
+  ON c.id = cm.channel_id
+ AND c.status = 'active'
+ AND c.deleted_at IS NULL
+WHERE mi.identifier = ?
 ORDER BY cm.sort_order ASC, cm.id ASC;
 ```
 
-完整别名查询：
-
-```sql
-SELECT /* 与候选查询相同字段 */
-FROM channel_models cm
-JOIN model_cards mc ON mc.id = cm.model_card_id
-JOIN channels c ON c.id = cm.channel_id
-WHERE cm.id = ?
-  AND mc.status = 'active'
-  AND mc.deleted_at IS NULL
-  AND cm.status = 'active'
-  AND cm.deleted_at IS NULL
-  AND c.status = 'active'
-  AND c.deleted_at IS NULL
-LIMIT 1;
-```
-
-公共模型标识符解析：
-
-```sql
-SELECT identifier_type, model_card_id, channel_model_id
-FROM model_identifiers
-WHERE identifier = ?
-LIMIT 1;
-```
+正常 Chat 请求在缓存全未命中时，将 Gateway Key 查询与上述路由查询放入同一个 `DB.batch()`，只产生一次 D1 网络往返。命中 isolate 内存缓存时不访问 D1。
 
 分钟用量 UPSERT：
 
@@ -676,11 +660,11 @@ x-gateway-request-id: <uuid>
 POST /v1/chat/completions
     │
     ├─ 1. 生成 Gateway Request ID
-    ├─ 2. 校验 Gateway Bearer Key
-    ├─ 3. 限制并读取 JSON body
-    ├─ 4. 校验 model、messages、stream
-    ├─ 5. 精确解析统一模型或完整别名
-    ├─ 6. 获取已启用渠道候选
+    ├─ 2. 提取并 hash Gateway Bearer Key
+    ├─ 3. 限制并读取 JSON body，校验 model/messages
+    ├─ 4. 查询 isolate 内存中的 Key/路由 TTL 缓存
+    ├─ 5. 缓存未命中：一次 D1 batch 完成鉴权和候选解析
+    ├─ 6. 缓存命中：不访问 D1；按统一模型/完整别名确定候选
     ├─ 7. 逐候选构造并发送上游请求
     │      ├─ 响应前可回退错误 → 下一候选
     │      └─ 接受响应 → 锁定最终渠道
@@ -1306,9 +1290,9 @@ Cron 不执行：
 | Worker CPU | 10ms/请求 | 流式转发、有限 JSON 解析、实现后 CPU profile |
 | Worker 子请求 | 50/请求 | 最多 3 个 Provider fetch，加少量 D1 查询 |
 | 并发出站连接 | 6/请求 | 候选串行尝试，不并行广播 |
-| D1 行读取 | 5,000,000/天 | 索引、固定范围看板、限制查询频率 |
+| D1 行读取 | 5,000,000/天 | 索引、单次 batch、短 TTL isolate 缓存 |
 | D1 行写入 | 100,000/天 | 每客户端请求一次 usage UPSERT，实测索引写放大 |
-| D1 大小 | 500MB/库 | 只存配置和 30 天分钟聚合 |
+| D1 大小 | 5GB（账号总计） | 只存配置和 30 天分钟聚合 |
 
 ### 18.2 降级原则
 
@@ -1320,14 +1304,24 @@ Cron 不执行：
 
 ### 18.3 D1 单点影响
 
-D1 配置查询默认依赖数据库 primary。全球 Edge 不代表 D1 查询一定本地完成。实现后必须测量：
+D1 配置查询默认依赖数据库 primary。全球 Edge 不代表 D1 查询一定本地完成。当前数据面采用以下免费档优化：
+
+- 正常 Chat 冷请求用一次 `DB.batch()` 完成 Key 鉴权和路由查询；
+- 有效 Key 缓存 30 秒，无效 Key 缓存 5 秒，最多 1,000 条；
+- 成功路由缓存 60 秒，不存在/不可用模型缓存 5 秒，最多 200 条；
+- 缓存只保存 Key hash 的验证结果、路由配置和 Provider Key 密文，不保存任何原始 Key 明文；
+- 管理 API 写入会清空当前 isolate 的相关缓存，其他 isolate 依靠 TTL 收敛；
+- isolate 被回收或缓存淘汰时自动回源 D1，D1 始终是唯一权威数据源；
+- 不引入 KV、Queues、Durable Objects，缓存本身不产生额外存储操作费用。
+
+必须持续测量：
 
 - 不同地区的 Gateway Key 查询延迟；
 - 模型候选查询延迟；
 - 加 D1 后的首字节增量；
-- 是否需要短 TTL isolate 内存缓存。
+- 缓存命中率和单次 batch 的首字节增量。
 
-若增加缓存，必须定义 Gateway Key 撤销和渠道停用的最大生效延迟。MVP 初始实现以 D1 为权威，不先引入 KV。
+Gateway Key 撤销在执行管理请求的当前 isolate 立即生效，跨 isolate 最长约 30 秒；渠道或模型停用跨 isolate 最长约 60 秒。需要全局即时失效时必须回到逐请求权威查询，或引入额外协调组件。
 
 ## 19. 可观测性
 
@@ -1394,6 +1388,8 @@ GET /health
 - HTTP/Provider 错误分类；
 - AES-GCM round trip、错误 key 和错误 AAD；
 - Gateway Key 生成和 hash；
+- TTL/LRU 到期、容量淘汰和负缓存；
+- Key 鉴权与模型路由冷请求单次 batch、热请求零 D1；
 - Admin Session 过期、篡改和 Token 轮换；
 - Header 白名单；
 - Base URL 规范化；
@@ -1419,7 +1415,7 @@ GET /health
 - 本地 D1 migrations；
 - 渠道 CRUD 和 Key 不回显；
 - 模型实例和原子重排；
-- Gateway Key 撤销即时生效；
+- Gateway Key 撤销在当前 isolate 立即清缓存，其他 isolate 在 30 秒内失效；
 - 第一渠道 503、第二渠道成功；
 - 第一渠道 400 不尝试第二渠道；
 - 指定别名 503 不尝试第二渠道；

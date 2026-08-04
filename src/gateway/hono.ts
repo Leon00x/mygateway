@@ -10,9 +10,9 @@ import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 import { apiReference } from '@scalar/hono-api-reference';
 import { Env } from '../env.ts';
 import { extractGatewayKey, hashGatewayKey } from '../auth/gateway-key.ts';
-import { findActiveKeyByHash } from '../db/keys.ts';
 import { handleChatCompletions } from './chat-completions.ts';
 import { handleModelsList } from './models-list.ts';
+import { authenticateGatewayKeyHash } from './access-resolver.ts';
 
 // Env type for Hono handlers — reuse the full Env so existing handlers type-check.
 type Bindings = Env;
@@ -20,6 +20,7 @@ type Bindings = Env;
 // Variables stored per-request (middleware → handler)
 interface Variables {
   requestId: string;
+  gatewayKeyHash: string;
 }
 
 export const gatewayApp = new OpenAPIHono<{
@@ -54,7 +55,15 @@ gatewayApp.use('/v1/*', async (c, next) => {
   }
 
   const keyHash = await hashGatewayKey(rawKey);
-  const keyRecord = await findActiveKeyByHash(c.env.DB, keyHash);
+  c.set('gatewayKeyHash', keyHash);
+
+  // The chat handler batches authentication and model routing after reading
+  // the model name. Other /v1 routes authenticate here as usual.
+  if (c.req.path === '/v1/chat/completions') {
+    return next();
+  }
+
+  const keyRecord = await authenticateGatewayKeyHash(c.env.DB, keyHash);
   if (!keyRecord) {
     return c.json(
       {
@@ -166,9 +175,16 @@ const chatRoute = createRoute({
 
 gatewayApp.openapi(chatRoute, async (c) => {
   const requestId = c.get('requestId') as string;
+  const gatewayKeyHash = c.get('gatewayKeyHash') as string;
   // Reconstruct a standard Request from c.req so the existing handler works unchanged
   const upstream = c.req.raw;
-  const response = await handleChatCompletions(upstream, c.env, c.executionCtx as unknown as ExecutionContext, requestId);
+  const response = await handleChatCompletions(
+    upstream,
+    c.env,
+    c.executionCtx as unknown as ExecutionContext,
+    requestId,
+    gatewayKeyHash,
+  );
   return new Response(response.body, {
     status: response.status,
     headers: response.headers,

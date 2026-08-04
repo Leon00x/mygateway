@@ -17,6 +17,7 @@ import {
   ChannelRow,
 } from '../db/channels.ts';
 import { encryptProviderKey } from '../crypto/provider-key.ts';
+import { invalidateModelRouteCache } from '../gateway/access-resolver.ts';
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -100,6 +101,7 @@ export async function handleChannelsCollection(
         status: 'active',
         notes: body.notes ?? null,
       });
+      invalidateModelRouteCache();
 
       const channel = await getChannel(env.DB, id);
       return json(toPublicChannel(channel!), 201);
@@ -168,6 +170,7 @@ export async function handleChannelItem(
       }
 
       await updateChannel(env.DB, id, updates);
+      invalidateModelRouteCache();
       const updated = await getChannel(env.DB, id);
       return json(toPublicChannel(updated!));
     } catch (e) {
@@ -179,6 +182,7 @@ export async function handleChannelItem(
     // Cascade: soft-delete all model instances referencing this channel
     await softDeleteInstancesByChannel(env.DB, id);
     await softDeleteChannel(env.DB, id);
+    invalidateModelRouteCache();
     return new Response(null, { status: 204 });
   }
 

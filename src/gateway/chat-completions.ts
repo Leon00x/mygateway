@@ -6,13 +6,13 @@ import { Env, parseConfig } from '../env.ts';
 import { gatewayErrorResponse } from '../http/errors.ts';
 import { buildUpstreamHeaders, gatewayResponseHeaders } from '../http/headers.ts';
 import { readLimitedBody, BodyTooLargeError } from '../http/body-limit.ts';
-import { resolveModel, ModelNotFoundError, ModelUnavailableError } from './model-resolver.ts';
 import { classifyUpstreamError } from './fallback-policy.ts';
 import { decryptProviderKey } from '../crypto/provider-key.ts';
 import { SseDecoder, extractNonStreamUsage, Usage } from '../streaming/sse-decoder.ts';
 import { upsertUsageMinute } from '../db/usage.ts';
 import { nowMinute } from '../shared/ids.ts';
 import { logEvent } from '../shared/log.ts';
+import { authenticateGatewayKeyHash, resolveGatewayAccess } from './access-resolver.ts';
 
 /**
  * POST /v1/chat/completions
@@ -22,8 +22,15 @@ export async function handleChatCompletions(
   env: Env,
   ctx: ExecutionContext,
   requestId: string,
+  gatewayKeyHash: string,
 ): Promise<Response> {
   const config = parseConfig(env);
+
+  const invalidKeyResponse = () => gatewayErrorResponse(
+    'invalid_api_key',
+    'Invalid API key',
+    requestId,
+  );
 
   // 1. Read and validate body
   let bodyText: string | null;
@@ -31,20 +38,34 @@ export async function handleChatCompletions(
     bodyText = await readLimitedBody(request, config.maxRequestBytes, requestId);
   } catch (e) {
     if (e instanceof BodyTooLargeError) {
+      if (!(await authenticateGatewayKeyHash(env.DB, gatewayKeyHash))) return invalidKeyResponse();
       return gatewayErrorResponse('request_too_large', 'Request body exceeds size limit', requestId);
     }
     throw e;
   }
 
-  let body: Record<string, unknown>;
+  let body: Record<string, unknown> | null = null;
   try {
-    body = JSON.parse(bodyText!);
+    const parsed = JSON.parse(bodyText ?? '');
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      body = parsed as Record<string, unknown>;
+    }
   } catch {
-    return gatewayErrorResponse('invalid_request', 'Invalid JSON body', requestId);
+    // Authenticate first so malformed bodies cannot reveal validation behavior
+    // to callers with an invalid but syntactically well-formed Gateway Key.
   }
 
-  const model = body.model;
-  if (typeof model !== 'string' || !model || model.length > 128) {
+  const model = body?.model;
+  const modelCanResolve = typeof model === 'string' && model.length > 0 && model.length <= 128;
+  const access = modelCanResolve
+    ? await resolveGatewayAccess(env.DB, gatewayKeyHash, model)
+    : { key: await authenticateGatewayKeyHash(env.DB, gatewayKeyHash), model: null };
+
+  if (!access.key) return invalidKeyResponse();
+  if (!body) {
+    return gatewayErrorResponse('invalid_request', 'Invalid JSON body', requestId);
+  }
+  if (!modelCanResolve) {
     return gatewayErrorResponse('invalid_request', 'model must be a non-empty string (max 128 chars)', requestId, 'model');
   }
 
@@ -55,21 +76,20 @@ export async function handleChatCompletions(
 
   const isStream = body.stream === true;
 
-  // 2. Resolve model
-  let resolved;
-  try {
-    resolved = await resolveModel(env.DB, model);
-  } catch (e) {
-    if (e instanceof ModelNotFoundError) {
-      return gatewayErrorResponse('model_not_found', e.message, requestId, 'model');
-    }
-    if (e instanceof ModelUnavailableError) {
-      return gatewayErrorResponse('model_unavailable', e.message, requestId, 'model');
-    }
-    throw e;
+  // 2. Authentication and model routing were resolved together above.
+  if (!access.model || access.model.status === 'not_found') {
+    return gatewayErrorResponse('model_not_found', `Model '${model}' not found`, requestId, 'model');
+  }
+  if (access.model.status === 'unavailable') {
+    return gatewayErrorResponse(
+      'model_unavailable',
+      `No active channel available for model '${model}'`,
+      requestId,
+      'model',
+    );
   }
 
-  const { direct, candidates, unifiedModelId, modelCardId } = resolved;
+  const { direct, candidates, unifiedModelId, modelCardId } = access.model.value;
   const maxAttempts = Math.min(candidates.length, config.maxChannelAttempts);
 
   // 3. Try candidates with fallback

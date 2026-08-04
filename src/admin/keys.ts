@@ -15,6 +15,7 @@ import {
   deleteGatewayKey,
   toPublicKey,
 } from '../db/keys.ts';
+import { invalidateGatewayKeyCache } from '../gateway/access-resolver.ts';
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -49,6 +50,7 @@ export async function handleKeysCollection(
       const id = generateId();
 
       await createGatewayKey(env.DB, { id, name: body.name, key_prefix: prefix, key_hash: keyHash });
+      invalidateGatewayKeyCache();
 
       // Return the raw key ONCE
       const key = await listGatewayKeys(env.DB);
@@ -79,6 +81,7 @@ export async function handleKeyItem(
           return gatewayErrorResponse('invalid_request', 'Invalid status', requestId);
         }
         await updateGatewayKeyStatus(env.DB, id, body.status as 'active' | 'disabled');
+        invalidateGatewayKeyCache();
       }
       const keys = await listGatewayKeys(env.DB);
       const key = keys.find((k) => k.id === id);
@@ -91,6 +94,7 @@ export async function handleKeyItem(
 
   if (request.method === 'DELETE') {
     await deleteGatewayKey(env.DB, id);
+    invalidateGatewayKeyCache();
     return new Response(null, { status: 204 });
   }
 
@@ -121,6 +125,7 @@ export async function handleKeyRegenerate(
     const newId = generateId();
 
     await createGatewayKey(env.DB, { id: newId, name, key_prefix: prefix, key_hash: keyHash });
+    invalidateGatewayKeyCache();
 
     return json({ id: newId, name, key_prefix: prefix, key: rawKey, status: 'active' }, 201);
   } catch (e) {
