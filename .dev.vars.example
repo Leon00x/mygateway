@@ -2,8 +2,8 @@
 # 本地开发必需；生产环境在 Cloudflare Dash 的 Worker → Settings → Variables and Secrets 配置同名 Secret
 
 # 初始管理员密码（用户名默认为 admin；首次登录后必须修改）
-# 生产首次部署会自动生成此 Secret，本地可填写一个至少 10 位的临时密码
-INITIAL_ADMIN_PASSWORD=
+# 生产首次部署会自动设置为此固定初始值；首次登录后必须立即修改
+INITIAL_ADMIN_PASSWORD=mygateway123
 
 # Provider Key 加密密钥（base64 编码，解码后恰好 32 字节，openssl rand -base64 32）
 MASTER_KEY=

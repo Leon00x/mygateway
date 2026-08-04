@@ -234,7 +234,11 @@ async function handleLogin(
         'x-gateway-request-id': requestId,
       },
     });
-  } catch {
+  } catch (error) {
+    console.error('admin_login_failed', {
+      request_id: requestId,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return gatewayErrorResponse('invalid_request', 'Invalid request body', requestId);
   }
 }

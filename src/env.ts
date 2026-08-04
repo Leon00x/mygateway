@@ -8,7 +8,7 @@ export interface Env {
   /** Initial admin username. Defaults to admin. */
   INITIAL_ADMIN_USERNAME?: string;
 
-  /** One-time initial password. Generated as a Worker Secret on first deploy. */
+  /** One-time initial password. Set to the documented bootstrap value on first deploy. */
   INITIAL_ADMIN_PASSWORD?: string;
 
   /** Legacy bootstrap password for deployments upgrading from v0.1. */

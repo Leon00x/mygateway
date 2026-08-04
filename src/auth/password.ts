@@ -1,6 +1,7 @@
 /** Password hashing for the single administrator account. */
 
-export const PASSWORD_ITERATIONS = 120_000;
+// Cloudflare Workers supports PBKDF2 iteration counts up to 100,000.
+export const PASSWORD_ITERATIONS = 100_000;
 
 export interface PasswordDigest {
   hash: string;

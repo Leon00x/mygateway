@@ -17,8 +17,8 @@
 
 1. 点击上方按钮，登录 Cloudflare 并授权 GitHub；
 2. 选择仓库 `Leon00x/mygateway`，Cloudflare 自动创建 Worker（`mygatewaydemo`）和 D1 数据库（`mygateway-db`）；
-3. 首次部署脚本自动生成 `MASTER_KEY` 和管理员初始密码，并在仅账号成员可见的部署日志中显示一次；立即保存这两项；
-4. 打开 `https://mygatewaydemo.<你的 workers.dev 子域>.workers.dev`，使用用户名 `admin` 和日志中的初始密码登录；
+3. 首次部署脚本自动生成 `MASTER_KEY`，并设置管理员初始账号 `admin / mygateway123`；立即保存部署日志中的 `MASTER_KEY`；
+4. 打开 `https://mygatewaydemo.<你的 workers.dev 子域>.workers.dev`，使用初始账号登录；
 5. 首次登录必须修改用户名和密码，然后在 **Channels**、**Models**、**API Keys** 页面完成配置；
 6. 用 Gateway Key 调用 `/v1/chat/completions`。
 
@@ -37,7 +37,7 @@ npx wrangler login
 # 3. 一键部署（构建前端 → 部署 → 生成首次 Secret → 跑 migrations）
 npm run deploy
 
-# 4. 从输出中保存初始密码与 MASTER_KEY，然后登录并修改初始凭据
+# 4. 从输出中保存 MASTER_KEY，使用 admin / mygateway123 登录并修改初始凭据
 ```
 
 ### 自动部署（可选）
@@ -178,7 +178,7 @@ MVP 使用一个 Cloudflare Worker 承载：
 - 自动创建并绑定 D1；
 - 自动执行数据库 migrations；
 - 自动构建和部署管理后台；
-- 首次部署自动生成 `INITIAL_ADMIN_PASSWORD` 和 `MASTER_KEY` 两个 Worker Secret；
+- 首次部署自动设置固定的 `INITIAL_ADMIN_PASSWORD`，并随机生成 `MASTER_KEY` Worker Secret；
 - 部署完成后显示管理地址和 Gateway Base URL。
 
 MVP 不单独部署 Cloudflare Pages，不依赖用户自行运行 GitHub Actions。
@@ -187,7 +187,7 @@ MVP 不单独部署 Cloudflare Pages，不依赖用户自行运行 GitHub Action
 
 MVP 使用单管理员用户名和密码登录：
 
-- 初始用户名为 `admin`，初始密码由首次部署脚本随机生成；
+- 初始用户名为 `admin`，初始密码为 `mygateway123`；该密码公开且仅用于首次登录；
 - 首次登录在 D1 创建管理员记录，并强制修改用户名和密码；
 - 密码使用带随机盐的 PBKDF2-SHA256 摘要保存，不保存明文；
 - 验证成功后签发短期、HttpOnly 的管理 Session Cookie；
@@ -545,7 +545,7 @@ MVP 只用 5 类 Cloudflare 组件：**1 个 Worker + Static Assets + 1 个 D1 �
              (8 张表：配置、          (OpenAI Compatible:
               加密密钥、用量统计)       DeepSeek/OpenAI 等)
 
- Secrets: INITIAL_ADMIN_PASSWORD + MASTER_KEY（首次部署自动生成）
+ Secrets: INITIAL_ADMIN_PASSWORD（固定初始值）+ MASTER_KEY（首次部署随机生成）
  Cron: 每日 03:17 清理 30 天前用量
 ```
 

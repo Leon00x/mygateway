@@ -1,10 +1,18 @@
 import { describe, expect, test } from 'vitest';
-import { hashPassword, validatePassword, validateUsername, verifyPassword } from '../src/auth/password.ts';
+import {
+  hashPassword,
+  PASSWORD_ITERATIONS,
+  validatePassword,
+  validateUsername,
+  verifyPassword,
+} from '../src/auth/password.ts';
 
 describe('administrator credentials', () => {
   test('hashes and verifies a password without storing plaintext', async () => {
     const digest = await hashPassword('a-strong-password');
     expect(digest.hash).not.toContain('a-strong-password');
+    expect(digest.iterations).toBe(PASSWORD_ITERATIONS);
+    expect(PASSWORD_ITERATIONS).toBe(100_000);
     await expect(verifyPassword('a-strong-password', digest)).resolves.toBe(true);
     await expect(verifyPassword('the-wrong-password', digest)).resolves.toBe(false);
   });

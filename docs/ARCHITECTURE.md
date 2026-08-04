@@ -84,7 +84,7 @@ MVP 只支持：
              (8 张表: 配置、     (OpenAI Compatible:
               密钥、用量)        DeepSeek/OpenAI 等)
 
-  Secrets: INITIAL_ADMIN_PASSWORD + MASTER_KEY（首次部署自动生成）
+  Secrets: INITIAL_ADMIN_PASSWORD（固定初始值）+ MASTER_KEY（随机生成）
   Cron: 每日 03:17 清理 30 天前用量
 ```
 
@@ -545,9 +545,9 @@ Content-Type: application/json
 
 处理流程：
 
-1. 首次部署生成初始用户名 `admin` 和随机初始密码；
+1. 首次部署设置初始用户名 `admin` 和固定初始密码 `mygateway123`；
 2. 第一次成功登录时，在 D1 创建单管理员记录；
-3. 密码使用随机 16 字节盐和 PBKDF2-HMAC-SHA256（120,000 次）保存摘要；
+3. 密码使用随机 16 字节盐和 PBKDF2-HMAC-SHA256（100,000 次，Cloudflare Workers 运行时上限）保存摘要；
 4. 初始账号标记 `must_change_password`，修改凭据前拒绝其他管理 API；
 5. 生成包含用户 ID、Session 版本、过期时间和 nonce 的 Session payload；
 6. 使用从 `MASTER_KEY` 经独立 HKDF domain 派生的 HMAC-SHA256 密钥签名；
@@ -1249,33 +1249,33 @@ WHERE timestamp_minute >= ? AND timestamp_minute < ?;
 Deploy Button → 登录 Cloudflare + 授权 GitHub
   → 自动创建 Worker + D1
   → npm install → 构建前端 → wrangler deploy
-  → 首次生成 INITIAL_ADMIN_PASSWORD + MASTER_KEY 并显示一次
+  → 设置固定 INITIAL_ADMIN_PASSWORD，随机生成 MASTER_KEY 并显示一次
   → migrations 建 8 张表
   → 使用 admin + 初始密码登录并强制修改凭据
   → 打开控制台配置渠道、模型和 Gateway Key
 ```
 
-仓库根目录提供 `.dev.vars.example` 模板（仅字段名，空值）：
+仓库根目录提供 `.dev.vars.example` 模板：
 
 ```dotenv
-INITIAL_ADMIN_PASSWORD=
+INITIAL_ADMIN_PASSWORD=mygateway123
 MASTER_KEY=
 ```
 
-本地开发需自行填写这两个值；生产由首次部署脚本创建。不能把带真实值的 `.dev.vars` 提交到 Git。
+本地开发只需自行填写 `MASTER_KEY`；生产由首次部署脚本创建两个 Secret。不能把带真实密钥的 `.dev.vars` 提交到 Git。
 
 ### 16.3 Secret 生成说明
 
 首次部署生成规则：
 
 ```text
-INITIAL_ADMIN_PASSWORD：18 随机字节的 base64url 字符串
+INITIAL_ADMIN_PASSWORD：固定为 mygateway123，仅用于首次登录并强制修改
 MASTER_KEY：恰好 32 字节随机值并进行 base64 编码
 ```
 
 Secret 只能进入 Cloudflare Worker Secrets，不能写入 `wrangler.jsonc`、Git 仓库或前端构建变量。
 
-首次生成值会在账号私有的部署日志中显示一次。用户必须在密码管理器中备份 `MASTER_KEY` 并立即修改初始登录密码。如果意外替换 `MASTER_KEY`，已有 Provider Key 密文和管理 Session 都将失效；恢复方式是还原原 Master Key，或逐个重新填写 Provider Key。
+随机生成的 `MASTER_KEY` 会在账号私有的部署日志中显示一次。用户必须在密码管理器中备份 `MASTER_KEY`，并在首次登录后立即修改公开的初始密码。如果意外替换 `MASTER_KEY`，已有 Provider Key 密文和管理 Session 都将失效；恢复方式是还原原 Master Key，或逐个重新填写 Provider Key。
 
 ## 17. Cron 任务
 

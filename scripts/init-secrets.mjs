@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 
 const workerName = process.env.MYGATEWAY_WORKER_NAME || 'mygatewaydemo';
 const wrangler = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+const initialAdminPassword = 'mygateway123';
 
 function runWrangler(args, input) {
   const result = spawnSync(wrangler, ['wrangler', ...args], {
@@ -37,16 +38,15 @@ if (!existing.has('MASTER_KEY')) {
 }
 
 if (!existing.has('INITIAL_ADMIN_PASSWORD')) {
-  const value = randomBytes(18).toString('base64url');
-  putSecret('INITIAL_ADMIN_PASSWORD', value);
-  generated.push(['INITIAL_ADMIN_PASSWORD', value]);
+  putSecret('INITIAL_ADMIN_PASSWORD', initialAdminPassword);
+  generated.push(['INITIAL_ADMIN_PASSWORD', initialAdminPassword]);
 }
 
 if (generated.length === 0) {
   console.log('MyGateway secrets already exist; keeping the current values.');
 } else {
   console.log('\n============================================================');
-  console.log(' MyGateway first-deploy credentials (shown only this time)');
+  console.log(' MyGateway first-deploy credentials');
   console.log('============================================================');
   console.log('INITIAL_ADMIN_USERNAME=admin');
   for (const [name, value] of generated) console.log(`${name}=${value}`);

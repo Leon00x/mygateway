@@ -27,15 +27,15 @@
 
 - 生产 `wrangler.jsonc` 的 D1 **不填 `database_id`** → 首次部署自动创建；若要固化，`wrangler d1 list` 拿 ID 回填
 - Deploy 脚本顺序：`build:dashboard → wrangler deploy → db:migrate:remote → secrets:init`
-- `secrets:init` 仅在 Secret 不存在时生成 `INITIAL_ADMIN_PASSWORD` 与 `MASTER_KEY`，已有值永不覆盖
-- 首次生成的管理员密码和 Master Key 只在部署日志显示一次，用户必须立即保存
-- `.dev.vars.example` 只提供字段名模板，真实值永不入库
+- `secrets:init` 仅在 Secret 不存在时设置 `INITIAL_ADMIN_PASSWORD` 与 `MASTER_KEY`，已有值永不覆盖
+- 管理员初始密码固定为 `mygateway123`；Master Key 随机生成且只在部署日志显示一次，用户必须立即保存
+- `.dev.vars.example` 提供公开的固定初始密码；真实 `MASTER_KEY` 永不入库
 
 首次部署输出示例：
 
 ```text
 INITIAL_ADMIN_USERNAME=admin
-INITIAL_ADMIN_PASSWORD=<随机一次性密码>
+INITIAL_ADMIN_PASSWORD=mygateway123
 MASTER_KEY=<base64 备份值>
 ```
 
