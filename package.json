@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
+    "dev:setup": "npm run db:migrate:local",
     "deploy": "npm run build:dashboard && wrangler deploy && npm run db:migrate:remote",
     "build": "npm run build:dashboard && wrangler deploy --dry-run",
     "build:dashboard": "vite build --config dashboard/vite.config.ts",

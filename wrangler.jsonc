@@ -1,6 +1,8 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "mygatewaydemo",
+  // 部署时会被替换成你的 Worker 名称（Deploy Button 或本地 wrangler 自动处理）。
+  // 手动部署时可用: npx wrangler deploy --name <your-worker-name>
+  "name": "mygateway",
   "main": "src/index.ts",
   "compatibility_date": "2025-07-27",
   "assets": {
@@ -9,12 +11,12 @@
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/v1/*", "/admin/api/*", "/health"]
   },
-  // Production D1: real database_id (provisioned on first deploy).
+  // Production D1: 不填 database_id → wrangler deploy 时自动创建并绑定。
+  // 首次部署后可用 `wrangler d1 list` 拿到真实 ID，如需固化再回填。
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "mygateway-db",
-      "database_id": "212b7b27-0f08-47df-8839-7e21107a6ad5"
+      "database_name": "mygateway-db"
     }
   ],
   "triggers": {
@@ -29,8 +31,7 @@
     "USAGE_RETENTION_DAYS": "30"
   },
   "env": {
-    // Local development: keep the placeholder ID so `wrangler dev -e local`
-    // uses the on-disk SQLite without provisioning errors.
+    // Local development: 用占位符让 `wrangler dev` 使用磁盘上的 SQLite。
     "local": {
       "d1_databases": [
         {

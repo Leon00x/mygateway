@@ -4,3 +4,4 @@ dist/
 .wrangler/
 *.tmp
 test-results/
+.env.local

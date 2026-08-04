@@ -1,2 +1,11 @@
+# 复制为 .dev.vars 并填写真实值（.dev.vars 已被 gitignore，不会提交）
+# 本地开发必需；生产环境在 Cloudflare Dash 的 Worker → Settings → Variables and Secrets 配置同名 Secret
+
+# 管理后台登录 Token（至少 32 字符随机，openssl rand -base64 24）
 ADMIN_TOKEN=
+
+# Provider Key 加密密钥（base64 编码，解码后恰好 32 字节，openssl rand -base64 32）
 MASTER_KEY=
+
+# 可选：E2E 真实集成测试用的 DeepSeek Provider Key（缺失时 realtime 测试自动跳过）
+# DEEPSEEK_TEST_KEY=sk-xxxx

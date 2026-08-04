@@ -10,28 +10,70 @@
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Leon00x/mygateway)
 
-### 部署步骤
+> 前提：需要一个 GitHub 账号（用于 Fork/部署仓库）和一个 Cloudflare 账号（免费即可）。
+> 不需要本地安装任何东西，浏览器完成全部部署。
 
-1. 点击上方按钮，登录 Cloudflare 账号并授权 GitHub 仓库；
-2. Cloudflare 自动创建 Worker 与 D1 数据库（`mygateway-db`）；
-3. 首次部署完成后，在 Cloudflare Dash → Worker → **Settings → Variables and Secrets** 配置两个 Secret：
+### 方式一：Deploy Button（推荐，零本地操作）
 
-   | Secret | 用途 | 建议 |
+1. 点击上方按钮，登录 Cloudflare 并授权 GitHub；
+2. 选择仓库 `Leon00x/mygateway`，Cloudflare 自动创建 Worker 和 D1 数据库（`mygateway-db`）；
+3. 部署完成后，在 **Cloudflare Dash → Worker → Settings → Variables and Secrets** 添加两个 Secret：
+
+   | Secret | 用途 | 生成方式 |
    |---|---|---|
-   | `ADMIN_TOKEN` | 管理后台登录 | ≥32 字节随机字符串 |
-   | `MASTER_KEY` | Provider Key 加密（AES-GCM） | ≥32 字节随机，建议 base64（如 `openssl rand -base64 32`） |
+   | `ADMIN_TOKEN` | 管理后台登录 | `openssl rand -base64 24` |
+   | `MASTER_KEY` | Provider Key 加密（AES-GCM） | `openssl rand -base64 32`（必须 base64，解码后恰好 32 字节） |
+
+   > ⚠️ `MASTER_KEY` 一旦设置不可更换（否则已加密的 Provider Key 无法解密）。请保存好。
 
 4. 打开 Worker 的 `workers.dev` 域名，用 `ADMIN_TOKEN` 登录管理后台；
-5. 在 Channels 页添加 Provider 渠道、Models 页创建模型、API Keys 页创建 Gateway Key；
+5. 在 **Channels** 页添加 Provider 渠道、**Models** 页创建模型、**API Keys** 页创建 Gateway Key；
 6. 用 Gateway Key 调用 `/v1/chat/completions`。
 
-### 手动部署（本地命令行）
+### 方式二：本地命令行部署
 
 ```bash
-wrangler login          # 登录 Cloudflare
+# 1. 克隆仓库并安装依赖
+git clone https://github.com/Leon00x/mygateway && cd mygateway
+npm install
+
+# 2. 登录 Cloudflare（浏览器授权一次）
+npx wrangler login
+
+# 3. 配置 Secrets（交互式，不会落盘）
 npx wrangler secret put ADMIN_TOKEN
 npx wrangler secret put MASTER_KEY
-npm run deploy          # 构建前端 → wrangler deploy → 自动创建 D1 并跑 migrations
+
+# 4. 一键部署（构建前端 → 自动创建 D1 → 跑 migrations → 部署）
+npm run deploy
+```
+
+### 自动部署（可选）
+
+连接 GitHub 仓库后，每次 push 到 `main` 分支会自动重新构建并部署：
+
+1. Cloudflare Dash → Worker → **Settings → Builds**；
+2. **Connect** 仓库（选你 fork 后的仓库，分支 `main`）；
+3. 构建配置：
+   - 构建命令：`npm ci && npm run build:dashboard`
+   - 部署命令：`npx wrangler deploy && npm run db:migrate:remote`
+
+> ⚠️ 踩坑提醒：
+> - Git 存储库必须选**真实的仓库名**（fork 后是你自己的用户名/mygateway），不能选成 Worker 名；
+> - 如果构建失败，先在 Builds 页面查看构建日志，常见原因是 D1 权限或 Worker 名称不匹配；
+> - Worker 名称以 Deploy 时创建的为准，与仓库 wrangler.jsonc 的 `name` 保持一致。
+
+### 本地开发
+
+```bash
+npm install
+npm run dev          # 启动本地 Worker（http://localhost:8799）
+```
+
+首次本地开发需要准备 `.dev.vars`（复制 `.dev.vars.example` 并填写，见文件内注释）。本地数据库自动初始化为空，`wrangler dev` 首次启动后执行：
+
+```bash
+npm run db:migrate:local
 ```
 
 详细机制见 [docs/DEPLOY.md](docs/DEPLOY.md)。

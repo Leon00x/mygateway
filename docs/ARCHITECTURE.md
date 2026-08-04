@@ -112,80 +112,65 @@ Deploy to Cloudflare Button 当前只部署 Workers 应用。把 SolidJS 构建�
 ```text
 mygateway/
 ├── src/
-│   ├── index.ts                    # Worker 入口和顶层路由
-│   ├── env.ts                      # Env 类型和启动配置校验
+│   ├── index.ts                    # Worker 入口和顶层路由（/health /v1/* /admin/api/* /静态资源）
+│   ├── env.ts                      # Env 类型和启动配置校验（parseConfig）
 │   ├── http/
 │   │   ├── errors.ts               # OpenAI 风格错误响应
 │   │   ├── headers.ts              # Header 清洗和响应 Header
 │   │   ├── request-id.ts           # Gateway Request ID
 │   │   └── body-limit.ts           # 请求体大小限制
 │   ├── auth/
-│   │   ├── admin-token.ts          # ADMIN_TOKEN 验证
-│   │   ├── admin-session.ts        # Session Cookie 签发/校验
-│   │   └── gateway-key.ts          # Gateway Key hash 验证
+│   │   ├── admin-token.ts          # ADMIN_TOKEN 验证（timing-safe）
+│   │   ├── admin-session.ts        # Session Cookie 签发/校验（HMAC-SHA256）
+│   │   └── gateway-key.ts          # Gateway Key hash 验证（SHA-256）
 │   ├── crypto/
-│   │   ├── provider-key.ts         # AES-GCM 加解密
-│   │   └── encoding.ts             # base64url/hex 工具
+│   │   └── provider-key.ts         # Provider Key AES-256-GCM 加解密
 │   ├── admin/
-│   │   ├── router.ts
-│   │   ├── auth.ts
-│   │   ├── channels.ts
-│   │   ├── models.ts
-│   │   ├── keys.ts
-│   │   ├── usage.ts
-│   │   └── system.ts
+│   │   ├── router.ts               # /admin/api/* 路由 + Session 鉴权
+│   │   ├── channels.ts             # 渠道 CRUD + 连接测试
+│   │   ├── models.ts               # 模型卡片/实例 CRUD + 排序
+│   │   ├── keys.ts                 # Gateway Key CRUD + 重新生成
+│   │   ├── usage.ts                # 用量查询（今日/7天/30天）
+│   │   └── system.ts               # 系统状态 + Provider 预设
 │   ├── gateway/
-│   │   ├── router.ts               # /v1 路由
-│   │   ├── request-validator.ts
-│   │   ├── model-resolver.ts
-│   │   ├── candidate-selector.ts
-│   │   ├── fallback-policy.ts
-│   │   └── proxy.ts
-│   ├── providers/
-│   │   ├── types.ts                # ProviderAdapter 接口
-│   │   └── openai-compatible.ts
+│   │   ├── hono.ts                 # /v1/* Hono + OpenAPI 路由 + Bearer 鉴权中间件
+│   │   ├── chat-completions.ts     # Chat Completions 代理（含 Fallback + 用量采集）
+│   │   ├── model-resolver.ts       # 统一模型 ID / 完整别名解析
+│   │   ├── models-list.ts          # /v1/models 列表
+│   │   └── fallback-policy.ts      # 上游错误分类（可回退/不可回退）
 │   ├── streaming/
-│   │   ├── sse-decoder.ts          # SSE frame 增量解析
-│   │   ├── chat-usage.ts           # Chat usage 事件解析
-│   │   └── proxy-stream.ts         # 透传、取消和完成回调
-│   ├── usage/
-│   │   ├── types.ts
-│   │   ├── collector.ts
-│   │   └── queries.ts
+│   │   └── sse-decoder.ts          # SSE 增量解析 + 流式 usage 提取
 │   ├── db/
-│   │   ├── channels.ts
-│   │   ├── models.ts
-│   │   ├── keys.ts
-│   │   └── usage.ts
+│   │   ├── channels.ts             # 渠道表操作
+│   │   ├── models.ts               # 模型卡片/实例/标识符表操作
+│   │   ├── keys.ts                 # Gateway Key 表操作
+│   │   └── usage.ts                # 分钟级用量 UPSERT + 查询 + 清理
 │   └── shared/
-│       ├── ids.ts
-│       ├── time.ts
-│       └── validation.ts
+│       ├── ids.ts                  # ID / 时间戳生成
+│       └── log.ts                  # 结构化日志（不含密钥/Prompt）
 ├── dashboard/
 │   ├── src/
+│   │   ├── index.tsx               # 入口 + 路由 + 鉴权守卫
+│   │   ├── presets.ts              # Provider 预设（DeepSeek/OpenAI/...）
 │   │   ├── pages/
 │   │   │   ├── Login.tsx
-│   │   │   ├── Dashboard.tsx
-│   │   │   ├── Channels.tsx
-│   │   │   ├── Models.tsx
+│   │   │   ├── Dashboard.tsx       # Gateway 端点 + 用量看板
+│   │   │   ├── Channels.tsx        # 渠道管理（预设添加）
+│   │   │   ├── Models.tsx          # 模型卡片 + 实例管理
 │   │   │   ├── ApiKeys.tsx
 │   │   │   └── System.tsx
-│   │   ├── components/
-│   │   ├── api/
-│   │   └── app.tsx
+│   │   └── app.css
 │   └── vite.config.ts
+├── e2e/
+│   ├── helpers.ts                  # 测试工具（登录/重置/环境变量读取）
+│   ├── journey.spec.ts             # UI 旅程测试（10 例，无外部依赖）
+│   └── realtime.spec.ts            # 真实 DeepSeek 集成测试（7 例）
 ├── migrations/
-│   └── 0001_initial.sql
-├── test/
-│   ├── unit/
-│   ├── integration/
-│   ├── fixtures/sse/
-│   └── e2e/
-├── .dev.vars.example              # Deploy Button 提示 ADMIN_TOKEN、MASTER_KEY
-├── wrangler.jsonc
-├── package.json
-├── README.md
-└── docs/ARCHITECTURE.md
+│   └── 0001_initial.sql            # 7 张表 + 索引
+├── .dev.vars.example              # 本地开发环境变量模板（含说明注释）
+├── wrangler.jsonc                 # Worker 配置（生产 auto-provision D1）
+├── playwright.config.ts           # E2E 测试配置
+└── package.json
 ```
 
 ### 3.1 模块依赖规则
