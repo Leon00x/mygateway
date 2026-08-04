@@ -32,6 +32,21 @@ export type ModelResolution =
 
 type CachedModelResolution = ModelResolution;
 
+export interface GatewayAccessMetrics {
+  cacheStatus: 'hit' | 'partial' | 'miss';
+  keyCache: 'hit' | 'miss';
+  modelCache: 'hit' | 'miss' | 'skipped';
+  d1Statements: number;
+  d1Ms: number;
+  accessMs: number;
+}
+
+export interface GatewayAccessResult {
+  key: GatewayKeyIdentity | null;
+  model: ModelResolution;
+  metrics: GatewayAccessMetrics;
+}
+
 interface RouteQueryRow extends Partial<CandidateRow> {
   identifier_type: 'unified' | 'alias';
   model_card_id: string;
@@ -158,15 +173,38 @@ export async function resolveGatewayAccess(
   db: D1Database,
   keyHash: string,
   modelName: string,
-): Promise<{ key: GatewayKeyIdentity | null; model: ModelResolution }> {
+): Promise<GatewayAccessResult> {
+  const accessStartedAt = performance.now();
   const cachedKey = keyCache.get(keyHash);
   const cachedModel = modelCache.get(modelName);
 
+  const metrics = (
+    d1Statements: number,
+    d1Ms: number,
+    modelCacheStatus: GatewayAccessMetrics['modelCache'] = cachedModel ? 'hit' : 'miss',
+  ): GatewayAccessMetrics => {
+    const modelSatisfiedWithoutD1 = modelCacheStatus !== 'miss';
+    return {
+      cacheStatus: cachedKey && modelSatisfiedWithoutD1
+        ? 'hit'
+        : cachedKey || modelSatisfiedWithoutD1 ? 'partial' : 'miss',
+      keyCache: cachedKey ? 'hit' : 'miss',
+      modelCache: modelCacheStatus,
+      d1Statements,
+      d1Ms: Math.round(d1Ms * 100) / 100,
+      accessMs: Math.round((performance.now() - accessStartedAt) * 100) / 100,
+    };
+  };
+
   if (cachedKey && !cachedKey.active) {
-    return { key: null, model: cachedModel ?? { status: 'not_found' } };
+    return {
+      key: null,
+      model: cachedModel ?? { status: 'not_found' },
+      metrics: metrics(0, 0, cachedModel ? 'hit' : 'skipped'),
+    };
   }
   if (cachedKey && cachedModel) {
-    return { key: cachedKey.identity, model: cachedModel };
+    return { key: cachedKey.identity, model: cachedModel, metrics: metrics(0, 0) };
   }
 
   const statements: D1PreparedStatement[] = [];
@@ -182,7 +220,9 @@ export async function resolveGatewayAccess(
     statements.push(db.prepare(ROUTE_QUERY).bind(modelName));
   }
 
+  const d1StartedAt = performance.now();
   const results = await db.batch(statements);
+  const d1Ms = performance.now() - d1StartedAt;
 
   const resolvedKey = cachedKey ?? readKeyResult(results[keyResultIndex].results);
   if (!cachedKey) cacheKey(keyHash, resolvedKey);
@@ -195,6 +235,7 @@ export async function resolveGatewayAccess(
   return {
     key: resolvedKey.active ? resolvedKey.identity : null,
     model: resolvedModel,
+    metrics: metrics(statements.length, d1Ms),
   };
 }
 

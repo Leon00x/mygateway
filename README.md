@@ -319,6 +319,7 @@ GET  /v1/models
 - 返回 Gateway Request ID 便于排查。
 - 冷请求用一次 D1 batch 同时完成 Gateway Key 鉴权和模型路由；
 - 热请求使用有界 isolate 内存 TTL 缓存，不引入 KV、Queues 或 Durable Objects；
+- 响应通过 `Server-Timing` 暴露缓存状态、鉴权/路由、D1、上游首包和网关首包耗时；
 
 `/v1/models` 根据已启用的统一模型和完整公开别名生成兼容模型列表。
 
@@ -416,6 +417,7 @@ MVP 必须满足：
 - 上游请求使用 Header 白名单/重建策略；
 - 每个请求生成 Gateway Request ID；
 - 日志记录模型、渠道、状态码、耗时、尝试次数和 Fallback，不记录 Prompt 与 Response 正文；
+- Workers Logs 启用 10% head sampling；性能观测不新增数据库写入或付费缓存服务；
 - 提供不暴露敏感信息的 `/health` 接口。
 
 ## 6. 管理后台页面

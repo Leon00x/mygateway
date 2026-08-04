@@ -1293,6 +1293,7 @@ Cron 不执行：
 | D1 行读取 | 5,000,000/天 | 索引、单次 batch、短 TTL isolate 缓存 |
 | D1 行写入 | 100,000/天 | 每客户端请求一次 usage UPSERT，实测索引写放大 |
 | D1 大小 | 5GB（账号总计） | 只存配置和 30 天分钟聚合 |
+| Workers Logs | 200,000 events/天、3 天保留 | 10% head sampling，只记录脱敏结构化事件 |
 
 ### 18.2 降级原则
 
@@ -1321,6 +1322,14 @@ D1 配置查询默认依赖数据库 primary。全球 Edge 不代表 D1 查询�
 - 加 D1 后的首字节增量；
 - 缓存命中率和单次 batch 的首字节增量。
 
+网关在响应中提供标准 `Server-Timing`，无需额外存储服务：
+
+- `gateway-cache`：`hit`、`partial` 或 `miss`；
+- `gateway-access`：鉴权与路由解析耗时；
+- `gateway-d1`：本次请求的 D1 batch 耗时，缓存全命中时为 `0`；
+- `upstream-ttfb`：上游返回响应头的耗时；
+- `gateway-ttfb`：网关准备好客户端响应头的总耗时。
+
 Gateway Key 撤销在执行管理请求的当前 isolate 立即生效，跨 isolate 最长约 30 秒；渠道或模型停用跨 isolate 最长约 60 秒。需要全局即时失效时必须回到逐请求权威查询，或引入额外协调组件。
 
 ## 19. 可观测性
@@ -1332,6 +1341,7 @@ Gateway Key 撤销在执行管理请求的当前 isolate 立即生效，跨 isol
 ```text
 gateway_request_started
 gateway_auth_failed
+gateway_access_resolved
 model_resolved
 upstream_attempt_started
 upstream_attempt_failed
@@ -1343,6 +1353,12 @@ gateway_request_completed
 admin_operation_failed
 cron_cleanup_completed
 ```
+
+`gateway_access_resolved` 记录 `cache_status`、`key_cache`、`model_cache`、
+`d1_statements`、`d1_ms` 和 `access_ms`；`gateway_request_completed` 记录
+`total_ms`、`upstream_ttfb_ms`、尝试次数及 Fallback。所有字段都不包含 Key、
+Prompt 或 Response 正文。生产配置启用 Workers Logs 的 10% head sampling，
+因此这些日志用于趋势和排障，不作为精确计费数据；完整请求计数仍以 D1 分钟聚合为准。
 
 统一字段：
 

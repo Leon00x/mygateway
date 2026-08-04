@@ -21,6 +21,11 @@
   "triggers": {
     "crons": ["17 3 * * *"]
   },
+  // Workers Logs 免费档：只保留约 10% 请求事件，避免日志额度成为成本来源。
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 0.1
+  },
   "vars": {
     "APP_VERSION": "0.1.0",
     "INITIAL_ADMIN_USERNAME": "admin",

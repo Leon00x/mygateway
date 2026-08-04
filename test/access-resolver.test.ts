@@ -81,11 +81,25 @@ describe('gateway access resolver', () => {
     const first = await resolveGatewayAccess(db, 'hash-1', 'unified-model');
     expect(first.key).toEqual({ id: 'key-1', name: 'default' });
     expect(first.model.status).toBe('resolved');
+    expect(first.metrics).toMatchObject({
+      cacheStatus: 'miss',
+      keyCache: 'miss',
+      modelCache: 'miss',
+      d1Statements: 2,
+    });
     expect(fake.batches).toHaveLength(1);
     expect(fake.batches[0]).toHaveLength(2);
 
     const second = await resolveGatewayAccess(db, 'hash-1', 'unified-model');
-    expect(second).toEqual(first);
+    expect(second.key).toEqual(first.key);
+    expect(second.model).toEqual(first.model);
+    expect(second.metrics).toMatchObject({
+      cacheStatus: 'hit',
+      keyCache: 'hit',
+      modelCache: 'hit',
+      d1Statements: 0,
+      d1Ms: 0,
+    });
     expect(fake.batches).toHaveLength(1);
     expect(fake.individualQueries).toBe(0);
   });
@@ -101,6 +115,12 @@ describe('gateway access resolver', () => {
     const result = await resolveGatewayAccess(db, 'hash-2', 'unified-model');
 
     expect(result.model.status).toBe('resolved');
+    expect(result.metrics).toMatchObject({
+      cacheStatus: 'partial',
+      keyCache: 'hit',
+      modelCache: 'miss',
+      d1Statements: 1,
+    });
     expect(fake.individualQueries).toBe(1);
     expect(fake.batches).toHaveLength(1);
     expect(fake.batches[0]).toHaveLength(1);
@@ -116,6 +136,14 @@ describe('gateway access resolver', () => {
 
     expect(first.key).toBeNull();
     expect(second.key).toBeNull();
+    expect(first.metrics).toMatchObject({ cacheStatus: 'miss', d1Statements: 2 });
+    expect(second.metrics).toMatchObject({
+      cacheStatus: 'hit',
+      keyCache: 'hit',
+      modelCache: 'skipped',
+      d1Statements: 0,
+      d1Ms: 0,
+    });
     expect(fake.batches).toHaveLength(1);
     expect(fake.batches[0]).toHaveLength(2);
 
