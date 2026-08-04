@@ -8,7 +8,7 @@ import { generateRequestId } from './http/request-id.ts';
 import { gatewayErrorResponse } from './http/errors.ts';
 import { logConfigError, logEvent } from './shared/log.ts';
 import { handleAdminApi } from './admin/router.ts';
-import { handleGateway } from './gateway/router.ts';
+import { handleGatewayHono } from './gateway/hono.ts';
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -39,9 +39,15 @@ export default {
       throw e;
     }
 
-    // --- Gateway API ---
+    // --- Gateway API (Hono + OpenAPI) ---
     if (path.startsWith('/v1/')) {
-      return handleGateway(request, url, env, ctx);
+      const gatewayResponse = await handleGatewayHono(request, env, ctx);
+      if (gatewayResponse) {
+        return gatewayResponse;
+      }
+      // Hono returned 404 (unknown /v1/* route) — fall through to a proper error
+      const requestId = generateRequestId();
+      return gatewayErrorResponse('invalid_request', 'Gateway route not found', requestId);
     }
 
     // --- Admin API ---

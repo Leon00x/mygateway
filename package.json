@@ -29,5 +29,11 @@
     "vite-plugin-solid": "^2.11.13",
     "vitest": "^4.1.10",
     "wrangler": "^4.114.0"
+  },
+  "dependencies": {
+    "@hono/zod-openapi": "^1.5.1",
+    "@scalar/hono-api-reference": "^0.11.12",
+    "hono": "^4.13.0",
+    "zod": "^4.4.3"
   }
 }
