@@ -61,7 +61,7 @@ describe('passive circuit breaker', () => {
   });
 
   test('replaces an open preferred channel with later fallbacks', () => {
-    const breaker = new PassiveCircuitBreaker(1, 30_000);
+    const breaker = new PassiveCircuitBreaker(1, 30_000, 10, () => 1_000);
     breaker.recordFailure('preferred');
 
     const result = selectCircuitCandidates([

@@ -2,7 +2,7 @@
 
 > 对应产品范围：[README.md](../README.md) 的 MVP v0.1
 >
-> 文档状态：实现基线
+> 文档状态：多协议实现基线
 >
 > 架构目标：用最少的 Cloudflare 组件完成可部署、可调用、可回退、可观测的单管理员 AI 网关。
 
@@ -16,8 +16,9 @@ MVP 只支持：
 - Worker Static Assets 管理后台；
 - 一个 D1 数据库；
 - 单管理员用户名密码登录与首次强制改密；
-- OpenAI 官方及 OpenAI Compatible 渠道；
-- OpenAI Chat Completions；
+- 一个供应商渠道配置一份 Key 和多个原生协议端点；
+- 对外提供 OpenAI Chat Completions、OpenAI Responses、Anthropic Messages；
+- 原生同协议优先，第一阶段支持 Chat 与 Messages 双向转换；
 - `/v1/models` 兼容模型列表；
 - 固定优先级路由；
 - 响应开始前的跨渠道 Fallback；
@@ -30,20 +31,22 @@ MVP 只支持：
 |---|---|---|
 | 前端部署 | Worker Static Assets | Deploy Button 不需要再部署 Pages，避免跨域和双应用配置 |
 | 管理认证 | D1 单管理员 + 签名 Session Cookie | 初始凭据自动生成，登录后使用可修改的用户名密码 |
-| Provider 协议 | OpenAI Chat Completions | 缩小 Provider 和 SSE 兼容矩阵 |
+| Provider 协议 | 渠道下配置多个原生协议 | 一份供应商 Key 可同时服务 Chat、Responses、Messages |
+| 协议选择 | 原生同协议优先 | 减少协议转换造成的能力损失 |
+| 协议转换 | 仅 Chat ↔ Messages 公共子集 | 无法无损转换时明确报错 |
 | 渠道指定 | 全局唯一完整别名 | 避免仅按 prefix 查询导致歧义 |
 | 路由 | 保存后的固定顺序 | 行为稳定、容易解释和测试 |
 | 同渠道重试 | 不自动重试 | 避免重复生成和重复计费 |
 | Fallback | 仅响应提交前 | 流式响应提交后无法透明切换 Provider |
-| 套餐和价格 | 手工填写、仅展示 | Provider 余额、费用和 Token 套餐不是同一种数据 |
+| 余额 | DeepSeek 官方按需查询、逐渠道展示 | Provider 余额、费用和 Token 套餐不是同一种数据 |
 | 用量 | 每请求直接 UPSERT 分钟表 | 不引入原始日志表和额外聚合任务 |
 | Prompt/Response | 不持久化 | 降低隐私和存储风险 |
 
 ### 1.3 MVP 不解决的问题
 
-- Claude、Gemini 和 OpenAI Responses 协议；
-- 跨协议转换；
-- 自动余额、套餐和价格同步；
+- Gemini 原生协议；
+- Responses 与其他协议的转换；
+- DeepSeek 之外的余额、套餐和价格同步；
 - 动态成本路由和套餐路由；
 - 流中断后的 Fallback；
 - 多用户、RBAC、Key 级权限和限流；
@@ -76,13 +79,13 @@ MVP 只支持：
  Static Assets       /admin/api/*           /v1/*
  SolidJS 管理后台    Session Cookie 认证     Gateway Key 认证
  (登录/渠道/模型/     Channels/Models/Keys   Model Resolver
-  Keys/看板)          CRUD + Usage 查询      Fixed Router + Fallback
+  Keys/看板)          CRUD + Usage 查询      Protocol Router + Fallback
         │                    │                    │
         └──────────┬─────────┴─────┬──────────────┘
                    │               │
               D1 数据库        AI Provider
-             (8 张表: 配置、     (OpenAI Compatible:
-              密钥、用量)        DeepSeek/OpenAI 等)
+             (9 张表: 配置、     (Chat / Responses /
+              密钥、用量)        Messages)
 
   Secrets: INITIAL_ADMIN_PASSWORD（固定初始值）+ MASTER_KEY（随机生成）
   Cron: 每日 03:17 清理 30 天前用量
@@ -130,6 +133,7 @@ mygateway/
 │   ├── admin/
 │   │   ├── router.ts               # /admin/api/* 路由 + Session 鉴权
 │   │   ├── channels.ts             # 渠道 CRUD + 连接测试
+│   │   ├── provider-balances.ts    # DeepSeek 官方余额查询 + isolate 短缓存
 │   │   ├── models.ts               # 模型卡片/实例 CRUD + 排序
 │   │   ├── keys.ts                 # Gateway Key CRUD + 重新生成
 │   │   ├── usage.ts                # 用量查询（今日/7天/30天）
@@ -137,7 +141,10 @@ mygateway/
 │   ├── gateway/
 │   │   ├── hono.ts                 # /v1/* Hono + OpenAPI 路由 + Bearer 鉴权中间件
 │   │   ├── access-resolver.ts      # Key 鉴权 + 模型路由单次 D1 batch 与软缓存
-│   │   ├── chat-completions.ts     # Chat Completions 代理（含 Fallback + 用量采集）
+│   │   ├── chat-completions.ts     # 三种对外生成协议的共用代理数据面
+│   │   ├── protocols.ts            # 协议能力、原生优先候选选择和端点路径
+│   │   ├── protocol-conversion.ts  # Chat / Messages 非流式双向转换
+│   │   ├── protocol-stream.ts      # Chat / Messages SSE 双向事件转换
 │   │   ├── models-list.ts          # /v1/models 列表
 │   │   └── fallback-policy.ts      # 上游错误分类（可回退/不可回退）
 │   ├── streaming/
@@ -150,11 +157,13 @@ mygateway/
 │   │   └── usage.ts                # 分钟级用量 UPSERT + 查询 + 清理
 │   └── shared/
 │       ├── ids.ts                  # ID / 时间戳生成
-│       └── log.ts                  # 结构化日志（不含密钥/Prompt）
+│       ├── log.ts                  # 结构化日志（不含密钥/Prompt）
+│       └── provider-presets.ts     # Worker 与 Dashboard 共用的供应商预制
 ├── dashboard/
 │   ├── src/
 │   │   ├── index.tsx               # 入口 + 路由 + 鉴权守卫
 │   │   ├── presets.ts              # Provider 预设（DeepSeek/OpenAI/...）
+│   │   ├── provider-balances.ts    # 余额响应类型与金额展示工具
 │   │   ├── pages/
 │   │   │   ├── Login.tsx
 │   │   │   ├── ChangeCredentials.tsx # 首次/日常修改管理员凭据
@@ -168,10 +177,11 @@ mygateway/
 ├── e2e/
 │   ├── helpers.ts                  # 测试工具（登录/重置/环境变量读取）
 │   ├── journey.spec.ts             # UI 旅程测试（10 例，无外部依赖）
-│   └── realtime.spec.ts            # 真实 DeepSeek 集成测试（7 例）
+│   └── realtime.spec.ts            # 真实 DeepSeek 集成测试（10 例）
 ├── migrations/
 │   ├── 0001_initial.sql            # 网关配置、密钥和用量表
-│   └── 0002_admin_users.sql        # 管理员账号表
+│   ├── 0002_admin_users.sql        # 管理员账号表
+│   └── 0003_channel_protocols.sql  # 渠道多协议端点及旧渠道回填
 ├── .dev.vars.example              # 本地开发环境变量模板（含说明注释）
 ├── wrangler.jsonc                 # Worker 配置（生产 auto-provision D1）
 ├── playwright.config.ts           # E2E 测试配置
@@ -243,6 +253,9 @@ interface Env {
 - 价格使用整数微单位，不使用浮点数作为货币真值；
 - usage 为分钟级聚合，不保存 Prompt/Response；
 - 统一模型 ID 和完整公开别名通过统一标识符注册表保证全局不冲突。
+- 渠道 API Key 只保存一次；每条 `channel_protocols` 记录独立保存协议端点和鉴权方式。
+
+详细协议路由、转换边界和免费档影响见 [多协议网关设计](PROTOCOLS.md)。
 
 ### 5.2 初始 Schema
 
@@ -925,6 +938,13 @@ usage.prompt_tokens     → inputTokens
 usage.completion_tokens → outputTokens
 ```
 
+OpenAI Responses 与 Anthropic Messages：
+
+```text
+usage.input_tokens  → inputTokens
+usage.output_tokens → outputTokens
+```
+
 字段缺失、非整数或负数时视为 usage 未知，不做推断。
 
 ## 12. SSE 流式转发
@@ -951,7 +971,8 @@ Decoder 维护：
 - 是否看到 `[DONE]`；
 - 是否发生解析错误。
 
-Decoder 只旁路观察，不改变转发字节。解析失败后：
+原生同协议转发时 Decoder 只旁路观察，不改变转发字节。Chat / Messages 转换时，
+独立的增量事件转换器读取同一 SSE 边界并输出客户端协议事件。解析失败后：
 
 - 继续原样透传；
 - 禁用后续 usage 解析；
@@ -1092,8 +1113,14 @@ WHERE timestamp_minute >= ? AND timestamp_minute < ?;
 | PUT | `/admin/api/channels/:id` | 更新名称、URL、状态、备注；Key 留空表示不修改 |
 | DELETE | `/admin/api/channels/:id` | 无引用时软删除 |
 | POST | `/admin/api/channels/:id/test` | 测试 `/models` 或最小调用 |
+| GET | `/admin/api/channels/balances` | 缓存优先列出支持的 Provider 余额；`refresh=1` 主动刷新，`active=1` 只查活动渠道 |
+| GET | `/admin/api/channels/:id/balance` | 查询单渠道余额；`refresh=1` 强制刷新 |
 
 连接测试默认请求 `<base_url>/models`。请求体可选提供 `model`；提供时允许发送一次最小、非流式 Chat Completions 作为兼容性测试，并在 UI 中明确提示该测试可能产生少量 Token 费用。`/models` 返回 404 时只标记“模型列表接口不支持”，不自动判定 Chat Completions 一定不可用。
+
+余额接口当前只支持主机名严格等于 `api.deepseek.com` 的官方 DeepSeek 渠道。成功结果在
+当前 isolate 缓存 5 分钟，不写入 D1/KV；Channels 逐渠道展示，Dashboard 使用独立卡片，
+不跨账户或币种求和。完整边界见 [DeepSeek 余额设计](DEEPSEEK_BALANCE.md)。
 
 创建渠道请求：
 
@@ -1244,7 +1271,7 @@ Deploy Button → 登录 Cloudflare + 授权 GitHub
   → 自动创建 Worker + D1
   → npm install → 构建前端 → wrangler deploy
   → 设置固定 INITIAL_ADMIN_PASSWORD，随机生成 MASTER_KEY 并显示一次
-  → migrations 建 8 张表
+  → migrations 建 9 张表
   → 使用 admin + 初始密码登录并强制修改凭据
   → 打开控制台配置渠道、模型和 Gateway Key
 ```
@@ -1282,7 +1309,7 @@ MVP 只使用一个每日 Cron：
   → 记录删除行数和 D1 meta
 ```
 
-Cron 不执行：
+Cron 不执行（DeepSeek 余额仅由管理员按需触发）：
 
 - Provider 余额查询；
 - 模型同步；

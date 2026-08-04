@@ -1,6 +1,6 @@
-/**
- * Channel database operations.
- */
+/** Channel and native protocol endpoint database operations. */
+
+import type { ChannelProtocol, GatewayProtocol, ProtocolAuthScheme } from '../gateway/protocols.ts';
 
 export interface ChannelRow {
   id: string;
@@ -27,9 +27,14 @@ export interface ChannelPublic {
   notes: string | null;
   created_at: number;
   updated_at: number;
+  protocols: ChannelProtocol[];
 }
 
-export function toPublicChannel(row: ChannelRow): ChannelPublic {
+export interface ChannelWithProtocols extends ChannelRow {
+  protocols: ChannelProtocol[];
+}
+
+export function toPublicChannel(row: ChannelWithProtocols): ChannelPublic {
   return {
     id: row.id,
     name: row.name,
@@ -40,21 +45,48 @@ export function toPublicChannel(row: ChannelRow): ChannelPublic {
     notes: row.notes,
     created_at: row.created_at,
     updated_at: row.updated_at,
+    protocols: row.protocols,
   };
 }
 
-export async function listChannels(db: D1Database): Promise<ChannelRow[]> {
+async function getProtocolMap(db: D1Database, channelIds: string[]): Promise<Map<string, ChannelProtocol[]>> {
+  if (channelIds.length === 0) return new Map();
+  const placeholders = channelIds.map(() => '?').join(', ');
+  const result = await db
+    .prepare(`SELECT channel_id, protocol, base_url, auth_scheme, api_version
+      FROM channel_protocols WHERE channel_id IN (${placeholders}) ORDER BY protocol ASC`)
+    .bind(...channelIds)
+    .all<ChannelProtocol & { channel_id: string }>();
+  const map = new Map<string, ChannelProtocol[]>();
+  for (const row of result.results) {
+    const entries = map.get(row.channel_id) ?? [];
+    entries.push({
+      protocol: row.protocol,
+      base_url: row.base_url,
+      auth_scheme: row.auth_scheme,
+      api_version: row.api_version,
+    });
+    map.set(row.channel_id, entries);
+  }
+  return map;
+}
+
+export async function listChannels(db: D1Database): Promise<ChannelWithProtocols[]> {
   const result = await db
     .prepare('SELECT * FROM channels WHERE deleted_at IS NULL ORDER BY created_at DESC')
     .all<ChannelRow>();
-  return result.results;
+  const protocolMap = await getProtocolMap(db, result.results.map((row) => row.id));
+  return result.results.map((row) => ({ ...row, protocols: protocolMap.get(row.id) ?? [] }));
 }
 
-export async function getChannel(db: D1Database, id: string): Promise<ChannelRow | null> {
-  return db
+export async function getChannel(db: D1Database, id: string): Promise<ChannelWithProtocols | null> {
+  const row = await db
     .prepare('SELECT * FROM channels WHERE id = ? AND deleted_at IS NULL')
     .bind(id)
     .first<ChannelRow>();
+  if (!row) return null;
+  const protocolMap = await getProtocolMap(db, [id]);
+  return { ...row, protocols: protocolMap.get(id) ?? [] };
 }
 
 export async function createChannel(
@@ -78,6 +110,28 @@ export async function createChannel(
       channel.notes,
     )
     .run();
+}
+
+export interface ChannelProtocolInput {
+  protocol: GatewayProtocol;
+  base_url: string;
+  auth_scheme: ProtocolAuthScheme;
+  api_version?: string | null;
+}
+
+export async function replaceChannelProtocols(
+  db: D1Database,
+  channelId: string,
+  protocols: ChannelProtocolInput[],
+): Promise<void> {
+  await db.prepare('DELETE FROM channel_protocols WHERE channel_id = ?').bind(channelId).run();
+  for (const entry of protocols) {
+    await db.prepare(`INSERT INTO channel_protocols
+      (channel_id, protocol, base_url, auth_scheme, api_version)
+      VALUES (?, ?, ?, ?, ?)`)
+      .bind(channelId, entry.protocol, entry.base_url, entry.auth_scheme, entry.api_version ?? null)
+      .run();
+  }
 }
 
 export async function updateChannel(

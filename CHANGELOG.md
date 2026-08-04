@@ -4,6 +4,40 @@
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)，后续计划见
 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
+## 2026-08-05：控制台侧边栏与暗黑模式
+
+状态：已实现，待随当前版本发布。
+
+- 左侧栏底部按钮改为桌面端展开/收缩控制，收起后保留图标导航并记忆用户选择。
+- 退出登录保留在管理员信息行，不再与侧边栏控制混用。
+- 右上角新增参考 QwenCloud 的圆形明暗主题切换按钮；首次跟随系统偏好，之后记忆用户选择。
+- 暗黑模式覆盖控制台、登录页、弹窗、表单、状态标签和代码区域，移动端继续使用横向导航。
+- UI E2E 增加侧边栏切换、主题切换和刷新后主题持久化验证。
+
+## 2026-08-04：多协议路由、供应商预制与 DeepSeek 余额
+
+状态：已实现，待部署到 Cloudflare Worker `mygatewaydemo`。
+
+- 对外新增 `POST /v1/responses` 和 `POST /v1/messages`，保留现有 Chat 接口。
+- 新增 `channel_protocols`，一个供应商渠道可用一份 Key 配置多个原生协议。
+- 路由改为原生同协议优先；Responses 没有原生候选时返回明确错误。
+- 实现 Chat 与 Messages 的文本、function tools、非流式响应和 SSE 双向转换。
+- 转换无法无损表达的字段返回 `unsupported_protocol_feature`，不静默删除。
+- OpenAI 预设自动配置 Chat + Responses；新增 Anthropic Messages 预设；自定义渠道可多选协议。
+- 新增 Z.AI、华为云（中国）、阿里云国际和火山国际（BytePlus）预制，并校准 DeepSeek；
+  多协议供应商只需输入一次 Key 即可自动创建其已确认的原生协议端点。
+- 新增 Google Gemini、Groq、MiniMax 国际、xAI 和 Mistral AI 预制；其中 Groq、
+  xAI 自动配置 Chat + Responses，MiniMax 国际自动配置 Chat + Messages。
+- Worker 管理 API 与 Dashboard 改为共用同一份预制数据，避免两处配置漂移。
+- 新增 DeepSeek 官方账户余额查询：渠道页按渠道展示总余额、赠金、充值余额、可用状态和
+  更新时间；首页新增独立 Provider Balance 卡片，不跨账户或币种汇总。
+- 首次打开页面只读取 5 分钟 isolate 短缓存；只有用户查询或刷新时访问 DeepSeek，且不
+  新增 D1/KV/DO 写入或 Cron 探测。
+- 协议配置随现有路由 D1 查询和 isolate 缓存返回，不新增免费档组件或每请求查询。
+- 新增协议选择、请求/响应转换、任意 SSE 分片、预制配置和余额解析测试；当前单元测试共 60 例。
+- Playwright 共 20 例，其中真实 DeepSeek 套件增加官方余额接口校验，并验证 Messages → Chat
+  的非流式、SSE 和 usage。
+
 ## 2026-08-04：MVP 可部署性、控制台与数据面增强
 
 状态：已合入 `main`，已部署到 Cloudflare Worker `mygatewaydemo`。

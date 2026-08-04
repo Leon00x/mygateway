@@ -1,6 +1,12 @@
 import { createSignal, onMount, Show, For } from 'solid-js';
 import { A } from '@solidjs/router';
 import Icon, { IconName } from '../components/Icon';
+import {
+  balanceCurrencySymbol,
+  balanceUpdatedAt,
+  type ProviderBalance,
+  type ProviderBalancesResponse,
+} from '../provider-balances';
 
 interface UsageOverview { requests: number; successes: number; errors: number; input_tokens: number; output_tokens: number; usage_unknown: number; fallbacks?: number; }
 interface ApiKey { id: string; name: string; key_prefix: string; status: string; }
@@ -21,31 +27,54 @@ export default function Dashboard() {
   const [keys, setKeys] = createSignal<ApiKey[]>([]);
   const [models, setModels] = createSignal<ModelItem[]>([]);
   const [channels, setChannels] = createSignal<Channel[]>([]);
+  const [balances, setBalances] = createSignal<ProviderBalance[]>([]);
+  const [balanceBusy, setBalanceBusy] = createSignal(false);
   const [copied, setCopied] = createSignal('');
   const baseUrl = () => `${window.location.origin}/v1`;
+
+  const fetchOverview = async () => {
+    const response = await fetch(`/admin/api/usage/overview?range=${range()}`);
+    if (response.ok) setOverview(await response.json());
+  };
 
   const fetchData = async () => {
     setLoading(true);
     try {
       const responses = await Promise.all([
         fetch(`/admin/api/usage/overview?range=${range()}`), fetch('/admin/api/keys'),
-        fetch('/admin/api/models'), fetch('/admin/api/channels'),
+        fetch('/admin/api/models'), fetch('/admin/api/channels'), fetch('/admin/api/channels/balances'),
       ]);
       if (responses[0].ok) setOverview(await responses[0].json());
       if (responses[1].ok) setKeys(await responses[1].json());
       if (responses[2].ok) setModels(await responses[2].json());
       if (responses[3].ok) setChannels(await responses[3].json());
+      if (responses[4].ok) setBalances(((await responses[4].json()) as ProviderBalancesResponse).balances);
     } finally { setLoading(false); }
   };
   onMount(fetchData);
 
-  const changeRange = (value: 'today' | '7d' | '30d') => { setRange(value); void fetchData(); };
+  const changeRange = (value: 'today' | '7d' | '30d') => {
+    setRange(value);
+    setLoading(true);
+    void fetchOverview().finally(() => setLoading(false));
+  };
+  const refreshBalances = async () => {
+    setBalanceBusy(true);
+    try {
+      const response = await fetch('/admin/api/channels/balances?refresh=1&active=1');
+      if (response.ok) setBalances(((await response.json()) as ProviderBalancesResponse).balances);
+    } finally { setBalanceBusy(false); }
+  };
   const copy = async (text: string, label: string) => {
     await navigator.clipboard.writeText(text); setCopied(label); setTimeout(() => setCopied(''), 1800);
   };
   const activeKeys = () => keys().filter((item) => item.status === 'active');
   const activeModels = () => models().filter((item) => item.status === 'active');
   const activeChannels = () => channels().filter((item) => item.status === 'active');
+  const visibleBalances = () => {
+    const activeIds = new Set(activeChannels().map((item) => item.id));
+    return balances().filter((item) => activeIds.has(item.channel_id));
+  };
   const successRate = () => overview()?.requests ? Math.round((overview()!.successes / overview()!.requests) * 100) : 0;
   const usageCoverage = () => overview()?.requests
     ? Math.round(((overview()!.requests - overview()!.usage_unknown) / overview()!.requests) * 100)
@@ -69,6 +98,40 @@ export default function Dashboard() {
         <Metric title="Token 用量" value={fmt((overview()?.input_tokens ?? 0) + (overview()?.output_tokens ?? 0))} note={`Provider 上报 · 覆盖率 ${usageCoverage()}%`} tone="orange" />
         <Metric title="自动回退" value={fmt(overview()?.fallbacks)} note={`${fmt(overview()?.errors)} 次失败`} tone="blue" />
       </section>
+
+      <Show when={visibleBalances().length > 0}>
+        <section class="panel provider-balance-panel">
+          <div class="panel-header">
+            <div><h2>Provider Balance</h2><p>DeepSeek 官方账户余额 · 各渠道独立展示，不跨账户或币种汇总</p></div>
+            <button class="secondary-button" disabled={balanceBusy()} onClick={refreshBalances}>
+              {balanceBusy() ? '查询中…' : '刷新余额'}
+            </button>
+          </div>
+          <div class="provider-balance-list">
+            <For each={visibleBalances()}>{(balance) => (
+              <div class="provider-balance-row">
+                <div class="provider-balance-name"><span class="provider-logo">D</span><div><strong>{balance.channel_name}</strong><small>DeepSeek 官方 API</small></div></div>
+                <Show when={balance.status === 'not_queried'}><span class="balance-state muted">点击刷新后查询</span></Show>
+                <Show when={balance.status === 'error'}><span class="balance-state error">{balance.status === 'error' ? balance.error : ''}</span></Show>
+                <Show when={balance.status === 'ok'}>{() => {
+                  if (balance.status !== 'ok') return null;
+                  return <div class="provider-balance-values">
+                    <span class={`balance-state ${balance.is_available ? 'available' : 'unavailable'}`}>{balance.is_available ? '账户可用' : '账户不可用'}</span>
+                    <For each={balance.balance_infos}>{(item) => (
+                      <div class="provider-balance-value">
+                        <small>{item.currency} 总余额</small>
+                        <strong>{balanceCurrencySymbol(item.currency)}{item.total_balance}</strong>
+                        <span>赠金 {balanceCurrencySymbol(item.currency)}{item.granted_balance} · 充值 {balanceCurrencySymbol(item.currency)}{item.topped_up_balance}</span>
+                      </div>
+                    )}</For>
+                    <small class="balance-updated">{balanceUpdatedAt(balance.fetched_at)}{balance.cached ? ' · 缓存' : ''}</small>
+                  </div>;
+                }}</Show>
+              </div>
+            )}</For>
+          </div>
+        </section>
+      </Show>
 
       <section class="dashboard-main-grid">
         <div class="panel endpoint-panel">

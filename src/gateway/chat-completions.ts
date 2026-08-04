@@ -20,6 +20,18 @@ import {
   resolveGatewayAccess,
   type GatewayAccessMetrics,
 } from './access-resolver.ts';
+import {
+  protocolPath,
+  routeCandidatesForProtocol,
+  type GatewayProtocol,
+  type ProtocolRouteCandidate,
+} from './protocols.ts';
+import {
+  convertRequest,
+  convertResponse,
+  UnsupportedProtocolFeatureError,
+} from './protocol-conversion.ts';
+import { ProtocolSseTransformer } from './protocol-stream.ts';
 
 interface RequestPerformance {
   requestStartedAt: number;
@@ -42,6 +54,37 @@ export async function handleChatCompletions(
   ctx: ExecutionContext,
   requestId: string,
   gatewayKeyHash: string,
+): Promise<Response> {
+  return handleProtocolCompletion(request, env, ctx, requestId, gatewayKeyHash, 'openai_chat');
+}
+
+export async function handleResponses(
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext,
+  requestId: string,
+  gatewayKeyHash: string,
+): Promise<Response> {
+  return handleProtocolCompletion(request, env, ctx, requestId, gatewayKeyHash, 'openai_responses');
+}
+
+export async function handleAnthropicMessages(
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext,
+  requestId: string,
+  gatewayKeyHash: string,
+): Promise<Response> {
+  return handleProtocolCompletion(request, env, ctx, requestId, gatewayKeyHash, 'anthropic_messages');
+}
+
+async function handleProtocolCompletion(
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext,
+  requestId: string,
+  gatewayKeyHash: string,
+  requestedProtocol: GatewayProtocol,
 ): Promise<Response> {
   const requestStartedAt = performance.now();
   const config = parseConfig(env);
@@ -113,8 +156,11 @@ export async function handleChatCompletions(
     return timed(gatewayErrorResponse('invalid_request', 'model must be a non-empty string (max 128 chars)', requestId, 'model'));
   }
 
-  const messages = body.messages;
-  if (!Array.isArray(messages)) {
+  if (requestedProtocol === 'openai_responses') {
+    if (body.input === undefined) {
+      return timed(gatewayErrorResponse('invalid_request', 'input is required', requestId, 'input'));
+    }
+  } else if (!Array.isArray(body.messages)) {
     return timed(gatewayErrorResponse('invalid_request', 'messages must be an array', requestId, 'messages'));
   }
 
@@ -134,8 +180,17 @@ export async function handleChatCompletions(
   }
 
   const { direct, candidates, unifiedModelId, modelCardId } = access.model.value;
+  const protocolCandidates = routeCandidatesForProtocol(candidates, requestedProtocol);
+  if (protocolCandidates.length === 0) {
+    return timed(gatewayErrorResponse(
+      'protocol_unavailable',
+      `No channel for model '${model}' supports ${requestedProtocol}`,
+      requestId,
+      'model',
+    ));
+  }
   const { selected: selectedCandidates, skipped: circuitSkipped } = selectCircuitCandidates(
-    candidates,
+    protocolCandidates,
     config.maxChannelAttempts,
   );
   const circuitSkippedCount = circuitSkipped.length;
@@ -165,7 +220,7 @@ export async function handleChatCompletions(
   const maxAttempts = selectedCandidates.length;
 
   const recordCircuitFailure = (
-    candidate: (typeof candidates)[number],
+    candidate: ProtocolRouteCandidate,
     errorKind: string,
   ) => {
     const circuit = channelCircuitBreaker.recordFailure(candidate.channel_id);
@@ -202,6 +257,28 @@ export async function handleChatCompletions(
       circuit_probe: circuitProbe,
     });
 
+    let upstreamBody: Record<string, unknown>;
+    try {
+      upstreamBody = convertRequest(body, requestedProtocol, candidate.upstreamProtocol);
+      upstreamBody.model = candidate.channel_model_id;
+      if (isStream && candidate.upstreamProtocol === 'openai_chat' && candidate.supports_stream_usage === 1) {
+        upstreamBody.stream_options = {
+          ...(typeof upstreamBody.stream_options === 'object' && upstreamBody.stream_options ? upstreamBody.stream_options : {}),
+          include_usage: true,
+        };
+      }
+    } catch (error) {
+      if (error instanceof UnsupportedProtocolFeatureError) {
+        return timed(gatewayErrorResponse(
+          'unsupported_protocol_feature',
+          error.message,
+          requestId,
+          error.feature,
+        ));
+      }
+      throw error;
+    }
+
     // Decrypt provider key
     let providerKey: string;
     try {
@@ -232,17 +309,7 @@ export async function handleChatCompletions(
     }
 
     // Build upstream URL
-    const upstreamUrl = `${candidate.base_url}/chat/completions`;
-
-    // Build upstream body — replace model, inject stream_options
-    const upstreamBody = structuredClone(body);
-    upstreamBody.model = candidate.channel_model_id;
-    if (isStream && candidate.supports_stream_usage === 1) {
-      upstreamBody.stream_options = {
-        ...(typeof upstreamBody.stream_options === 'object' && upstreamBody.stream_options ? upstreamBody.stream_options : {}),
-        include_usage: true,
-      };
-    }
+    const upstreamUrl = `${candidate.protocolConfig.base_url}${protocolPath(candidate.upstreamProtocol)}`;
 
     // Build upstream headers
     const upstreamHeaders = buildUpstreamHeaders({
@@ -250,6 +317,8 @@ export async function handleChatCompletions(
       requestId,
       isStream,
       appVersion: config.appVersion,
+      authScheme: candidate.protocolConfig.auth_scheme,
+      apiVersion: candidate.protocolConfig.api_version,
     });
 
     // Send upstream request with timeout
@@ -379,6 +448,8 @@ export async function handleChatCompletions(
         attempt + 1,
         fallbackOccurred,
         requestPerformance,
+        requestedProtocol,
+        candidate.upstreamProtocol,
       ), requestPerformance);
     }
 
@@ -396,6 +467,8 @@ export async function handleChatCompletions(
       attempt + 1,
       fallbackOccurred,
       requestPerformance,
+      requestedProtocol,
+      candidate.upstreamProtocol,
     ), requestPerformance);
   }
 
@@ -427,7 +500,34 @@ async function handleNonStreamResponse(
   attemptCount: number,
   fallbackOccurred: boolean,
   requestPerformance: RequestPerformance,
+  requestedProtocol: GatewayProtocol,
+  upstreamProtocol: GatewayProtocol,
 ): Promise<Response> {
+  if (requestedProtocol !== upstreamProtocol) {
+    let raw: Record<string, unknown>;
+    try {
+      raw = JSON.parse(await upstream.text()) as Record<string, unknown>;
+    } catch {
+      return gatewayErrorResponse('upstream_error', 'Upstream returned invalid JSON', requestId);
+    }
+    let converted: Record<string, unknown>;
+    try {
+      converted = convertResponse(raw, upstreamProtocol, requestedProtocol);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Protocol response conversion failed';
+      const feature = error instanceof UnsupportedProtocolFeatureError ? error.feature : null;
+      return gatewayErrorResponse('unsupported_protocol_feature', message, requestId, feature);
+    }
+    const usage = extractNonStreamUsage(raw);
+    ctx.waitUntil(writeUsage(
+      env, modelCardId, unifiedModelId, candidate, attemptCount,
+      fallbackOccurred, 'success', usage,
+    ));
+    const headers = gatewayResponseHeaders(requestId);
+    headers.set('Content-Type', 'application/json');
+    return new Response(JSON.stringify(converted), { status: upstream.status, headers });
+  }
+
   // Clone the body so we can parse usage while forwarding
   const [bodyBranch, usageBranch] = upstream.body!.tee();
 
@@ -497,9 +597,14 @@ function handleStreamResponse(
   attemptCount: number,
   fallbackOccurred: boolean,
   requestPerformance: RequestPerformance,
+  requestedProtocol: GatewayProtocol,
+  upstreamProtocol: GatewayProtocol,
 ): Response {
   const decoder = new SseDecoder();
   const reader = upstream.body!.getReader();
+  const transformer = requestedProtocol === upstreamProtocol
+    ? null
+    : new ProtocolSseTransformer(upstreamProtocol, requestedProtocol, unifiedModelId);
 
   const finalize = onceAsync(async (outcome: 'success' | 'error' | 'cancelled') => {
     decoder.flush();
@@ -533,14 +638,30 @@ function handleStreamResponse(
   const clientStream = new ReadableStream({
     async pull(controller) {
       try {
-        const result = await reader.read();
-        if (result.done) {
-          await finalize('success');
-          controller.close();
+        // A network chunk may contain only part of an SSE event. Keep reading
+        // until the converter can emit at least one complete client event;
+        // returning from pull() without enqueue/close can leave workerd with no
+        // future task capable of advancing the stream.
+        while (true) {
+          const result = await reader.read();
+          if (result.done) {
+            if (transformer) {
+              for (const chunk of transformer.flush()) controller.enqueue(chunk);
+            }
+            await finalize('success');
+            controller.close();
+            return;
+          }
+          decoder.observe(result.value);
+          if (!transformer) {
+            controller.enqueue(result.value);
+            return;
+          }
+          const converted = transformer.push(result.value);
+          if (converted.length === 0) continue;
+          for (const chunk of converted) controller.enqueue(chunk);
           return;
         }
-        decoder.observe(result.value);
-        controller.enqueue(result.value);
       } catch (e) {
         await finalize('error');
         controller.error(e);

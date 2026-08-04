@@ -2,6 +2,8 @@
  * Model cards and channel model instances — database operations.
  */
 
+import { parseCandidateProtocols, type ChannelProtocol } from '../gateway/protocols.ts';
+
 export interface ModelCardRow {
   id: string;
   unified_model_id: string;
@@ -208,6 +210,12 @@ export async function getCandidatesForModel(
         c.name AS channel_name,
         c.provider_type,
         c.base_url,
+        (SELECT json_group_array(json_object(
+          'protocol', cp.protocol,
+          'base_url', cp.base_url,
+          'auth_scheme', cp.auth_scheme,
+          'api_version', cp.api_version
+        )) FROM channel_protocols cp WHERE cp.channel_id = c.id) AS protocols_json,
         c.api_key_ciphertext,
         c.api_key_iv,
         c.api_key_version
@@ -221,8 +229,8 @@ export async function getCandidatesForModel(
       ORDER BY cm.sort_order ASC, cm.id ASC`,
     )
     .bind(modelCardId)
-    .all<CandidateRow>()
-    .then((r) => r.results);
+    .all<CandidateQueryRow>()
+    .then((r) => r.results.map(hydrateCandidate));
 }
 
 export interface CandidateRow {
@@ -235,7 +243,19 @@ export interface CandidateRow {
   channel_name: string;
   provider_type: string;
   base_url: string;
+  protocols: ChannelProtocol[];
   api_key_ciphertext: string;
   api_key_iv: string;
   api_key_version: number;
+}
+
+export interface CandidateQueryRow extends Omit<CandidateRow, 'protocols'> {
+  protocols_json?: string;
+}
+
+export function hydrateCandidate(row: CandidateQueryRow): CandidateRow {
+  return {
+    ...row,
+    protocols: parseCandidateProtocols(row.protocols_json, row.base_url),
+  };
 }

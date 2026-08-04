@@ -19,6 +19,8 @@ export type ErrorCode =
   | 'request_too_large'
   | 'gateway_rate_limited'
   | 'model_unavailable'
+  | 'protocol_unavailable'
+  | 'unsupported_protocol_feature'
   | 'upstream_error'
   | 'upstream_timeout'
   | 'gateway_internal_error'
@@ -32,6 +34,8 @@ const HTTP_MAP: Record<ErrorCode, number> = {
   request_too_large: 413,
   gateway_rate_limited: 429,
   model_unavailable: 503,
+  protocol_unavailable: 422,
+  unsupported_protocol_feature: 422,
   upstream_error: 502,
   upstream_timeout: 504,
   gateway_internal_error: 500,

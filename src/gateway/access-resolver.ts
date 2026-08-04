@@ -1,5 +1,5 @@
 import { TtlLruCache } from '../cache/ttl-lru.ts';
-import type { CandidateRow } from '../db/models.ts';
+import { hydrateCandidate, type CandidateQueryRow, type CandidateRow } from '../db/models.ts';
 
 const ACTIVE_KEY_TTL_MS = 30_000;
 const INACTIVE_KEY_TTL_MS = 5_000;
@@ -47,7 +47,7 @@ export interface GatewayAccessResult {
   metrics: GatewayAccessMetrics;
 }
 
-interface RouteQueryRow extends Partial<CandidateRow> {
+interface RouteQueryRow extends Partial<CandidateQueryRow> {
   identifier_type: 'unified' | 'alias';
   model_card_id: string;
   direct_channel_model_id: string | null;
@@ -76,6 +76,12 @@ const ROUTE_QUERY = `
     c.name AS channel_name,
     c.provider_type,
     c.base_url,
+    (SELECT json_group_array(json_object(
+      'protocol', cp.protocol,
+      'base_url', cp.base_url,
+      'auth_scheme', cp.auth_scheme,
+      'api_version', cp.api_version
+    )) FROM channel_protocols cp WHERE cp.channel_id = c.id) AS protocols_json,
     c.api_key_ciphertext,
     c.api_key_iv,
     c.api_key_version
@@ -107,10 +113,11 @@ function readModelResult(modelName: string, rows: unknown[]): ModelResolution {
   const marker = routeRows[0];
   if (!marker) return { status: 'not_found' };
 
-  const candidates = routeRows.filter(
-    (row): row is RouteQueryRow & CandidateRow =>
+  const candidateRows = routeRows.filter(
+    (row): row is RouteQueryRow & CandidateQueryRow =>
       typeof row.channel_model_id_pk === 'string' && typeof row.channel_id === 'string',
   );
+  const candidates = candidateRows.map((row) => hydrateCandidate(row));
 
   if (marker.identifier_type === 'alias') {
     const direct = candidates.find(

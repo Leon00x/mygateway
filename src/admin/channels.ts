@@ -15,10 +15,14 @@ import {
   isChannelReferenced,
   toPublicChannel,
   ChannelRow,
+  replaceChannelProtocols,
+  type ChannelProtocolInput,
 } from '../db/channels.ts';
 import { encryptProviderKey } from '../crypto/provider-key.ts';
 import { invalidateModelRouteCache } from '../gateway/access-resolver.ts';
 import { channelCircuitBreaker } from '../gateway/passive-circuit-breaker.ts';
+import { isGatewayProtocol, type GatewayProtocol } from '../gateway/protocols.ts';
+import { invalidateProviderBalanceCache } from './provider-balances.ts';
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -45,6 +49,32 @@ function normalizeBaseUrl(url: string): string {
   return parsed.href.replace(/\/+$/, '');
 }
 
+function normalizeProtocols(input: unknown, fallbackBaseUrl: string): ChannelProtocolInput[] {
+  const source = input === undefined
+    ? [{ protocol: 'openai_chat', base_url: fallbackBaseUrl, auth_scheme: 'bearer' }]
+    : input;
+  if (!Array.isArray(source) || source.length === 0) {
+    throw new Error('At least one provider protocol is required');
+  }
+  const seen = new Set<GatewayProtocol>();
+  return source.map((raw, index) => {
+    if (!raw || typeof raw !== 'object') throw new Error(`protocols[${index}] must be an object`);
+    const entry = raw as Record<string, unknown>;
+    if (!isGatewayProtocol(entry.protocol)) throw new Error(`Invalid protocols[${index}].protocol`);
+    if (seen.has(entry.protocol)) throw new Error(`Duplicate protocol '${entry.protocol}'`);
+    seen.add(entry.protocol);
+    const authScheme = entry.auth_scheme ?? (entry.protocol === 'anthropic_messages' ? 'x_api_key' : 'bearer');
+    if (authScheme !== 'bearer' && authScheme !== 'x_api_key') {
+      throw new Error(`Invalid protocols[${index}].auth_scheme`);
+    }
+    const baseUrl = normalizeBaseUrl(typeof entry.base_url === 'string' ? entry.base_url : fallbackBaseUrl);
+    const apiVersion = entry.protocol === 'anthropic_messages'
+      ? (typeof entry.api_version === 'string' && entry.api_version ? entry.api_version : '2023-06-01')
+      : null;
+    return { protocol: entry.protocol, base_url: baseUrl, auth_scheme: authScheme, api_version: apiVersion };
+  });
+}
+
 /**
  * GET/POST /admin/api/channels
  */
@@ -66,6 +96,7 @@ export async function handleChannelsCollection(
         base_url?: string;
         api_key?: string;
         notes?: string;
+        protocols?: unknown;
       };
 
       if (!body.name || !body.provider_type || !body.base_url || !body.api_key) {
@@ -82,6 +113,7 @@ export async function handleChannelsCollection(
       } catch (e) {
         return gatewayErrorResponse('invalid_request', (e as Error).message, requestId);
       }
+      const protocols = normalizeProtocols(body.protocols, baseUrl);
 
       const id = generateId();
       const { ciphertext, iv } = await encryptProviderKey(
@@ -102,6 +134,7 @@ export async function handleChannelsCollection(
         status: 'active',
         notes: body.notes ?? null,
       });
+      await replaceChannelProtocols(env.DB, id, protocols);
       invalidateModelRouteCache();
       channelCircuitBreaker.reset(id);
 
@@ -138,6 +171,7 @@ export async function handleChannelItem(
         api_key?: string;
         status?: string;
         notes?: string;
+        protocols?: unknown;
       };
 
       const channel = await getChannel(env.DB, id);
@@ -172,8 +206,16 @@ export async function handleChannelItem(
       }
 
       await updateChannel(env.DB, id, updates);
+      if (body.protocols !== undefined) {
+        await replaceChannelProtocols(
+          env.DB,
+          id,
+          normalizeProtocols(body.protocols, updates.base_url ?? channel.base_url),
+        );
+      }
       invalidateModelRouteCache();
       channelCircuitBreaker.reset(id);
+      invalidateProviderBalanceCache(id);
       const updated = await getChannel(env.DB, id);
       return json(toPublicChannel(updated!));
     } catch (e) {
@@ -187,6 +229,7 @@ export async function handleChannelItem(
     await softDeleteChannel(env.DB, id);
     invalidateModelRouteCache();
     channelCircuitBreaker.reset(id);
+    invalidateProviderBalanceCache(id);
     return new Response(null, { status: 204 });
   }
 
@@ -220,17 +263,22 @@ export async function handleChannelTest(
     return json({ ok: false, error: 'Failed to decrypt provider key' }, 500);
   }
 
-  // Test by calling <base_url>/models
-  const testUrl = `${channel.base_url}/models`;
+  // Test the provider's model listing with the first configured protocol auth.
+  const protocol = channel.protocols[0];
+  const testUrl = `${protocol?.base_url ?? channel.base_url}/models`;
   const start = Date.now();
 
   try {
+    const headers = new Headers({ 'User-Agent': 'mygateway/0.1.0' });
+    if (protocol?.auth_scheme === 'x_api_key') {
+      headers.set('x-api-key', providerKey);
+      headers.set('anthropic-version', protocol.api_version ?? '2023-06-01');
+    } else {
+      headers.set('Authorization', `Bearer ${providerKey}`);
+    }
     const resp = await fetch(testUrl, {
       method: 'GET',
-      headers: {
-        Authorization: `Bearer ${providerKey}`,
-        'User-Agent': 'mygateway/0.1.0',
-      },
+      headers,
       signal: AbortSignal.timeout(10_000),
     });
 
