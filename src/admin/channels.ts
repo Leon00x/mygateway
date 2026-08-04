@@ -18,6 +18,7 @@ import {
 } from '../db/channels.ts';
 import { encryptProviderKey } from '../crypto/provider-key.ts';
 import { invalidateModelRouteCache } from '../gateway/access-resolver.ts';
+import { channelCircuitBreaker } from '../gateway/passive-circuit-breaker.ts';
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -102,6 +103,7 @@ export async function handleChannelsCollection(
         notes: body.notes ?? null,
       });
       invalidateModelRouteCache();
+      channelCircuitBreaker.reset(id);
 
       const channel = await getChannel(env.DB, id);
       return json(toPublicChannel(channel!), 201);
@@ -171,6 +173,7 @@ export async function handleChannelItem(
 
       await updateChannel(env.DB, id, updates);
       invalidateModelRouteCache();
+      channelCircuitBreaker.reset(id);
       const updated = await getChannel(env.DB, id);
       return json(toPublicChannel(updated!));
     } catch (e) {
@@ -183,6 +186,7 @@ export async function handleChannelItem(
     await softDeleteInstancesByChannel(env.DB, id);
     await softDeleteChannel(env.DB, id);
     invalidateModelRouteCache();
+    channelCircuitBreaker.reset(id);
     return new Response(null, { status: 204 });
   }
 
@@ -233,6 +237,7 @@ export async function handleChannelTest(
     const elapsed = Date.now() - start;
 
     if (resp.ok) {
+      channelCircuitBreaker.recordSuccess(channelId);
       return json({ ok: true, status: resp.status, elapsed_ms: elapsed });
     }
     return json({

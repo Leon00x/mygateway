@@ -31,6 +31,7 @@
 - 管理员初始密码固定为 `mygateway123`；Master Key 随机生成且只在部署日志显示一次，用户必须立即保存
 - `.dev.vars.example` 提供公开的固定初始密码；真实 `MASTER_KEY` 永不入库
 - `wrangler.jsonc` 启用 Workers Logs，并使用 10% head sampling；性能响应头不依赖额外服务
+- 渠道被动熔断只使用 isolate 内存（3 次故障、冷却 30 秒），不需要新增 Cloudflare Binding
 
 首次部署输出示例：
 

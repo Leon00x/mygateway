@@ -47,6 +47,9 @@ export default function Dashboard() {
   const activeModels = () => models().filter((item) => item.status === 'active');
   const activeChannels = () => channels().filter((item) => item.status === 'active');
   const successRate = () => overview()?.requests ? Math.round((overview()!.successes / overview()!.requests) * 100) : 0;
+  const usageCoverage = () => overview()?.requests
+    ? Math.round(((overview()!.requests - overview()!.usage_unknown) / overview()!.requests) * 100)
+    : 100;
   const fmt = (value = 0) => value.toLocaleString();
 
   return (
@@ -63,7 +66,7 @@ export default function Dashboard() {
       <section class="metric-grid">
         <Metric title="总请求" value={fmt(overview()?.requests)} note={range() === 'today' ? '今日调用' : `${range()} 调用`} tone="violet" />
         <Metric title="成功率" value={`${successRate()}%`} note={`${fmt(overview()?.successes)} 次成功`} tone="green" />
-        <Metric title="Token 用量" value={fmt((overview()?.input_tokens ?? 0) + (overview()?.output_tokens ?? 0))} note="输入 + 输出" tone="orange" />
+        <Metric title="Token 用量" value={fmt((overview()?.input_tokens ?? 0) + (overview()?.output_tokens ?? 0))} note={`Provider 上报 · 覆盖率 ${usageCoverage()}%`} tone="orange" />
         <Metric title="自动回退" value={fmt(overview()?.fallbacks)} note={`${fmt(overview()?.errors)} 次失败`} tone="blue" />
       </section>
 
@@ -91,7 +94,7 @@ export default function Dashboard() {
 
         <div class="panel usage-panel">
           <div class="panel-header">
-            <div><h2>Usage Overview</h2><p>按时间范围聚合</p></div>
+            <div><h2>Usage Overview</h2><p>Provider 上报值，未知用量单独标记</p></div>
             <div class="range-tabs">
               <For each={['today','7d','30d'] as const}>{(item) => <button classList={{ active: range() === item }} onClick={() => changeRange(item)}>{item === 'today' ? '今日' : item}</button>}</For>
             </div>

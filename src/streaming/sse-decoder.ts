@@ -51,10 +51,18 @@ export class SseDecoder {
    * Flush any remaining buffered data.
    */
   flush(): void {
+    if (this._parseError) return;
+
+    this.buffer += this.textDecoder.decode();
     if (this.buffer.length > 0) {
       const remaining = this.buffer.replace(/\r$/, '');
       this.buffer = '';
       this.processLine(remaining);
+    }
+    // Some compatible providers omit the final blank SSE event separator.
+    if (this.currentData.length > 0) {
+      this.processEvent(this.currentData.join('\n'));
+      this.currentData = [];
     }
   }
 
@@ -89,8 +97,7 @@ export class SseDecoder {
       if (obj.usage && typeof obj.usage === 'object') {
         const prompt = obj.usage.prompt_tokens;
         const completion = obj.usage.completion_tokens;
-        if (typeof prompt === 'number' && prompt >= 0 &&
-            typeof completion === 'number' && completion >= 0) {
+        if (isTokenCount(prompt) && isTokenCount(completion)) {
           this.lastUsage = { inputTokens: prompt, outputTokens: completion };
         }
       }
@@ -115,10 +122,13 @@ export function extractNonStreamUsage(body: unknown): Usage | null {
   const prompt = u.prompt_tokens;
   const completion = u.completion_tokens;
 
-  if (typeof prompt === 'number' && prompt >= 0 &&
-      typeof completion === 'number' && completion >= 0) {
+  if (isTokenCount(prompt) && isTokenCount(completion)) {
     return { inputTokens: prompt, outputTokens: completion };
   }
 
   return null;
+}
+
+function isTokenCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 }

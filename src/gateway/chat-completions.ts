@@ -8,8 +8,10 @@ import { buildUpstreamHeaders, gatewayResponseHeaders } from '../http/headers.ts
 import { readLimitedBody, BodyTooLargeError } from '../http/body-limit.ts';
 import { applyServerTiming } from '../http/server-timing.ts';
 import { classifyUpstreamError } from './fallback-policy.ts';
+import { channelCircuitBreaker, selectCircuitCandidates } from './passive-circuit-breaker.ts';
 import { decryptProviderKey } from '../crypto/provider-key.ts';
 import { SseDecoder, extractNonStreamUsage, Usage } from '../streaming/sse-decoder.ts';
+import { onceAsync } from '../streaming/once-async.ts';
 import { upsertUsageMinute } from '../db/usage.ts';
 import { nowMinute } from '../shared/ids.ts';
 import { logEvent } from '../shared/log.ts';
@@ -24,6 +26,7 @@ interface RequestPerformance {
   access: GatewayAccessMetrics;
   upstreamTtfbMs: number;
   gatewayTtfbMs: number;
+  circuitSkippedCount: number;
 }
 
 function elapsedMs(startedAt: number): number {
@@ -131,14 +134,61 @@ export async function handleChatCompletions(
   }
 
   const { direct, candidates, unifiedModelId, modelCardId } = access.model.value;
-  const maxAttempts = Math.min(candidates.length, config.maxChannelAttempts);
+  const { selected: selectedCandidates, skipped: circuitSkipped } = selectCircuitCandidates(
+    candidates,
+    config.maxChannelAttempts,
+  );
+  const circuitSkippedCount = circuitSkipped.length;
+
+  for (const { candidate, position, retryAfterMs } of circuitSkipped) {
+    logEvent({
+      event: 'upstream_attempt_skipped',
+      timestamp: new Date().toISOString(),
+      request_id: requestId,
+      channel_id: candidate.channel_id,
+      channel_name: candidate.channel_name,
+      candidate_position: position + 1,
+      reason: 'circuit_open',
+      retry_after_ms: Math.ceil(retryAfterMs),
+    });
+  }
+
+  if (selectedCandidates.length === 0) {
+    return timed(gatewayErrorResponse(
+      'model_unavailable',
+      `All channels for model '${model}' are temporarily cooling down`,
+      requestId,
+      'model',
+    ));
+  }
+
+  const maxAttempts = selectedCandidates.length;
+
+  const recordCircuitFailure = (
+    candidate: (typeof candidates)[number],
+    errorKind: string,
+  ) => {
+    const circuit = channelCircuitBreaker.recordFailure(candidate.channel_id);
+    if (circuit.opened) {
+      logEvent({
+        event: 'channel_circuit_opened',
+        timestamp: new Date().toISOString(),
+        request_id: requestId,
+        channel_id: candidate.channel_id,
+        channel_name: candidate.channel_name,
+        error_kind: errorKind,
+        consecutive_failures: circuit.failures,
+        cooldown_ms: circuit.cooldownMs,
+      });
+    }
+  };
 
   // 3. Try candidates with fallback
   let lastError: { status: number; body: string } | null = null;
   let lastRetryableError: { status: number; body: string } | null = null;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const candidate = candidates[attempt];
+    const { candidate, circuitProbe } = selectedCandidates[attempt];
     const isLastAttempt = attempt === maxAttempts - 1;
 
     logEvent({
@@ -149,6 +199,7 @@ export async function handleChatCompletions(
       channel_id: candidate.channel_id,
       channel_name: candidate.channel_name,
       attempt: attempt + 1,
+      circuit_probe: circuitProbe,
     });
 
     // Decrypt provider key
@@ -163,6 +214,7 @@ export async function handleChatCompletions(
       );
     } catch {
       // Key decryption failure — treat as retryable
+      recordCircuitFailure(candidate, 'key_decryption');
       logEvent({
         event: 'upstream_attempt_failed',
         timestamp: new Date().toISOString(),
@@ -223,6 +275,7 @@ export async function handleChatCompletions(
       clearTimeout(timeoutId);
       upstreamTtfbMs = elapsedMs(upstreamStartedAt);
       const isTimeout = (e as Error).name === 'AbortError';
+      recordCircuitFailure(candidate, isTimeout ? 'timeout' : 'connection');
       logEvent({
         event: 'upstream_attempt_failed',
         timestamp: new Date().toISOString(),
@@ -259,6 +312,9 @@ export async function handleChatCompletions(
       lastError = { status: upstreamResponse.status, body: errorBody };
       const willFallback = kind === 'retryable' && !direct && !isLastAttempt;
 
+      if (kind === 'retryable') recordCircuitFailure(candidate, `http_${upstreamResponse.status}`);
+      else channelCircuitBreaker.recordSuccess(candidate.channel_id);
+
       logEvent({
         event: 'upstream_attempt_failed',
         timestamp: new Date().toISOString(),
@@ -284,6 +340,7 @@ export async function handleChatCompletions(
     }
 
     // --- Success: upstream accepted the response ---
+    channelCircuitBreaker.recordSuccess(candidate.channel_id);
     logEvent({
       event: 'upstream_response_accepted',
       timestamp: new Date().toISOString(),
@@ -295,14 +352,17 @@ export async function handleChatCompletions(
       gateway_ttfb_ms: elapsedMs(requestStartedAt),
       cache_status: access.metrics?.cacheStatus,
       d1_ms: access.metrics?.d1Ms,
+      circuit_probe: circuitProbe,
+      circuit_skipped_count: circuitSkippedCount,
     });
 
-    const fallbackOccurred = attempt > 0;
+    const fallbackOccurred = attempt > 0 || circuitSkippedCount > 0;
     const requestPerformance: RequestPerformance = {
       requestStartedAt,
       access: access.metrics!,
       upstreamTtfbMs,
       gatewayTtfbMs: elapsedMs(requestStartedAt),
+      circuitSkippedCount,
     };
 
     // 4a. Non-streaming
@@ -408,6 +468,7 @@ async function handleNonStreamResponse(
         cache_status: requestPerformance.access.cacheStatus,
         d1_ms: requestPerformance.access.d1Ms,
         upstream_ttfb_ms: requestPerformance.upstreamTtfbMs,
+        circuit_skipped_count: requestPerformance.circuitSkippedCount,
       });
     }
   })();
@@ -440,11 +501,7 @@ function handleStreamResponse(
   const decoder = new SseDecoder();
   const reader = upstream.body!.getReader();
 
-  let finalized = false;
-
-  const finalize = async (outcome: 'success' | 'error' | 'cancelled') => {
-    if (finalized) return;
-    finalized = true;
+  const finalize = onceAsync(async (outcome: 'success' | 'error' | 'cancelled') => {
     decoder.flush();
     const usage = decoder.parseError ? null : decoder.usage;
     try {
@@ -468,9 +525,10 @@ function handleStreamResponse(
         cache_status: requestPerformance.access.cacheStatus,
         d1_ms: requestPerformance.access.d1Ms,
         upstream_ttfb_ms: requestPerformance.upstreamTtfbMs,
+        circuit_skipped_count: requestPerformance.circuitSkippedCount,
       });
     }
-  };
+  });
 
   const clientStream = new ReadableStream({
     async pull(controller) {

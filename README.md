@@ -357,6 +357,8 @@ MVP 可触发 Fallback 的情况：
 
 MVP 不做同渠道原地自动重试，避免重复生成和重复计费。
 
+连续 3 次出现连接错误、Header 超时、`408`、`429` 或 `5xx` 后，当前 Worker isolate 会将该渠道冷却 30 秒。冷却期间统一模型直接选择后续渠道；冷却结束后的下一次真实业务请求作为恢复探测。该被动熔断不使用 KV、Durable Objects、额外 D1 写入或主动 Provider 探测，因此不增加免费档基础设施成本。完整公开别名不会改路由到其他渠道。
+
 ### 5.8 SSE 流式处理
 
 MVP 的流处理器：
@@ -368,6 +370,7 @@ MVP 的流处理器：
 - 对明确支持的渠道注入 `stream_options.include_usage=true`；
 - 从最终 Chat Completions usage chunk 提取用量；
 - Provider 不支持 usage 或流被中断时记录 `usage_unknown`；
+- Token 只接受 Provider 返回的非负安全整数，不自行估算；
 - 流开始后发生错误时终止流，不执行 Fallback。
 
 ### 5.9 基础用量统计
@@ -383,6 +386,7 @@ MVP 直接向 D1 的分钟级汇总表执行 UPSERT，不保存 Prompt、Respons
 - 最终尝试次数；
 - 输入 Token；
 - 输出 Token；
+- Provider usage 覆盖率与未知请求数；
 - usage 未知请求数；
 - 最终使用的模型和渠道。
 

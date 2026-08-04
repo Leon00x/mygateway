@@ -19,6 +19,10 @@ function parseRange(url: URL): 'today' | '7d' | '30d' {
   return 'today';
 }
 
+function usageRange(range: 'today' | '7d' | '30d', env: Env) {
+  return getUsageRange(range, env.DEFAULT_TIMEZONE ?? 'Asia/Shanghai');
+}
+
 /**
  * GET /admin/api/usage/overview?range=today|7d|30d
  */
@@ -28,7 +32,7 @@ export async function handleUsageOverview(
   requestId: string,
 ): Promise<Response> {
   const range = parseRange(url);
-  const { start, end } = getUsageRange(range);
+  const { start, end } = usageRange(range, env);
   const overview = await getOverview(env.DB, start, end);
   return json({ range, ...overview });
 }
@@ -42,7 +46,7 @@ export async function handleUsageByModel(
   requestId: string,
 ): Promise<Response> {
   const range = parseRange(url);
-  const { start, end } = getUsageRange(range);
+  const { start, end } = usageRange(range, env);
 
   const result = await env.DB
     .prepare(
@@ -73,7 +77,7 @@ export async function handleUsageByChannel(
   requestId: string,
 ): Promise<Response> {
   const range = parseRange(url);
-  const { start, end } = getUsageRange(range);
+  const { start, end } = usageRange(range, env);
 
   const result = await env.DB
     .prepare(

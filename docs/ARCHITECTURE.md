@@ -881,6 +881,16 @@ RESOLVING
 - 错误 body 读取设置上限，避免超大错误响应消耗内存；
 - 日志记录每次尝试，但 usage 分钟表只按最终渠道汇总一次客户端请求。
 
+### 10.6 免费档被动熔断
+
+- 每个 Worker isolate 独立维护最多 500 个渠道状态，不引入共享存储；
+- 连续 3 次可回退错误后打开熔断器，固定冷却 30 秒；
+- 冷却期间统一模型跳过该渠道，并从后续候选中补足最多 `MAX_CHANNEL_ATTEMPTS` 个实际尝试；
+- 冷却结束后的真实业务请求作为恢复探测，成功立即关闭，失败立即重新冷却；
+- 普通 `4xx` 表示渠道可达，会清除连续故障；管理端更新渠道或连接测试成功也会清除当前 isolate 状态；
+- 状态随 isolate 回收自然丢失，不做主动健康请求，不产生额外 D1/KV/DO 成本；
+- 完整公开别名仍不切换渠道；若指定渠道正在冷却，直接返回暂时不可用。
+
 ## 11. 非流式响应和用量
 
 ### 11.1 响应处理
@@ -1017,7 +1027,7 @@ interface UsageContext {
 
 - 一次客户端请求只增加一次 `request_count`；
 - `attempt_count_total` 增加实际上游尝试次数；
-- `fallback_count` 表示该请求至少尝试过第二个渠道；
+- `fallback_count` 表示该请求尝试过第二个渠道，或因被动熔断跳过首选渠道；
 - 统计维度使用最终接受/最终失败的渠道；
 - 前面失败候选的详情只进入结构化日志，不为每次尝试额外写 D1；
 - 客户端取消增加 `cancelled_count` 和 `usage_unknown_count`；
@@ -1052,7 +1062,7 @@ FROM usage_minutes
 WHERE timestamp_minute >= ? AND timestamp_minute < ?;
 ```
 
-按模型和渠道查询使用相同时间条件后 GROUP BY。管理 API 只允许 `today`、`7d`、`30d` 三个预设范围，防止任意超大扫描。
+按模型和渠道查询使用相同时间条件后 GROUP BY。管理 API 只允许 `today`、`7d`、`30d` 三个预设范围，防止任意超大扫描。`today` 从 `DEFAULT_TIMEZONE`（默认 `Asia/Shanghai`）的当地零点开始；`7d` 和 `30d` 是滚动时间范围。看板同时展示 Provider usage 覆盖率与 `usage_unknown`，不会把未知请求解释为零 Token。
 
 ## 14. 管理 API
 
@@ -1314,6 +1324,7 @@ D1 配置查询默认依赖数据库 primary。全球 Edge 不代表 D1 查询�
 - 管理 API 写入会清空当前 isolate 的相关缓存，其他 isolate 依靠 TTL 收敛；
 - isolate 被回收或缓存淘汰时自动回源 D1，D1 始终是唯一权威数据源；
 - 不引入 KV、Queues、Durable Objects，缓存本身不产生额外存储操作费用。
+- 被动熔断同样只使用有界 isolate 内存；阈值 3 次、冷却 30 秒，不主动调用 Provider。
 
 必须持续测量：
 
@@ -1345,6 +1356,8 @@ gateway_access_resolved
 model_resolved
 upstream_attempt_started
 upstream_attempt_failed
+upstream_attempt_skipped
+channel_circuit_opened
 upstream_response_accepted
 gateway_stream_completed
 gateway_stream_cancelled
@@ -1356,7 +1369,8 @@ cron_cleanup_completed
 
 `gateway_access_resolved` 记录 `cache_status`、`key_cache`、`model_cache`、
 `d1_statements`、`d1_ms` 和 `access_ms`；`gateway_request_completed` 记录
-`total_ms`、`upstream_ttfb_ms`、尝试次数及 Fallback。所有字段都不包含 Key、
+`total_ms`、`upstream_ttfb_ms`、尝试次数、熔断跳过数及 Fallback。
+`upstream_attempt_skipped` 和 `channel_circuit_opened` 用于观察被动熔断。所有字段都不包含 Key、
 Prompt 或 Response 正文。生产配置启用 Workers Logs 的 10% head sampling，
 因此这些日志用于趋势和排障，不作为精确计费数据；完整请求计数仍以 D1 分钟聚合为准。
 
