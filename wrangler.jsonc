@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "mygateway",
+  "name": "mygatewaydemo",
   "main": "src/index.ts",
   "compatibility_date": "2025-07-27",
   "assets": {
