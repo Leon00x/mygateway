@@ -23,6 +23,7 @@ import {
 } from '../db/admin-users.ts';
 import { logAuthFailed } from '../shared/log.ts';
 import { handleChannelsCollection, handleChannelItem, handleChannelTest } from './channels.ts';
+import { handleChannelBalance, handleChannelBalances } from './provider-balances.ts';
 import { handleModelsCollection, handleModelItem, handleModelInstances, handleReorderInstances } from './models.ts';
 import { handleKeysCollection, handleKeyItem, handleKeyRegenerate } from './keys.ts';
 import { handleUsageOverview, handleUsageByModel, handleUsageByChannel, handleUsageClear } from './usage.ts';
@@ -102,6 +103,14 @@ export async function handleAdminApi(
   // --- Channels ---
   if (path === '/admin/api/channels') {
     return handleChannelsCollection(request, env, requestId);
+  }
+  if (path === '/admin/api/channels/balances') {
+    return handleChannelBalances(request, url, env);
+  }
+  if (path.match(/^\/admin\/api\/channels\/[^/]+\/balance$/)) {
+    const parts = path.split('/');
+    const id = parts[parts.length - 2];
+    return handleChannelBalance(request, url, id, env);
   }
   if (path.match(/^\/admin\/api\/channels\/[^/]+\/test$/)) {
     const parts = path.split('/');

@@ -10,7 +10,7 @@ import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 import { apiReference } from '@scalar/hono-api-reference';
 import { Env } from '../env.ts';
 import { extractGatewayKey, hashGatewayKey } from '../auth/gateway-key.ts';
-import { handleChatCompletions } from './chat-completions.ts';
+import { handleAnthropicMessages, handleChatCompletions, handleResponses } from './chat-completions.ts';
 import { handleModelsList } from './models-list.ts';
 import { authenticateGatewayKeyHash } from './access-resolver.ts';
 
@@ -59,7 +59,7 @@ gatewayApp.use('/v1/*', async (c, next) => {
 
   // The chat handler batches authentication and model routing after reading
   // the model name. Other /v1 routes authenticate here as usual.
-  if (c.req.path === '/v1/chat/completions') {
+  if (['/v1/chat/completions', '/v1/responses', '/v1/messages'].includes(c.req.path)) {
     return next();
   }
 
@@ -87,6 +87,12 @@ gatewayApp.openAPIRegistry.registerComponent('securitySchemes', 'bearerAuth', {
   scheme: 'bearer',
   description: 'Gateway API key (gw_...)',
 });
+gatewayApp.openAPIRegistry.registerComponent('securitySchemes', 'anthropicApiKey', {
+  type: 'apiKey',
+  in: 'header',
+  name: 'x-api-key',
+  description: 'Gateway API key (gw_...) for Anthropic SDK compatibility',
+});
 
 gatewayApp.doc31('/v1/openapi.json', {
   openapi: '3.1.0',
@@ -109,7 +115,7 @@ gatewayApp.get('/v1/api-docs', apiReference({
 const modelsRoute = createRoute({
   method: 'get',
   path: '/v1/models',
-  security: [{ bearerAuth: [] }],
+  security: [{ bearerAuth: [] }, { anthropicApiKey: [] }],
   responses: {
     200: {
       description: 'List of available models',
@@ -189,6 +195,64 @@ gatewayApp.openapi(chatRoute, async (c) => {
     status: response.status,
     headers: response.headers,
   });
+});
+
+const responsesRoute = createRoute({
+  method: 'post',
+  path: '/v1/responses',
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: 'OpenAI Responses response (native protocol only)',
+      content: {
+        'application/json': { schema: z.object({ id: z.string(), object: z.string() }).passthrough() },
+        'text/event-stream': { schema: z.string() },
+      },
+    },
+    400: { description: 'Invalid request' },
+    401: { description: 'Invalid or missing API key' },
+    422: { description: 'No matching native provider protocol' },
+  },
+});
+
+gatewayApp.openapi(responsesRoute, async (c) => {
+  const response = await handleResponses(
+    c.req.raw,
+    c.env,
+    c.executionCtx as unknown as ExecutionContext,
+    c.get('requestId') as string,
+    c.get('gatewayKeyHash') as string,
+  );
+  return new Response(response.body, { status: response.status, headers: response.headers });
+});
+
+const messagesRoute = createRoute({
+  method: 'post',
+  path: '/v1/messages',
+  security: [{ bearerAuth: [] }, { anthropicApiKey: [] }],
+  responses: {
+    200: {
+      description: 'Anthropic Messages response, native or converted from Chat Completions',
+      content: {
+        'application/json': { schema: z.object({ id: z.string(), type: z.string() }).passthrough() },
+        'text/event-stream': { schema: z.string() },
+      },
+    },
+    400: { description: 'Invalid request' },
+    401: { description: 'Invalid or missing API key' },
+    422: { description: 'Unsupported conversion feature or unavailable protocol' },
+  },
+});
+
+gatewayApp.openapi(messagesRoute, async (c) => {
+  const response = await handleAnthropicMessages(
+    c.req.raw,
+    c.env,
+    c.executionCtx as unknown as ExecutionContext,
+    c.get('requestId') as string,
+    c.get('gatewayKeyHash') as string,
+  );
+  return new Response(response.body, { status: response.status, headers: response.headers });
 });
 
 /**

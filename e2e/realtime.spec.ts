@@ -7,11 +7,13 @@
  * Flow:
  *   1. add channel with real key
  *   2. channel connection test → 200
- *   3. create model card + instance
- *   4. create gateway key
- *   5. non-streaming chat via gateway → real completion + usage
- *   6. streaming chat via gateway → [DONE] + usage chunk
- *   7. admin usage overview reflects the calls
+ *   3. official account balance query → exact monetary strings
+ *   4. create model card + instance
+ *   5. create gateway key
+ *   6. non-streaming chat via gateway → real completion + usage
+ *   7. streaming chat via gateway → [DONE] + usage chunk
+ *   8. Anthropic Messages non-stream and stream → converted through Chat
+ *   9. admin usage overview reflects the calls
  */
 
 import { test, expect } from '@playwright/test';
@@ -59,6 +61,26 @@ test('realtime: channel connection test returns 200', async ({ request }) => {
   const body = await t.json();
   expect(body.ok).toBe(true);
   expect(body.status).toBe(200);
+});
+
+test('realtime: official DeepSeek balance returns exact monetary strings', async ({ request }) => {
+  await loginViaApi(request);
+  const channels = await request.get('/admin/api/channels').then((r) => r.json());
+  const ch = channels.find((c: any) => c.name === channelName);
+
+  const response = await request.get(`/admin/api/channels/${ch.id}/balance?refresh=1`);
+  expect(response.status()).toBe(200);
+  const body = await response.json();
+  expect(body.provider).toBe('deepseek');
+  expect(body.status).toBe('ok');
+  expect(typeof body.is_available).toBe('boolean');
+  expect(Array.isArray(body.balance_infos)).toBe(true);
+  for (const item of body.balance_infos) {
+    expect(item.currency).toMatch(/^(CNY|USD)$/);
+    expect(item.total_balance).toMatch(/^\d+(?:\.\d+)?$/);
+    expect(item.granted_balance).toMatch(/^\d+(?:\.\d+)?$/);
+    expect(item.topped_up_balance).toMatch(/^\d+(?:\.\d+)?$/);
+  }
 });
 
 test('realtime: create model + instance', async ({ request }) => {
@@ -140,12 +162,52 @@ test('realtime: streaming chat → [DONE] + usage chunk', async ({ request }) =>
   expect(usageChunk, 'final usage chunk should be present').toBeTruthy();
 });
 
+test('realtime: Anthropic Messages → Chat conversion', async ({ request }) => {
+  const resp = await request.post('/v1/messages', {
+    headers: { 'x-api-key': gwKey, 'anthropic-version': '2023-06-01' },
+    data: {
+      model: modelId,
+      max_tokens: 128,
+      messages: [{ role: 'user', content: 'Reply with exactly: OK' }],
+      stream: false,
+    },
+    timeout: 60_000,
+  });
+  expect(resp.status()).toBe(200);
+  const body = await resp.json();
+  expect(body.type).toBe('message');
+  expect(body.role).toBe('assistant');
+  expect(body.content?.some((block: any) => block.type === 'text' && block.text.length > 0)).toBe(true);
+  expect(body.usage.input_tokens).toBeGreaterThan(0);
+  expect(body.usage.output_tokens).toBeGreaterThan(0);
+});
+
+test('realtime: streaming Messages conversion emits Anthropic events', async ({ request }) => {
+  const resp = await request.post('/v1/messages', {
+    headers: { 'x-api-key': gwKey, 'anthropic-version': '2023-06-01' },
+    data: {
+      model: alias,
+      max_tokens: 128,
+      messages: [{ role: 'user', content: 'Reply with exactly: OK' }],
+      stream: true,
+    },
+    timeout: 60_000,
+  });
+  expect(resp.status()).toBe(200);
+  const text = await resp.text();
+  expect(text).toContain('event: message_start');
+  expect(text).toContain('event: content_block_delta');
+  expect(text).toContain('event: message_delta');
+  expect(text).toContain('event: message_stop');
+  expect(text).toContain('"type":"text_delta"');
+});
+
 test('realtime: admin usage overview reflects the calls', async ({ request }) => {
   await loginViaApi(request);
 
   const overview = await request.get('/admin/api/usage/overview?range=today').then((r) => r.json());
-  expect(overview.requests).toBeGreaterThanOrEqual(2);
-  expect(overview.successes).toBeGreaterThanOrEqual(2);
+  expect(overview.requests).toBeGreaterThanOrEqual(4);
+  expect(overview.successes).toBeGreaterThanOrEqual(4);
   expect(overview.input_tokens).toBeGreaterThan(0);
   expect(overview.output_tokens).toBeGreaterThan(0);
 });

@@ -7,17 +7,16 @@
 import { sha256Hex } from '../shared/ids.ts';
 
 /**
- * Extract Gateway Bearer Key from Authorization header.
+ * Extract a Gateway Key from OpenAI Bearer or Anthropic x-api-key headers.
  * Returns the raw key string, or null if missing/malformed.
  */
 export function extractGatewayKey(request: Request): string | null {
   const auth = request.headers.get('authorization');
-  if (!auth) return null;
-
-  const parts = auth.split(' ');
-  if (parts.length !== 2 || parts[0] !== 'Bearer') return null;
-
-  const key = parts[1];
+  const parts = auth?.split(' ');
+  const key = parts?.length === 2 && parts[0].toLowerCase() === 'bearer'
+    ? parts[1]
+    : request.headers.get('x-api-key');
+  if (!key) return null;
   if (!key.startsWith('gw_')) return null;
 
   return key;

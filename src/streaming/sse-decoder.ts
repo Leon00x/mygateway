@@ -95,8 +95,26 @@ export class SseDecoder {
     try {
       const obj = JSON.parse(data);
       if (obj.usage && typeof obj.usage === 'object') {
-        const prompt = obj.usage.prompt_tokens;
-        const completion = obj.usage.completion_tokens;
+        const prompt = obj.usage.prompt_tokens ?? obj.usage.input_tokens;
+        const completion = obj.usage.completion_tokens ?? obj.usage.output_tokens;
+        if (isTokenCount(prompt) && isTokenCount(completion)) {
+          this.lastUsage = { inputTokens: prompt, outputTokens: completion };
+        } else if (isTokenCount(completion) && this.lastUsage) {
+          this.lastUsage = { ...this.lastUsage, outputTokens: completion };
+        }
+      }
+      const responseUsage = obj.response?.usage;
+      if (responseUsage && typeof responseUsage === 'object') {
+        const prompt = responseUsage.input_tokens;
+        const completion = responseUsage.output_tokens;
+        if (isTokenCount(prompt) && isTokenCount(completion)) {
+          this.lastUsage = { inputTokens: prompt, outputTokens: completion };
+        }
+      }
+      const messageUsage = obj.message?.usage;
+      if (messageUsage && typeof messageUsage === 'object') {
+        const prompt = messageUsage.input_tokens;
+        const completion = messageUsage.output_tokens;
         if (isTokenCount(prompt) && isTokenCount(completion)) {
           this.lastUsage = { inputTokens: prompt, outputTokens: completion };
         }
@@ -119,8 +137,8 @@ export function extractNonStreamUsage(body: unknown): Usage | null {
   if (!usage || typeof usage !== 'object') return null;
 
   const u = usage as Record<string, unknown>;
-  const prompt = u.prompt_tokens;
-  const completion = u.completion_tokens;
+  const prompt = u.prompt_tokens ?? u.input_tokens;
+  const completion = u.completion_tokens ?? u.output_tokens;
 
   if (isTokenCount(prompt) && isTokenCount(completion)) {
     return { inputTokens: prompt, outputTokens: completion };

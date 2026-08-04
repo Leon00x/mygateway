@@ -7,7 +7,8 @@
 > MVP 原则：先完成最小可部署、可调用、可回退、可观测的完整闭环。
 
 文档入口：[更新日志](CHANGELOG.md) · [下一阶段路线图](docs/ROADMAP.md) ·
-[架构设计](docs/ARCHITECTURE.md) · [部署指南](docs/DEPLOY.md)
+[架构设计](docs/ARCHITECTURE.md) · [多协议设计](docs/PROTOCOLS.md) ·
+[DeepSeek 余额](docs/DEEPSEEK_BALANCE.md) · [部署指南](docs/DEPLOY.md)
 
 ## 0. 一键部署
 
@@ -23,7 +24,7 @@
 3. 首次部署脚本自动生成 `MASTER_KEY`，并设置管理员初始账号 `admin / mygateway123`；立即保存部署日志中的 `MASTER_KEY`；
 4. 打开 `https://mygatewaydemo.<你的 workers.dev 子域>.workers.dev`，使用初始账号登录；
 5. 首次登录必须修改用户名和密码，然后在 **Channels**、**Models**、**API Keys** 页面完成配置；
-6. 用 Gateway Key 调用 `/v1/chat/completions`。
+6. 用 Gateway Key 调用 `/v1/chat/completions`、`/v1/responses` 或 `/v1/messages`。
 
 > ⚠️ `MASTER_KEY` 一旦生成不可更换，否则已加密的 Provider Key 无法解密。不要把首次部署日志公开。
 
@@ -79,9 +80,9 @@ npm run db:migrate:local
 ## 1. 产品定义
 Cloudflare AI Aggregation Gateway 是一个部署在用户自己 Cloudflare 账号中的轻量 AI 网关。
 
-用户可以配置多个 OpenAI Compatible 渠道，用一个统一的模型 ID 和 Gateway API Key 调用模型。网关按照管理员保存的固定顺序选择渠道，并在上游尚未开始向客户端返回响应时执行 Fallback。
+用户可以配置多个供应商渠道；一个渠道用一份 API Key 配置多个原生协议端点。网关对外提供 OpenAI Chat、OpenAI Responses 和 Anthropic Messages，用统一模型 ID 路由，并在上游尚未开始响应时执行 Fallback。
 
-MVP 不追求覆盖所有 AI Provider，也不做协议转换、动态负载均衡或精确费用结算。第一版只验证以下核心价值：
+当前协议转换只覆盖最高频的 Chat 与 Messages 公共子集，不做 Responses 转换、动态负载均衡或精确费用结算。
 
 - 无需自建服务器即可部署 AI 网关；
 - 一个调用入口管理多个兼容渠道；
@@ -149,9 +150,9 @@ MVP 上线必须完成以下闭环：
 
 MVP 的自动路由是管理员保存的固定优先级，不是随机、轮询或动态成本调度。同一配置下，同一统一模型默认选择同一个首选渠道。
 
-### 4.2 只做协议内转发
+### 4.2 原生协议优先，转换严格受限
 
-MVP 只提供 OpenAI Chat Completions 协议，不把 OpenAI 请求转换成 Claude、Gemini 或其他原生协议。
+客户端请求优先进入供应商的同协议端点。缺少同协议时只允许 Chat 与 Messages 双向转换；找不到路径或字段不能安全表达时返回明确错误，不静默丢弃。Responses 当前只原生转发。
 
 ### 4.3 Fallback 只发生在响应提交前
 
@@ -206,10 +207,21 @@ Cloudflare Access 作为后续可选增强，不是 MVP 部署的前置条件。
 
 ### 5.3 渠道管理
 
-MVP 支持：
+当前支持：
 
 - OpenAI 官方；
-- 其他 OpenAI Compatible 渠道。
+- Anthropic 原生 Messages；
+- DeepSeek、Z.AI、华为云（中国）、阿里云国际、火山国际（BytePlus）、Google
+  Gemini、Groq、MiniMax 国际、xAI 和 Mistral AI 预制；
+- 其他 OpenAI Compatible 渠道；
+- 单渠道配置多个 Chat / Responses / Messages 端点并共用一份加密 Key。
+
+华为云（中国）和阿里云国际预制会用同一 Key 自动配置 Chat + Messages；火山国际
+预制自动配置 Chat + Responses。预制使用通用按量端点，不会把 Coding Plan 专属
+地址与普通 API Key 混用。
+
+Groq 和 xAI 预制自动配置 Chat + Responses；MiniMax 国际自动配置 Chat +
+Messages；Gemini 与 Mistral 使用各自已确认的 OpenAI Chat 兼容端点。
 
 渠道字段：
 
@@ -226,9 +238,13 @@ MVP 支持：
 - 创建、编辑、启用、停用渠道；
 - 删除未被模型实例引用的渠道；
 - 测试渠道连接；
+- 对 DeepSeek 官方渠道按需查询账户余额，并逐币种展示总余额、赠金、充值余额和可用状态；
 - Provider API Key 更新后不再回显明文。
 
 Provider API Key 使用 `MASTER_KEY` 通过 AES-GCM 加密后存入 D1。
+余额查询只在用户点击查询/刷新时访问 DeepSeek，成功结果使用 5 分钟 Worker isolate
+短缓存，不写入 D1/KV，也不跨渠道或币种汇总。详细设计见
+[DeepSeek 余额查询](docs/DEEPSEEK_BALANCE.md)。
 
 ### 5.4 模型管理
 
@@ -303,20 +319,23 @@ D1 只保存 SHA-256 hash 和用于展示的短 prefix。
 Authorization: Bearer gw_xxx
 ```
 
-### 5.6 Chat Completions 网关
+### 5.6 多协议网关
 
-MVP 提供：
+当前提供：
 
 ```http
 POST /v1/chat/completions
+POST /v1/responses
+POST /v1/messages
 GET  /v1/models
 ```
 
-`/v1/chat/completions` 支持：
+三个生成接口共用 Gateway Key、模型路由、Fallback、被动熔断和 usage 数据面：
 
 - `stream: false` 非流式响应；
 - `stream: true` SSE 流式响应；
-- 保留 OpenAI Chat Completions 请求体，只替换 `model`；
+- 原生同协议端点优先，只替换 `model` 和上游鉴权；
+- Chat 与 Messages 缺少原生端点时使用严格公共子集双向转换；Responses 不转换；
 - 将 Gateway Key 替换为上游 Provider Key；
 - 清理 Cookie、Cloudflare Header、客户端凭据等不应转发的 Header；
 - 将客户端取消信号传递给上游；
@@ -433,22 +452,20 @@ MVP 必须满足：
 | 页面 | MVP 功能 |
 |---|---|
 | 登录 | 用户名密码登录、首次强制改密、建立 Session、退出登录 |
-| Dashboard | 请求、Token、成功率、模型和渠道统计 |
-| Channels | 渠道 CRUD、启停、更新 Key、测试连接 |
+| Dashboard | 请求、Token、成功率、模型和渠道统计；DeepSeek 官方账户余额卡片 |
+| Channels | 渠道 CRUD、启停、更新 Key、测试连接；DeepSeek 官方余额按需查询 |
 | Models | 模型卡片、渠道实例、完整别名、拖拽排序、手工价格和套餐 |
 | API Keys | 创建、一次性展示、启停、删除、重新生成 |
 | System | Gateway 地址、版本、数据库状态和运行配置状态 |
 
 ## 7. MVP 明确不包含
 
-- OpenAI Responses API；
-- Claude Messages API；
 - Gemini 原生协议；
 - Embeddings、Images、Audio、Realtime、Batch、Files；
-- OpenAI、Claude、Gemini 之间的协议转换；
+- Responses 与 Chat/Messages 的协议转换，以及 Gemini 原生协议转换；
 - OAuth 渠道接入；
 - 自动查询 Token 套餐余量；
-- 自动查询 Provider 金额余额；
+- DeepSeek 之外的 Provider 金额余额与后台定时同步；
 - MaaS Lab 或其他第三方价格自动抓取；
 - 套餐优先和成本优先自动排序；
 - 自动扣减手工套餐；
@@ -487,7 +504,8 @@ MVP 必须满足：
 
 ### 8.4 兼容性
 
-- MVP 以 OpenAI Chat Completions 的公共请求/响应结构为兼容目标；
+- 原生转发保持 Chat、Responses 或 Messages 的客户端协议；
+- Chat 与 Messages 转换只承诺文档列出的公共子集；
 - OpenAI Compatible 渠道的非标准差异由渠道配置和后续 Provider Adapter 迭代处理；
 - 不承诺所有标称 OpenAI Compatible 服务都支持全部可选字段。
 
@@ -543,7 +561,7 @@ MVP 必须满足：
 MVP 只用 5 类 Cloudflare 组件：**1 个 Worker + Static Assets + 1 个 D1 数据库 + 2 个首次部署 Secrets + 1 个 Cron**，不依赖 Pages/KV/R2/GitHub Actions。
 
 ```text
-     浏览器 / OpenAI SDK
+     浏览器 / OpenAI SDK / Anthropic SDK
            │
            ▼
  workers.dev ───────────▶ 单个 Cloudflare Worker（mygatewaydemo）
@@ -553,13 +571,13 @@ MVP 只用 5 类 Cloudflare 组件：**1 个 Worker + Static Assets + 1 个 D1 �
  Static Assets            /admin/api/*                /v1/*
  SolidJS 管理后台         Session Cookie 认证          Gateway Key 认证
  (登录/渠道/模型/          Channels/Models/Keys        Model Resolver
-  Keys/看板)               CRUD + Usage 查询           Fixed Router
+  Keys/看板)               CRUD + Usage 查询           Protocol Router
         │                       │                    Fallback + SSE
         └───────────┬───────────┴──────────┬──────────┘
                     │                      │
               D1 数据库                 AI Provider
-             (8 张表：配置、          (OpenAI Compatible:
-              加密密钥、用量统计)       DeepSeek/OpenAI 等)
+             (9 张表：配置、          (Chat / Responses /
+              加密密钥、用量统计)       Messages)
 
  Secrets: INITIAL_ADMIN_PASSWORD（固定初始值）+ MASTER_KEY（首次部署随机生成）
  Cron: 每日 03:17 清理 30 天前用量
@@ -583,7 +601,7 @@ MVP 使用 Playwright 驱动真实 Chromium 浏览器做端到端验证，覆盖
 | 套件 | 文件 | 依赖 | 覆盖 |
 |---|---|---|---|
 | UI 旅程 | `e2e/journey.spec.ts`（10 例） | 无外部依赖（dummy key） | 登录鉴权、渠道/模型/Key 管理页交互、网关调用、登出 |
-| 真实集成 | `e2e/realtime.spec.ts`（7 例） | `.dev.vars` 的 `DEEPSEEK_TEST_KEY`（缺失自动跳过） | 真实 DeepSeek 渠道、连接测试、非流式/流式调用、usage 落库 |
+| 真实集成 | `e2e/realtime.spec.ts`（10 例） | `.dev.vars` 的 `DEEPSEEK_TEST_KEY`（缺失自动跳过） | 真实 DeepSeek 渠道、余额、Chat/Messages 非流式与流式调用、usage 落库 |
 
 ### 前置条件
 
@@ -614,15 +632,18 @@ npx playwright test e2e/realtime.spec.ts   # 仅真实集成
 9. Dashboard 显示渠道与模型
 10. 退出登录 → 回登录页
 
-### 真实集成（7 例，真实 DeepSeek key）
+### 真实集成（10 例，真实 DeepSeek key）
 
 1. 添加真实 key 渠道
 2. 渠道连接测试 → 200 OK
-3. 创建模型卡片 + 绑定实例
-4. 创建 Gateway Key
-5. 非流式调用 → 真实 completion + usage
-6. 流式调用 → `[DONE]` + usage chunk
-7. admin usage 看板反映调用量
+3. 官方余额接口 → 金额字符串和账户可用状态
+4. 创建模型卡片 + 绑定实例
+5. 创建 Gateway Key
+6. Chat 非流式调用 → 真实 completion + usage
+7. Chat 流式调用 → `[DONE]` + usage chunk
+8. Messages → Chat 非流式转换
+9. Messages → Chat 流式 SSE 事件转换
+10. admin usage 看板反映调用量
 
 测试自动清理数据库（删除全部渠道/Key/模型），可重复运行。真实 key 只存于 `.dev.vars`（已 gitignore），测试从环境读取，不硬编码。
 

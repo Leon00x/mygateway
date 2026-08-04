@@ -58,6 +58,7 @@ test('4. add channel via preset modal', async ({ page }) => {
 
   // List should show the channel (created from the DeepSeek preset)
   await expect(page.getByText(channelName).first()).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole('button', { name: '查询余额' })).toBeVisible();
 });
 
 test('5. create model card + add instance via UI', async ({ page, request }) => {
@@ -172,8 +173,10 @@ test('8. no auth → 401 from gateway', async ({ request }) => {
 test('9. dashboard shows channel and model', async ({ page }) => {
   await loginViaUi(page);
   await expect(page.getByText('Gateway Endpoint')).toBeVisible();
-  await expect(page.getByText(channelName, { exact: true })).toBeVisible();
+  await expect(page.getByText(channelName, { exact: true }).first()).toBeVisible();
   await expect(page.getByText(modelId, { exact: true })).toBeVisible();
+  await expect(page.getByText('Provider Balance')).toBeVisible();
+  await expect(page.getByText('点击刷新后查询')).toBeVisible();
 });
 
 test('10. logout returns to login', async ({ page }) => {
