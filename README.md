@@ -319,7 +319,7 @@ GET  /v1/models
 - 返回 Gateway Request ID 便于排查。
 - 冷请求用一次 D1 batch 同时完成 Gateway Key 鉴权和模型路由；
 - 热请求使用有界 isolate 内存 TTL 缓存，不引入 KV、Queues 或 Durable Objects；
-- 响应通过 `Server-Timing` 暴露缓存状态、鉴权/路由、D1、上游首包和网关首包耗时；
+- 响应通过 `X-Gateway-Timing`（稳定）与 `Server-Timing`（Cloudflare 可能覆盖）暴露缓存状态、鉴权/路由、D1、上游首包和网关首包耗时；
 
 `/v1/models` 根据已启用的统一模型和完整公开别名生成兼容模型列表。
 

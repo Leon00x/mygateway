@@ -1322,7 +1322,7 @@ D1 配置查询默认依赖数据库 primary。全球 Edge 不代表 D1 查询�
 - 加 D1 后的首字节增量；
 - 缓存命中率和单次 batch 的首字节增量。
 
-网关在响应中提供标准 `Server-Timing`，无需额外存储服务：
+网关在响应中提供稳定的 `X-Gateway-Timing`，同时写入标准 `Server-Timing`，无需额外存储服务。Cloudflare 可能为 `cfWorker` 或 RUM 指标管理并覆盖标准头，生产排障应优先读取 `X-Gateway-Timing`：
 
 - `gateway-cache`：`hit`、`partial` 或 `miss`；
 - `gateway-access`：鉴权与路由解析耗时；

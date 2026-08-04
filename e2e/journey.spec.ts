@@ -148,10 +148,12 @@ test('7. gateway call via real HTTP with Bearer key', async ({ request }) => {
   });
   expect(chatResp.status()).toBe(401);
   const serverTiming = chatResp.headers()['server-timing'];
+  const gatewayTiming = chatResp.headers()['x-gateway-timing'];
   expect(serverTiming).toContain('gateway-cache');
   expect(serverTiming).toContain('gateway-d1');
   expect(serverTiming).toContain('upstream-ttfb');
   expect(serverTiming).toContain('gateway-ttfb');
+  expect(gatewayTiming).toBe(serverTiming);
   const body = await chatResp.json();
   expect(body.error).toBeTruthy();
   expect(body.error.message).toContain('api key');

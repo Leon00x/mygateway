@@ -24,6 +24,12 @@ export function applyServerTiming(response: Response, timing: GatewayResponseTim
   if (timing.gatewayTtfbMs !== undefined) {
     metrics.push(`gateway-ttfb;dur=${duration(timing.gatewayTtfbMs)}`);
   }
-  if (metrics.length > 0) response.headers.set('Server-Timing', metrics.join(', '));
+  if (metrics.length > 0) {
+    const value = metrics.join(', ');
+    // Cloudflare may manage Server-Timing for its cfWorker/RUM metrics. Keep
+    // the standard header, and provide a stable gateway-specific equivalent.
+    response.headers.set('Server-Timing', value);
+    response.headers.set('X-Gateway-Timing', value);
+  }
   return response;
 }

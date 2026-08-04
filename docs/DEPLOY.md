@@ -42,7 +42,7 @@ MASTER_KEY=<base64 备份值>
 
 使用初始账号登录后，控制台会强制进入凭据修改页。修改完成后密码摘要保存到 D1，`INITIAL_ADMIN_PASSWORD` 不再参与正常登录。旧版部署若尚未初始化管理员表，可使用原 `ADMIN_TOKEN` 作为一次性初始密码迁移。
 
-生产排障时可在响应的 `Server-Timing` 查看缓存命中、D1、上游首包和网关首包耗时；Cloudflare 日志只保留抽样的脱敏结构化事件，不应依赖它做精确请求计数。
+生产排障时优先在响应的 `X-Gateway-Timing` 查看缓存命中、D1、上游首包和网关首包耗时；标准 `Server-Timing` 也会写入，但可能被 Cloudflare 的平台指标覆盖。Cloudflare 日志只保留抽样的脱敏结构化事件，不应依赖它做精确请求计数。
 
 ## 3. 自动部署（Workers Builds）
 

@@ -16,9 +16,9 @@ describe('gateway Server-Timing', () => {
       gatewayTtfbMs: 53.999,
     });
 
-    expect(response.headers.get('Server-Timing')).toBe(
-      'gateway-cache;desc="partial", gateway-access;dur=2.35, gateway-d1;dur=1.24, '
-      + 'upstream-ttfb;dur=50.68, gateway-ttfb;dur=54',
-    );
+    const expected = 'gateway-cache;desc="partial", gateway-access;dur=2.35, gateway-d1;dur=1.24, '
+      + 'upstream-ttfb;dur=50.68, gateway-ttfb;dur=54';
+    expect(response.headers.get('Server-Timing')).toBe(expected);
+    expect(response.headers.get('X-Gateway-Timing')).toBe(expected);
   });
 });
