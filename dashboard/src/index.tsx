@@ -94,14 +94,34 @@ const titles: Record<string, { title: string; subtitle: string }> = {
   '/system': { title: '系统设置', subtitle: '查看运行状态并维护管理员账号' },
 };
 
+const startupTheme = readThemePreference();
+document.documentElement.dataset.theme = startupTheme;
+
 function AppLayout(props: { children?: JSX.Element }) {
   const auth = useAuth();
   const location = useLocation();
   const page = () => titles[location.pathname] ?? titles['/'];
+  const [theme, setTheme] = createSignal<'light' | 'dark'>(startupTheme);
+  const [sidebarCollapsed, setSidebarCollapsed] = createSignal(readSidebarPreference());
+
+  const applyTheme = (next: 'light' | 'dark') => {
+    setTheme(next);
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem('mygateway.theme', next); } catch { /* storage may be unavailable */ }
+  };
+
+  const toggleTheme = () => applyTheme(theme() === 'light' ? 'dark' : 'light');
+  const toggleSidebar = () => {
+    const next = !sidebarCollapsed();
+    setSidebarCollapsed(next);
+    try { localStorage.setItem('mygateway.sidebarCollapsed', String(next)); } catch { /* storage may be unavailable */ }
+  };
+
+  onMount(() => { document.documentElement.dataset.theme = theme(); });
 
   return (
-    <Show when={auth.authenticated()} fallback={<main class="public-shell">{props.children}</main>}>
-      <div class="app-shell">
+    <Show when={auth.authenticated()} fallback={<main class="public-shell">{props.children}<ThemeToggle theme={theme()} onToggle={toggleTheme} public /></main>}>
+      <div class="app-shell" classList={{ 'sidebar-collapsed': sidebarCollapsed() }}>
         <aside class="sidebar">
           <A href="/" class="brand">
             <span class="brand-symbol">M</span>
@@ -110,25 +130,30 @@ function AppLayout(props: { children?: JSX.Element }) {
           <div class="sidebar-label">工作台</div>
           <nav class="sidebar-nav">
             <For each={navigation}>{(item) => (
-              <A href={item.href} end={item.end} class="nav-item" activeClass="active">
+              <A href={item.href} end={item.end} class="nav-item" activeClass="active" title={sidebarCollapsed() ? item.label : undefined}>
                 <Icon name={item.icon} size={19} />
                 <span><strong>{item.label}</strong><small>{item.detail}</small></span>
               </A>
             )}</For>
           </nav>
           <div class="sidebar-bottom">
-            <a href="/v1/api-docs" target="_blank" class="nav-item compact"><Icon name="docs" size={18} /><span><strong>接口文档</strong></span></a>
+            <a href="/v1/api-docs" target="_blank" class="nav-item compact" title={sidebarCollapsed() ? '接口文档' : undefined}><Icon name="docs" size={18} /><span><strong>接口文档</strong></span></a>
             <div class="user-tile">
               <span class="avatar">{auth.username().slice(0, 1).toUpperCase()}</span>
               <span class="user-copy"><strong>{auth.username()}</strong><small>管理员</small></span>
-              <button title="退出登录" onClick={auth.logout}><Icon name="logout" size={17} /></button>
+              <button class="logout-button" aria-label="退出登录" title="退出登录" onClick={auth.logout}><Icon name="logout" size={17} /></button>
             </div>
+            <button class="sidebar-toggle" aria-label={sidebarCollapsed() ? '展开侧边栏' : '收起侧边栏'} title={sidebarCollapsed() ? '展开侧边栏' : '收起侧边栏'} onClick={toggleSidebar}>
+              <Icon name={sidebarCollapsed() ? 'panel-expand' : 'panel-collapse'} size={18} />
+              <span>{sidebarCollapsed() ? '展开侧边栏' : '收起侧边栏'}</span>
+            </button>
           </div>
         </aside>
         <section class="workspace">
           <header class="topbar">
             <div><h1>{page().title}</h1><p>{page().subtitle}</p></div>
             <div class="topbar-actions">
+              <ThemeToggle theme={theme()} onToggle={toggleTheme} />
               <a class="ghost-button" href="/v1/api-docs" target="_blank"><Icon name="docs" size={16} /> API Docs</a>
               <span class="status-pill"><i /> Gateway Online</span>
             </div>
@@ -138,6 +163,26 @@ function AppLayout(props: { children?: JSX.Element }) {
       </div>
     </Show>
   );
+}
+
+function readThemePreference(): 'light' | 'dark' {
+  try {
+    const saved = localStorage.getItem('mygateway.theme');
+    if (saved === 'light' || saved === 'dark') return saved;
+  } catch { /* storage may be unavailable */ }
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function readSidebarPreference(): boolean {
+  try { return localStorage.getItem('mygateway.sidebarCollapsed') === 'true'; }
+  catch { return false; }
+}
+
+function ThemeToggle(props: { theme: 'light' | 'dark'; onToggle: () => void; public?: boolean }) {
+  const label = () => props.theme === 'light' ? '切换到暗黑模式' : '切换到浅色模式';
+  return <button class="theme-toggle" classList={{ 'public-theme-toggle': Boolean(props.public) }} aria-label={label()} title={label()} aria-pressed={props.theme === 'dark'} onClick={props.onToggle}>
+    <Icon name={props.theme === 'light' ? 'moon' : 'sun'} size={18} />
+  </button>;
 }
 
 render(() => (

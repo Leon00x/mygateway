@@ -1,4 +1,4 @@
-export type IconName = 'home' | 'channels' | 'models' | 'keys' | 'system' | 'docs' | 'logout' | 'search' | 'menu' | 'close';
+export type IconName = 'home' | 'channels' | 'models' | 'keys' | 'system' | 'docs' | 'logout' | 'search' | 'menu' | 'close' | 'moon' | 'sun' | 'panel-collapse' | 'panel-expand';
 
 export default function Icon(props: { name: IconName; size?: number; class?: string }) {
   const size = () => props.size ?? 18;
@@ -13,6 +13,10 @@ export default function Icon(props: { name: IconName; size?: number; class?: str
     search: <><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></>,
     menu: <><path d="M4 7h16M4 12h16M4 17h16"/></>,
     close: <><path d="m6 6 12 12M18 6 6 18"/></>,
+    moon: <path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5 8.5 8.5 0 1 0 20.5 14.2Z"/>,
+    sun: <><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42"/></>,
+    'panel-collapse': <><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M16 9l-3 3 3 3"/></>,
+    'panel-expand': <><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M13 9l3 3-3 3"/></>,
   };
   return (
     <svg class={props.class} width={size()} height={size()} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

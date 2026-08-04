@@ -44,6 +44,18 @@ test('3. correct credentials log in → dashboard shows endpoint', async ({ page
   await loginViaUi(page);
   await expect(page.getByText('Gateway Endpoint')).toBeVisible();
   await expect(page.locator('code').first()).toContainText('/v1');
+
+  await page.getByRole('button', { name: '收起侧边栏' }).click();
+  await expect(page.locator('.app-shell')).toHaveClass(/sidebar-collapsed/);
+  await expect(page.getByRole('button', { name: '展开侧边栏' })).toBeVisible();
+  await page.getByRole('button', { name: '展开侧边栏' }).click();
+  await expect(page.locator('.app-shell')).not.toHaveClass(/sidebar-collapsed/);
+
+  await page.getByRole('button', { name: '切换到暗黑模式' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await page.getByRole('button', { name: '切换到浅色模式' }).click();
 });
 
 test('4. add channel via preset modal', async ({ page }) => {
