@@ -6,9 +6,10 @@
   "scripts": {
     "dev": "wrangler dev",
     "dev:setup": "npm run db:migrate:local",
-    "deploy": "npm run build:dashboard && wrangler deploy && npm run db:migrate:remote",
+    "deploy": "npm run build:dashboard && wrangler deploy && npm run db:migrate:remote && npm run secrets:init",
     "build": "npm run build:dashboard && wrangler deploy --dry-run",
     "build:dashboard": "vite build --config dashboard/vite.config.ts",
+    "secrets:init": "node scripts/init-secrets.mjs",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
     "test": "vitest run",

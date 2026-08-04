@@ -1,8 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  // 部署时会被替换成你的 Worker 名称（Deploy Button 或本地 wrangler 自动处理）。
-  // 手动部署时可用: npx wrangler deploy --name <your-worker-name>
-  "name": "mygateway",
+  // 生产 Worker 名称。应与 Cloudflare Dash / Workers Builds 中的项目保持一致。
+  "name": "mygatewaydemo",
   "main": "src/index.ts",
   "compatibility_date": "2025-07-27",
   "assets": {
@@ -24,6 +23,7 @@
   },
   "vars": {
     "APP_VERSION": "0.1.0",
+    "INITIAL_ADMIN_USERNAME": "admin",
     "DEFAULT_TIMEZONE": "Asia/Shanghai",
     "MAX_REQUEST_BYTES": "2097152",
     "MAX_CHANNEL_ATTEMPTS": "3",

@@ -1,35 +1,18 @@
 import { createSignal, onMount, Show, For } from 'solid-js';
+import { A } from '@solidjs/router';
+import Icon, { IconName } from '../components/Icon';
 
-interface UsageOverview {
-  requests: number;
-  successes: number;
-  errors: number;
-  input_tokens: number;
-  output_tokens: number;
-  usage_unknown: number;
-}
+interface UsageOverview { requests: number; successes: number; errors: number; input_tokens: number; output_tokens: number; usage_unknown: number; fallbacks?: number; }
+interface ApiKey { id: string; name: string; key_prefix: string; status: string; }
+interface Channel { id: string; name: string; provider_type: string; base_url: string; status: string; }
+interface ModelItem { id: string; unified_model_id: string; display_name: string; status: string; }
 
-interface ApiKey {
-  id: string;
-  name: string;
-  key_prefix: string;
-  status: string;
-}
-
-interface Channel {
-  id: string;
-  name: string;
-  provider_type: string;
-  base_url: string;
-  status: string;
-}
-
-interface ModelItem {
-  id: string;
-  unified_model_id: string;
-  display_name: string;
-  status: string;
-}
+const shortcuts: { href: string; label: string; note: string; icon: IconName }[] = [
+  { href: '/channels', label: '添加渠道', note: '连接 Provider', icon: 'channels' },
+  { href: '/models', label: '配置模型', note: '设置路由顺序', icon: 'models' },
+  { href: '/keys', label: '创建密钥', note: '开放 API 调用', icon: 'keys' },
+  { href: '/v1/api-docs', label: '接口文档', note: '查看请求规范', icon: 'docs' },
+];
 
 export default function Dashboard() {
   const [overview, setOverview] = createSignal<UsageOverview | null>(null);
@@ -39,167 +22,106 @@ export default function Dashboard() {
   const [models, setModels] = createSignal<ModelItem[]>([]);
   const [channels, setChannels] = createSignal<Channel[]>([]);
   const [copied, setCopied] = createSignal('');
-
   const baseUrl = () => `${window.location.origin}/v1`;
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [usageResp, keysResp, modelsResp, channelsResp] = await Promise.all([
-        fetch(`/admin/api/usage/overview?range=${range()}`),
-        fetch('/admin/api/keys'),
-        fetch('/admin/api/models'),
-        fetch('/admin/api/channels'),
+      const responses = await Promise.all([
+        fetch(`/admin/api/usage/overview?range=${range()}`), fetch('/admin/api/keys'),
+        fetch('/admin/api/models'), fetch('/admin/api/channels'),
       ]);
-      if (usageResp.ok) setOverview(await usageResp.json());
-      if (keysResp.ok) setKeys(await keysResp.json());
-      if (modelsResp.ok) setModels((await modelsResp.json()).map((m: any) => m));
-      if (channelsResp.ok) setChannels(await channelsResp.json());
-    } catch {}
-    setLoading(false);
+      if (responses[0].ok) setOverview(await responses[0].json());
+      if (responses[1].ok) setKeys(await responses[1].json());
+      if (responses[2].ok) setModels(await responses[2].json());
+      if (responses[3].ok) setChannels(await responses[3].json());
+    } finally { setLoading(false); }
   };
-
   onMount(fetchData);
 
-  const handleRangeChange = (r: 'today' | '7d' | '30d') => {
-    setRange(r);
-    fetchData();
+  const changeRange = (value: 'today' | '7d' | '30d') => { setRange(value); void fetchData(); };
+  const copy = async (text: string, label: string) => {
+    await navigator.clipboard.writeText(text); setCopied(label); setTimeout(() => setCopied(''), 1800);
   };
-
-  const copy = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(label);
-    setTimeout(() => setCopied(''), 2000);
-  };
-
-  const fmt = (n: number) => n.toLocaleString();
-  const activeKeys = () => keys().filter((k) => k.status === 'active');
-  const activeModels = () => models().filter((m) => m.status === 'active');
-  const activeChannels = () => channels().filter((c) => c.status === 'active');
+  const activeKeys = () => keys().filter((item) => item.status === 'active');
+  const activeModels = () => models().filter((item) => item.status === 'active');
+  const activeChannels = () => channels().filter((item) => item.status === 'active');
+  const successRate = () => overview()?.requests ? Math.round((overview()!.successes / overview()!.requests) * 100) : 0;
+  const fmt = (value = 0) => value.toLocaleString();
 
   return (
-    <div>
-      {/* ---- Endpoint Card ---- */}
-      <div class="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg p-5 mb-6">
-        <h3 class="text-sm font-semibold text-[var(--color-muted)] uppercase tracking-wider mb-3">Gateway Endpoint</h3>
+    <div class="dashboard-stack">
+      <section class="shortcut-panel panel">
+        <For each={shortcuts}>{(item) => (
+          <A href={item.href} class="shortcut-item" target={item.href.startsWith('/v1') ? '_blank' : undefined}>
+            <span class="shortcut-icon"><Icon name={item.icon} size={21} /></span>
+            <span><strong>{item.label}</strong><small>{item.note}</small></span><b>↗</b>
+          </A>
+        )}</For>
+      </section>
 
-        <div class="flex items-center gap-2 mb-4">
-          <code class="flex-1 bg-[var(--color-bg)] border border-[var(--color-border)] rounded px-3 py-2 text-sm font-mono select-all break-all">
-            {baseUrl()}
-          </code>
-          <button
-            onClick={() => copy(baseUrl(), 'url')}
-            class="shrink-0 px-3 py-2 bg-[var(--color-bg)] border border-[var(--color-border)] rounded text-xs text-[var(--color-muted)] hover:text-white hover:border-[var(--color-primary)]"
-          >
-            {copied() === 'url' ? '✓' : 'Copy'}
-          </button>
-        </div>
+      <section class="metric-grid">
+        <Metric title="总请求" value={fmt(overview()?.requests)} note={range() === 'today' ? '今日调用' : `${range()} 调用`} tone="violet" />
+        <Metric title="成功率" value={`${successRate()}%`} note={`${fmt(overview()?.successes)} 次成功`} tone="green" />
+        <Metric title="Token 用量" value={fmt((overview()?.input_tokens ?? 0) + (overview()?.output_tokens ?? 0))} note="输入 + 输出" tone="orange" />
+        <Metric title="自动回退" value={fmt(overview()?.fallbacks)} note={`${fmt(overview()?.errors)} 次失败`} tone="blue" />
+      </section>
 
-        {/* Providers */}
-        <Show when={activeChannels().length > 0}>
-          <p class="text-xs text-[var(--color-muted)] mb-2">Providers</p>
-          <div class="flex flex-wrap gap-2 mb-3">
-            <For each={activeChannels()}>
-              {(ch) => (
-                <span class="inline-flex items-center gap-1.5 bg-[var(--color-bg)] border border-[var(--color-border)] rounded px-2.5 py-1 text-xs">
-                  <span class="font-medium">{ch.name}</span>
-                  <span class="text-[var(--color-muted)] font-mono">{ch.base_url.replace('https://', '').split('/')[0]}</span>
-                </span>
-              )}
-            </For>
+      <section class="dashboard-main-grid">
+        <div class="panel endpoint-panel">
+          <div class="panel-header">
+            <div><h2>Gateway Endpoint</h2><p>OpenAI Compatible API 入口</p></div>
+            <span class="badge active">可用</span>
           </div>
-        </Show>
-
-        {/* API Keys */}
-        <Show when={activeKeys().length > 0}>
-          <p class="text-xs text-[var(--color-muted)] mb-2">API Keys</p>
-          <div class="space-y-1.5">
-            <For each={activeKeys()}>
-              {(key) => (
-                <div class="flex items-center gap-2">
-                  <span class="text-xs text-[var(--color-muted)] w-20 shrink-0 truncate" title={key.name}>{key.name}</span>
-                  <code class="flex-1 bg-[var(--color-bg)] border border-[var(--color-border)] rounded px-3 py-1 text-xs font-mono select-all">
-                    {key.key_prefix}••••••••
-                  </code>
-                </div>
-              )}
-            </For>
-          </div>
-        </Show>
-
-        {/* Models */}
-        <Show when={activeModels().length > 0}>
-          <p class="text-xs text-[var(--color-muted)] mt-3 mb-2">Available Models</p>
-          <div class="flex flex-wrap gap-2">
-            <For each={activeModels()}>
-              {(model) => (
-                <span class="inline-block bg-[var(--color-bg)] border border-[var(--color-border)] rounded px-2.5 py-1 text-xs font-mono">
-                  {model.unified_model_id}
-                </span>
-              )}
-            </For>
-          </div>
-        </Show>
-
-        {/* Quick Start curl */}
-        <Show when={activeKeys().length > 0 && activeModels().length > 0}>
-          <div class="mt-4 pt-4 border-t border-[var(--color-border)]">
-            <p class="text-xs text-[var(--color-muted)] mb-2">Quick Start</p>
-            <div class="bg-[var(--color-bg)] border border-[var(--color-border)] rounded px-3 py-2.5">
-              <pre class="text-xs font-mono text-[var(--color-muted)] whitespace-pre-wrap break-all">{`curl ${baseUrl()}/chat/completions \\
-  -H "Authorization: Bearer ${activeKeys()[0]?.key_prefix}••••" \\
-  -H "Content-Type: application/json" \\
-  -d '{"model": "${activeModels()[0]?.unified_model_id}", "messages": [{"role": "user", "content": "hello"}]}'`}</pre>
+          <div class="endpoint-body">
+            <div class="code-line"><code>{baseUrl()}</code><button onClick={() => copy(baseUrl(), 'url')}>{copied() === 'url' ? '已复制' : '复制'}</button></div>
+            <div class="resource-summary">
+              <div><small>渠道</small><strong>{activeChannels().length}</strong></div>
+              <div><small>模型</small><strong>{activeModels().length}</strong></div>
+              <div><small>有效密钥</small><strong>{activeKeys().length}</strong></div>
             </div>
-            <button
-              onClick={() => copy(
-                `curl ${baseUrl()}/chat/completions \\\n  -H "Authorization: Bearer YOUR_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d '{"model": "${activeModels()[0]?.unified_model_id}", "messages": [{"role": "user", "content": "hello"}]}'`,
-                'curl'
-              )}
-              class="mt-2 px-3 py-1 bg-[var(--color-bg)] border border-[var(--color-border)] rounded text-xs text-[var(--color-muted)] hover:text-white"
-            >
-              {copied() === 'curl' ? '✓ Copied' : 'Copy curl'}
-            </button>
+            <Show when={activeChannels().length || activeModels().length}>
+              <div class="tag-section">
+                <For each={activeChannels()}>{(channel) => <span class="soft-tag"><i />{channel.name}</span>}</For>
+                <For each={activeModels()}>{(model) => <span class="soft-tag model">{model.unified_model_id}</span>}</For>
+              </div>
+            </Show>
           </div>
-        </Show>
-      </div>
-
-      {/* ---- Usage Stats ---- */}
-      <div class="flex items-center justify-between mb-4">
-        <h3 class="text-sm font-semibold text-[var(--color-muted)] uppercase tracking-wider">Usage</h3>
-        <div class="flex gap-2">
-          {(['today', '7d', '30d'] as const).map((r) => (
-            <button
-              onClick={() => handleRangeChange(r)}
-              class={`px-3 py-1 rounded text-xs ${range() === r ? 'bg-[var(--color-primary)] text-white' : 'bg-[var(--color-surface)] text-[var(--color-muted)] border border-[var(--color-border)]'}`}
-            >
-              {r === 'today' ? 'Today' : r === '7d' ? '7 Days' : '30 Days'}
-            </button>
-          ))}
         </div>
-      </div>
 
-      {loading() && <p class="text-sm text-[var(--color-muted)]">Loading...</p>}
-
-      <Show when={overview()}>
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <StatCard label="Requests" value={fmt(overview()!.requests)} />
-          <StatCard label="Success" value={fmt(overview()!.successes)} />
-          <StatCard label="Errors" value={fmt(overview()!.errors)} />
-          <StatCard label="Input Tokens" value={fmt(overview()!.input_tokens)} />
-          <StatCard label="Output Tokens" value={fmt(overview()!.output_tokens)} />
-          <StatCard label="Usage Unknown" value={fmt(overview()!.usage_unknown)} />
+        <div class="panel usage-panel">
+          <div class="panel-header">
+            <div><h2>Usage Overview</h2><p>按时间范围聚合</p></div>
+            <div class="range-tabs">
+              <For each={['today','7d','30d'] as const}>{(item) => <button classList={{ active: range() === item }} onClick={() => changeRange(item)}>{item === 'today' ? '今日' : item}</button>}</For>
+            </div>
+          </div>
+          <div class="usage-bars">
+            <UsageBar label="输入 Token" value={overview()?.input_tokens ?? 0} max={(overview()?.input_tokens ?? 0) + (overview()?.output_tokens ?? 0)} />
+            <UsageBar label="输出 Token" value={overview()?.output_tokens ?? 0} max={(overview()?.input_tokens ?? 0) + (overview()?.output_tokens ?? 0)} accent />
+            <UsageBar label="未知用量" value={overview()?.usage_unknown ?? 0} max={overview()?.requests ?? 0} subtle />
+            <Show when={loading()}><span class="loading-line">正在刷新数据…</span></Show>
+          </div>
         </div>
-      </Show>
+      </section>
+
+      <section class="panel quickstart-panel">
+        <div class="panel-header"><div><h2>快速开始</h2><p>复制下面的示例，替换为完整 Gateway Key 即可调用</p></div><button class="secondary-button" onClick={() => copy(curlExample(baseUrl(), activeModels()[0]?.unified_model_id), 'curl')}>{copied() === 'curl' ? '已复制' : '复制命令'}</button></div>
+        <pre>{curlExample(baseUrl(), activeModels()[0]?.unified_model_id)}</pre>
+      </section>
     </div>
   );
 }
 
-function StatCard(props: { label: string; value: string }) {
-  return (
-    <div class="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg p-4">
-      <p class="text-xs text-[var(--color-muted)] mb-1">{props.label}</p>
-      <p class="text-2xl font-bold">{props.value}</p>
-    </div>
-  );
+function curlExample(baseUrl: string, model = 'your-model') {
+  return `curl ${baseUrl}/chat/completions \\\n  -H "Authorization: Bearer YOUR_GATEWAY_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d '{"model":"${model}","messages":[{"role":"user","content":"Hello"}]}'`;
+}
+
+function Metric(props: { title: string; value: string; note: string; tone: string }) {
+  return <div class={`metric-card panel ${props.tone}`}><span class="metric-dot"/><small>{props.title}</small><strong>{props.value}</strong><p>{props.note}</p></div>;
+}
+
+function UsageBar(props: { label: string; value: number; max: number; accent?: boolean; subtle?: boolean }) {
+  const width = () => props.max > 0 ? Math.max(3, Math.round((props.value / props.max) * 100)) : 0;
+  return <div class="usage-row"><div><span>{props.label}</span><strong>{props.value.toLocaleString()}</strong></div><div class="bar-track"><i classList={{ accent: props.accent, subtle: props.subtle }} style={{ width: `${width()}%` }}/></div></div>;
 }

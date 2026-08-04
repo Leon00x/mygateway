@@ -15,7 +15,7 @@ MVP 只支持：
 - 单个 Cloudflare Worker；
 - Worker Static Assets 管理后台；
 - 一个 D1 数据库；
-- 单管理员 Token 登录；
+- 单管理员用户名密码登录与首次强制改密；
 - OpenAI 官方及 OpenAI Compatible 渠道；
 - OpenAI Chat Completions；
 - `/v1/models` 兼容模型列表；
@@ -29,7 +29,7 @@ MVP 只支持：
 | 决策 | MVP 选择 | 原因 |
 |---|---|---|
 | 前端部署 | Worker Static Assets | Deploy Button 不需要再部署 Pages，避免跨域和双应用配置 |
-| 管理认证 | `ADMIN_TOKEN` + 签名 Session Cookie | 不把 Cloudflare Access 配置作为首次部署前置条件 |
+| 管理认证 | D1 单管理员 + 签名 Session Cookie | 初始凭据自动生成，登录后使用可修改的用户名密码 |
 | Provider 协议 | OpenAI Chat Completions | 缩小 Provider 和 SSE 兼容矩阵 |
 | 渠道指定 | 全局唯一完整别名 | 避免仅按 prefix 查询导致歧义 |
 | 路由 | 保存后的固定顺序 | 行为稳定、容易解释和测试 |
@@ -53,13 +53,13 @@ MVP 只支持：
 
 ### 2.0 Cloudflare 组件
 
-只用 5 类组件：**1 个 Worker（含 Static Assets）+ 1 个 D1 + 2 个 Secrets + 1 个 Cron**。不用 Pages / KV / R2 / Durable Objects / Queues / GitHub Actions。
+只用 5 类组件：**1 个 Worker（含 Static Assets）+ 1 个 D1 + 2 个首次部署 Secrets + 1 个 Cron**。不用 Pages / KV / R2 / Durable Objects / Queues / GitHub Actions。
 
 | 组件 | 用途 | 免费档限制 |
 |---|---|---|
 | Cloudflare Worker | 网关 API + 管理 API + 静态资源 | 10ms CPU / 请求 |
 | D1 数据库（mygateway-db） | 配置、加密密钥、分钟级用量统计 | 5M 读 / 100k 写 / 天 |
-| Worker Secrets（ADMIN_TOKEN / MASTER_KEY） | 管理员登录凭证 + Provider Key 加密密钥 | — |
+| Worker Secrets（INITIAL_ADMIN_PASSWORD / MASTER_KEY） | 首次登录凭证 + Provider Key/Session 加密签名根密钥 | — |
 | Cron（每日 03:17） | 清理 30 天前用量 | — |
 | workers.dev 子域名 | 部署后访问入口 | 100k 请求 / 天 |
 
@@ -69,7 +69,7 @@ MVP 只支持：
   浏览器 / OpenAI SDK
         │
         ▼
-  workers.dev ──────▶ Cloudflare Worker (mygateway)
+  workers.dev ──────▶ Cloudflare Worker (mygatewaydemo)
                              │
         ┌────────────────────┼────────────────────┐
         │                    │                    │
@@ -81,10 +81,10 @@ MVP 只支持：
         └──────────┬─────────┴─────┬──────────────┘
                    │               │
               D1 数据库        AI Provider
-             (7 张表: 配置、     (OpenAI Compatible:
+             (8 张表: 配置、     (OpenAI Compatible:
               密钥、用量)        DeepSeek/OpenAI 等)
 
-  Secrets: ADMIN_TOKEN + MASTER_KEY（Dash 手动配置）
+  Secrets: INITIAL_ADMIN_PASSWORD + MASTER_KEY（首次部署自动生成）
   Cron: 每日 03:17 清理 30 天前用量
 ```
 
@@ -120,8 +120,8 @@ mygateway/
 │   │   ├── request-id.ts           # Gateway Request ID
 │   │   └── body-limit.ts           # 请求体大小限制
 │   ├── auth/
-│   │   ├── admin-token.ts          # ADMIN_TOKEN 验证（timing-safe）
-│   │   ├── admin-session.ts        # Session Cookie 签发/校验（HMAC-SHA256）
+│   │   ├── password.ts             # PBKDF2 密码摘要、验证和凭据规则
+│   │   ├── admin-session.ts        # Session Cookie 签发/校验与版本失效
 │   │   └── gateway-key.ts          # Gateway Key hash 验证（SHA-256）
 │   ├── crypto/
 │   │   └── provider-key.ts         # Provider Key AES-256-GCM 加解密
@@ -141,6 +141,7 @@ mygateway/
 │   ├── streaming/
 │   │   └── sse-decoder.ts          # SSE 增量解析 + 流式 usage 提取
 │   ├── db/
+│   │   ├── admin-users.ts          # 单管理员账号读写
 │   │   ├── channels.ts             # 渠道表操作
 │   │   ├── models.ts               # 模型卡片/实例/标识符表操作
 │   │   ├── keys.ts                 # Gateway Key 表操作
@@ -154,6 +155,7 @@ mygateway/
 │   │   ├── presets.ts              # Provider 预设（DeepSeek/OpenAI/...）
 │   │   ├── pages/
 │   │   │   ├── Login.tsx
+│   │   │   ├── ChangeCredentials.tsx # 首次/日常修改管理员凭据
 │   │   │   ├── Dashboard.tsx       # Gateway 端点 + 用量看板
 │   │   │   ├── Channels.tsx        # 渠道管理（预设添加）
 │   │   │   ├── Models.tsx          # 模型卡片 + 实例管理
@@ -166,7 +168,8 @@ mygateway/
 │   ├── journey.spec.ts             # UI 旅程测试（10 例，无外部依赖）
 │   └── realtime.spec.ts            # 真实 DeepSeek 集成测试（7 例）
 ├── migrations/
-│   └── 0001_initial.sql            # 7 张表 + 索引
+│   ├── 0001_initial.sql            # 网关配置、密钥和用量表
+│   └── 0002_admin_users.sql        # 管理员账号表
 ├── .dev.vars.example              # 本地开发环境变量模板（含说明注释）
 ├── wrangler.jsonc                 # Worker 配置（生产 auto-provision D1）
 ├── playwright.config.ts           # E2E 测试配置
@@ -191,8 +194,12 @@ interface Env {
   DB: D1Database;
   ASSETS: Fetcher;
 
-  // 用户在 Deploy Button 中配置，至少 32 字节高熵随机值。
-  ADMIN_TOKEN: string;
+  // 初始管理员账号；密码 Secret 由首次部署脚本生成。
+  INITIAL_ADMIN_USERNAME?: string;
+  INITIAL_ADMIN_PASSWORD?: string;
+
+  // 旧版升级首次登录兼容，完成改密后不再使用。
+  ADMIN_TOKEN?: string;
 
   // 32 字节随机密钥的 base64 编码，用于 Provider Key AES-GCM。
   MASTER_KEY: string;
@@ -218,7 +225,6 @@ interface Env {
 
 启动时必须校验：
 
-- `ADMIN_TOKEN` 长度不少于 32 字符；
 - `MASTER_KEY` 解码后恰好 32 字节；
 - 数值配置在允许范围内；
 - 生产环境缺失关键 Secret 时返回明确的系统配置错误，不带 Secret 内容。
@@ -374,6 +380,19 @@ CREATE TABLE system_settings (
   value TEXT NOT NULL,
   updated_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
+
+CREATE TABLE admin_users (
+  id TEXT PRIMARY KEY,
+  username TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  password_salt TEXT NOT NULL,
+  password_iterations INTEGER NOT NULL,
+  must_change_password INTEGER NOT NULL DEFAULT 1,
+  session_version INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  last_login_at INTEGER
+);
 ```
 
 ### 5.3 数据约束说明
@@ -521,17 +540,19 @@ WHERE timestamp_minute < ?;
 POST /admin/api/auth/login
 Content-Type: application/json
 
-{"token":"<ADMIN_TOKEN>"}
+{"username":"admin","password":"<INITIAL_ADMIN_PASSWORD>"}
 ```
 
 处理流程：
 
-1. 检查 Content-Type 和请求体大小；
-2. 对输入 Token 和 `env.ADMIN_TOKEN` 做恒定时间比较；
-3. 生成 Session payload：`version`、`issued_at`、`expires_at`、随机 nonce；
-4. 使用从 `ADMIN_TOKEN` 通过 HKDF 派生的 HMAC-SHA-256 密钥签名；
-5. 写入 `mg_admin_session` Cookie；
-6. Cookie 默认有效期 8 小时。
+1. 首次部署生成初始用户名 `admin` 和随机初始密码；
+2. 第一次成功登录时，在 D1 创建单管理员记录；
+3. 密码使用随机 16 字节盐和 PBKDF2-HMAC-SHA256（120,000 次）保存摘要；
+4. 初始账号标记 `must_change_password`，修改凭据前拒绝其他管理 API；
+5. 生成包含用户 ID、Session 版本、过期时间和 nonce 的 Session payload；
+6. 使用从 `MASTER_KEY` 经独立 HKDF domain 派生的 HMAC-SHA256 密钥签名；
+7. 写入 `mg_admin_session` Cookie，默认有效期 8 小时；
+8. 修改用户名或密码时递增 Session 版本，使其他旧 Session 失效。
 
 Cookie：
 
@@ -539,12 +560,12 @@ Cookie：
 HttpOnly
 Secure
 SameSite=Strict
-Path=/admin
+Path=/
 ```
 
 所有修改型管理 API 还必须检查 `Origin` 与当前请求 origin 一致，降低 CSRF 和跨站请求风险。
 
-管理员 Token 不写入 D1。轮换 `ADMIN_TOKEN` 会使旧 Session 签名失效。
+管理员密码明文不写入 D1。旧部署可用原 `ADMIN_TOKEN` 作为一次性初始密码，首次改密后不再依赖该 Secret。
 
 ### 6.2 Gateway API Key
 
@@ -582,7 +603,8 @@ Schema 保留 `api_key_version` 以支持后续主密钥轮换。MVP 不提供�
 
 - `Authorization`；
 - Cookie；
-- `ADMIN_TOKEN`；
+- 管理员初始密码、密码明文和摘要；
+- `MASTER_KEY`；
 - Gateway Key；
 - Provider Key、密文和 IV；
 - Prompt、Response 正文和完整请求 body。
@@ -1062,9 +1084,10 @@ WHERE timestamp_minute >= ? AND timestamp_minute < ?;
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| POST | `/admin/api/auth/login` | 使用 ADMIN_TOKEN 登录 |
+| POST | `/admin/api/auth/login` | 使用管理员用户名密码登录 |
 | POST | `/admin/api/auth/logout` | 清除 Session Cookie |
-| GET | `/admin/api/auth/session` | 查询登录状态和过期时间 |
+| GET | `/admin/api/auth/session` | 查询用户名和首次改密状态 |
+| POST | `/admin/api/auth/change-credentials` | 修改用户名密码并使旧 Session 失效 |
 
 ### 14.2 渠道
 
@@ -1169,10 +1192,13 @@ WHERE timestamp_minute >= ? AND timestamp_minute < ?;
 
 ### 15.2 页面行为
 
+整体采用桌面控制台的左右结构：固定左侧导航、顶部页面状态区、浅灰工作区和白色大圆角内容卡片；窄屏时侧栏转换为横向导航。紫色只用于主操作、当前导航和关键数据，危险操作使用独立红色语义。
+
 #### Login
 
-- 不在 LocalStorage 保存管理员 Token；
+- 不在 LocalStorage 保存管理员密码或 Session；
 - 登录成功后依赖 HttpOnly Cookie；
+- 首次登录强制进入凭据修改页；
 - 401 自动回到登录页。
 
 #### Channels
@@ -1209,13 +1235,13 @@ WHERE timestamp_minute >= ? AND timestamp_minute < ?;
 支持两种方式，底层同一套流程：
 
 1. **Deploy Button**（推荐）：`deploy.workers.cloudflare.com/?url=<repo>` → Cloudflare Git 集成自动完成构建与部署；
-2. **本地 CLI**：`wrangler login` → 配置 Secrets → `npm run deploy`。
+2. **本地 CLI**：`wrangler login` → `npm run deploy`，部署脚本自动初始化缺失的 Secrets。
 
 实际配置见仓库根目录 `wrangler.jsonc` 与 `package.json`。关键点：
 
 - 生产配置**不含 `database_id`** → `wrangler deploy` 时自动创建并绑定 D1；
-- deploy 脚本顺序为 `build → deploy（provision D1）→ migrate`；
-- Secrets 由用户部署后在 Dash 手动配置（Deploy Button 不自动提示）。
+- deploy 脚本顺序为 `build → deploy（provision D1）→ migrate → secrets:init`；
+- `secrets:init` 只创建缺失的 `INITIAL_ADMIN_PASSWORD` 和 `MASTER_KEY`，绝不覆盖已有 Secret。
 
 ### 16.2 部署流程
 
@@ -1223,32 +1249,33 @@ WHERE timestamp_minute >= ? AND timestamp_minute < ?;
 Deploy Button → 登录 Cloudflare + 授权 GitHub
   → 自动创建 Worker + D1
   → npm install → 构建前端 → wrangler deploy
-  → migrations 建 7 张表
-  → 用户在 Dash 配置 ADMIN_TOKEN + MASTER_KEY
-  → 打开 workers.dev 登录使用
+  → 首次生成 INITIAL_ADMIN_PASSWORD + MASTER_KEY 并显示一次
+  → migrations 建 8 张表
+  → 使用 admin + 初始密码登录并强制修改凭据
+  → 打开控制台配置渠道、模型和 Gateway Key
 ```
 
 仓库根目录提供 `.dev.vars.example` 模板（仅字段名，空值）：
 
 ```dotenv
-ADMIN_TOKEN=
+INITIAL_ADMIN_PASSWORD=
 MASTER_KEY=
 ```
 
-Secrets 由用户在部署后通过 Dash 手动配置（Deploy Button 不会自动提示），不能把示例文件替换成带真实值的 `.dev.vars` 并提交到 Git。
+本地开发需自行填写这两个值；生产由首次部署脚本创建。不能把带真实值的 `.dev.vars` 提交到 Git。
 
 ### 16.3 Secret 生成说明
 
-README 和 Deploy UI 必须提供跨平台生成说明：
+首次部署生成规则：
 
 ```text
-ADMIN_TOKEN：至少 32 字节随机值
+INITIAL_ADMIN_PASSWORD：18 随机字节的 base64url 字符串
 MASTER_KEY：恰好 32 字节随机值并进行 base64 编码
 ```
 
 Secret 只能进入 Cloudflare Worker Secrets，不能写入 `wrangler.jsonc`、Git 仓库或前端构建变量。
 
-用户必须在自己的密码管理器中备份 `MASTER_KEY`。如果部署时意外替换该 Secret，已有 Provider Key 密文将无法解密；恢复方式是还原原 Master Key，或逐个重新填写 Provider Key。`ADMIN_TOKEN` 可以轮换，轮换后所有旧管理 Session 立即失效。
+首次生成值会在账号私有的部署日志中显示一次。用户必须在密码管理器中备份 `MASTER_KEY` 并立即修改初始登录密码。如果意外替换 `MASTER_KEY`，已有 Provider Key 密文和管理 Session 都将失效；恢复方式是还原原 Master Key，或逐个重新填写 Provider Key。
 
 ## 17. Cron 任务
 
@@ -1434,7 +1461,7 @@ GET /health
 - JSON 校验、AES-GCM、D1 查询和 SSE usage 解析可以稳定运行在 Free 10ms CPU 内；
 - 每请求一次 usage UPSERT 在目标流量和索引下不会耗尽 D1 写额度；
 - 目标 OpenAI Compatible 渠道支持所需 Chat 字段和 SSE 格式；
-- Deploy Button 能正确注入两个 Secret、创建 D1 并执行 migration；
+- Deploy Button 能正确生成两个首次 Secret、创建 D1 并执行 migration；
 - `run_worker_first` 和 SPA fallback 配置与实现时的 Wrangler 版本一致；
 - D1 primary 延迟对目标用户可接受。
 

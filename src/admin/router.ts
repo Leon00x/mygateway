@@ -6,7 +6,21 @@ import { Env } from '../env.ts';
 import { generateRequestId } from '../http/request-id.ts';
 import { gatewayErrorResponse } from '../http/errors.ts';
 import { validateAdminSession, createAdminSession, clearSessionCookie } from '../auth/admin-session.ts';
-import { verifyAdminToken } from '../auth/admin-token.ts';
+import {
+  hashPassword,
+  validatePassword,
+  validateUsername,
+  verifyBootstrapPassword,
+  verifyPassword,
+} from '../auth/password.ts';
+import {
+  createInitialAdmin,
+  getAdminById,
+  getAdminByUsername,
+  hasAdminUser,
+  recordAdminLogin,
+  updateAdminCredentials,
+} from '../db/admin-users.ts';
 import { logAuthFailed } from '../shared/log.ts';
 import { handleChannelsCollection, handleChannelItem, handleChannelTest } from './channels.ts';
 import { handleModelsCollection, handleModelItem, handleModelInstances, handleReorderInstances } from './models.ts';
@@ -36,8 +50,8 @@ export async function handleAdminApi(
   }
 
   // --- Session required for everything else ---
-  const isAuthenticated = await validateAdminSession(request, env.ADMIN_TOKEN);
-  if (!isAuthenticated) {
+  const session = await validateAdminSession(request, env.DB, env.MASTER_KEY);
+  if (!session) {
     logAuthFailed(requestId, 'invalid_or_missing_session');
     return gatewayErrorResponse('invalid_api_key', 'Admin session required', requestId);
   }
@@ -46,21 +60,43 @@ export async function handleAdminApi(
   if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(request.method)) {
     const origin = request.headers.get('origin');
     const host = request.headers.get('host');
-    if (origin && host && !origin.includes(host)) {
-      return gatewayErrorResponse('invalid_request', 'Cross-origin request denied', requestId);
+    try {
+      if (origin && host && new URL(origin).host !== host) {
+        return gatewayErrorResponse('invalid_request', 'Cross-origin request denied', requestId);
+      }
+    } catch {
+      return gatewayErrorResponse('invalid_request', 'Invalid request origin', requestId);
     }
   }
 
   // --- Auth session/logout ---
   if (path === '/admin/api/auth/session' && request.method === 'GET') {
-    return json({ authenticated: true });
+    return json({
+      authenticated: true,
+      username: session.username,
+      must_change_password: session.mustChangePassword,
+    });
   }
 
   if (path === '/admin/api/auth/logout' && request.method === 'POST') {
     return new Response(null, {
       status: 204,
-      headers: { 'Set-Cookie': clearSessionCookie() },
+      headers: { 'Set-Cookie': clearSessionCookie(url.protocol === 'https:') },
     });
+  }
+
+  if (path === '/admin/api/auth/change-credentials' && request.method === 'POST') {
+    return handleChangeCredentials(request, env, session.userId, requestId);
+  }
+
+  if (session.mustChangePassword) {
+    return json({
+      error: {
+        message: 'Change the initial administrator credentials before continuing',
+        type: 'admin_error',
+        code: 'password_change_required',
+      },
+    }, 403);
   }
 
   // --- Channels ---
@@ -154,19 +190,43 @@ async function handleLogin(
   requestId: string,
 ): Promise<Response> {
   try {
-    const body = (await request.json()) as { token?: string };
-    if (!body.token) {
-      return gatewayErrorResponse('invalid_request', 'Token is required', requestId);
+    const body = (await request.json()) as { username?: string; password?: string };
+    const username = body.username?.trim() ?? '';
+    const password = body.password ?? '';
+    if (!username || !password) {
+      return gatewayErrorResponse('invalid_request', 'Username and password are required', requestId);
     }
 
-    const valid = await verifyAdminToken(body.token, env.ADMIN_TOKEN);
-    if (!valid) {
+    let user = await getAdminByUsername(env.DB, username);
+
+    // First login creates the single D1 administrator from the one-time deploy secret.
+    if (!user && !(await hasAdminUser(env.DB))) {
+      const initialUsername = env.INITIAL_ADMIN_USERNAME ?? 'admin';
+      const initialPassword = env.INITIAL_ADMIN_PASSWORD ?? env.ADMIN_TOKEN ?? '';
+      const bootstrapValid = username === initialUsername && initialPassword.length > 0
+        && await verifyBootstrapPassword(password, initialPassword);
+      if (bootstrapValid) {
+        user = await createInitialAdmin(env.DB, initialUsername, await hashPassword(password));
+      }
+    }
+
+    const valid = user && await verifyPassword(password, {
+      hash: user.password_hash,
+      salt: user.password_salt,
+      iterations: user.password_iterations,
+    });
+    if (!user || !valid) {
       logAuthFailed(requestId, 'invalid_admin_token');
-      return gatewayErrorResponse('invalid_api_key', 'Invalid admin token', requestId);
+      return gatewayErrorResponse('invalid_api_key', 'Invalid username or password', requestId);
     }
 
-    const setCookie = await createAdminSession(env.ADMIN_TOKEN);
-    return new Response(JSON.stringify({ ok: true }), {
+    await recordAdminLogin(env.DB, user.id);
+    const setCookie = await createAdminSession(env.MASTER_KEY, user, new URL(request.url).protocol === 'https:');
+    return new Response(JSON.stringify({
+      ok: true,
+      username: user.username,
+      must_change_password: user.must_change_password === 1,
+    }), {
       status: 200,
       headers: {
         'Content-Type': 'application/json',
@@ -176,5 +236,55 @@ async function handleLogin(
     });
   } catch {
     return gatewayErrorResponse('invalid_request', 'Invalid request body', requestId);
+  }
+}
+
+async function handleChangeCredentials(
+  request: Request,
+  env: Env,
+  userId: string,
+  requestId: string,
+): Promise<Response> {
+  try {
+    const body = (await request.json()) as {
+      current_password?: string;
+      username?: string;
+      new_password?: string;
+    };
+    const username = body.username?.trim() ?? '';
+    const currentPassword = body.current_password ?? '';
+    const newPassword = body.new_password ?? '';
+    const usernameError = validateUsername(username);
+    const passwordError = validatePassword(newPassword);
+    if (usernameError || passwordError) {
+      return gatewayErrorResponse('invalid_request', usernameError ?? passwordError!, requestId);
+    }
+
+    const user = await getAdminById(env.DB, userId);
+    if (!user || !(await verifyPassword(currentPassword, {
+      hash: user.password_hash,
+      salt: user.password_salt,
+      iterations: user.password_iterations,
+    }))) {
+      return gatewayErrorResponse('invalid_api_key', 'Current password is incorrect', requestId);
+    }
+
+    const existing = await getAdminByUsername(env.DB, username);
+    if (existing && existing.id !== user.id) {
+      return gatewayErrorResponse('invalid_request', 'Username is already in use', requestId);
+    }
+
+    const updated = await updateAdminCredentials(env.DB, user.id, username, await hashPassword(newPassword));
+    const setCookie = await createAdminSession(
+      env.MASTER_KEY,
+      updated,
+      new URL(request.url).protocol === 'https:',
+    );
+    return json({ ok: true, username: updated.username, must_change_password: false }, 200, {
+      'Set-Cookie': setCookie,
+      'x-gateway-request-id': requestId,
+    });
+  } catch (error) {
+    return gatewayErrorResponse('invalid_request', (error as Error).message, requestId);
   }
 }

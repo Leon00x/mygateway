@@ -3,7 +3,7 @@
  * Requires a local wrangler dev server on :8799 with a clean D1.
  *
  * Flow (serial, one file):
- *   1. auth: guard → login page → wrong token → correct token → dashboard
+ *   1. auth: guard → login page → wrong credentials → correct credentials → dashboard
  *   2. channels: preset add DeepSeek → list shows it
  *   3. models: create card → add instance bound to channel
  *   4. api keys: create key → plaintext shown once → list shows it
@@ -28,18 +28,19 @@ test.beforeAll(async ({ request }) => {
 
 test('1. auth guard redirects to login', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByPlaceholder('Admin Token')).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByPlaceholder('用户名')).toBeVisible({ timeout: 10_000 });
   await expect(page).toHaveURL(/\/login/);
 });
 
-test('2. wrong admin token shows error', async ({ page }) => {
+test('2. wrong administrator credentials show error', async ({ page }) => {
   await page.goto('/login');
-  await page.getByPlaceholder('Admin Token').fill('wrong-token');
-  await page.getByRole('button', { name: 'Login' }).click();
-  await expect(page.locator('.text-red-400')).toBeVisible({ timeout: 10_000 });
+  await page.getByPlaceholder('用户名').fill('admin');
+  await page.getByPlaceholder('密码').fill('wrong-password');
+  await page.getByRole('button', { name: '登录控制台' }).click();
+  await expect(page.locator('.form-error')).toBeVisible({ timeout: 10_000 });
 });
 
-test('3. correct token logs in → dashboard shows endpoint', async ({ page }) => {
+test('3. correct credentials log in → dashboard shows endpoint', async ({ page }) => {
   await loginViaUi(page);
   await expect(page.getByText('Gateway Endpoint')).toBeVisible();
   await expect(page.locator('code').first()).toContainText('/v1');
@@ -47,7 +48,7 @@ test('3. correct token logs in → dashboard shows endpoint', async ({ page }) =
 
 test('4. add channel via preset modal', async ({ page }) => {
   await loginViaUi(page);
-  await page.getByRole('link', { name: 'Channels' }).click();
+  await page.locator('.sidebar').getByRole('link', { name: /渠道/ }).click();
   await expect(page).toHaveURL(/\/channels/);
 
   await page.getByRole('button', { name: '+ 添加供应商' }).click();
@@ -64,7 +65,7 @@ test('5. create model card + add instance via UI', async ({ page, request }) => 
   await loginViaApi(request);
 
   // Navigate to Models page
-  await page.getByRole('link', { name: 'Models' }).click();
+  await page.locator('.sidebar').getByRole('link', { name: /模型/ }).click();
   await expect(page).toHaveURL(/\/models/);
 
   // Create model card through the UI form
@@ -106,13 +107,13 @@ test('5. create model card + add instance via UI', async ({ page, request }) => 
 
 test('6. create gateway key → plaintext shown once', async ({ page }) => {
   await loginViaUi(page);
-  await page.getByRole('link', { name: 'API Keys' }).click();
+  await page.locator('.sidebar').getByRole('link', { name: /API 密钥/ }).click();
   await expect(page).toHaveURL(/\/keys/);
 
   await page.getByPlaceholder('Key name').fill(uniq('e2e-key'));
   await page.getByRole('button', { name: 'Create Key' }).click();
 
-  const reveal = page.locator('.bg-green-900\\/30');
+  const reveal = page.locator('.secret-reveal');
   await expect(reveal).toBeVisible({ timeout: 10_000 });
   const text = (await reveal.locator('code').textContent()) ?? '';
   expect(text).toMatch(/^gw_[A-Za-z0-9_-]{20,}/);
@@ -170,8 +171,8 @@ test('9. dashboard shows channel and model', async ({ page }) => {
 
 test('10. logout returns to login', async ({ page }) => {
   await loginViaUi(page);
-  await page.getByRole('button', { name: 'Logout' }).click();
-  await expect(page.getByPlaceholder('Admin Token')).toBeVisible({ timeout: 10_000 });
+  await page.getByRole('button', { name: '退出登录' }).click();
+  await expect(page.getByPlaceholder('用户名')).toBeVisible({ timeout: 10_000 });
 });
 
 test.afterAll(async ({ request }) => {

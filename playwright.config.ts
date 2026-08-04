@@ -8,7 +8,7 @@ export default defineConfig({
   fullyParallel: false,
   reporter: [['list']],
   use: {
-    baseURL: 'http://localhost:8799',
+    baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:8799',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },

@@ -2,7 +2,7 @@
 
 > 文档版本：MVP v0.1
 >
-> 文档状态：已确认范围，待实现
+> 文档状态：MVP 已实现，持续完善
 >
 > MVP 原则：先完成最小可部署、可调用、可回退、可观测的完整闭环。
 
@@ -16,19 +16,13 @@
 ### 方式一：Deploy Button（推荐，零本地操作）
 
 1. 点击上方按钮，登录 Cloudflare 并授权 GitHub；
-2. 选择仓库 `Leon00x/mygateway`，Cloudflare 自动创建 Worker 和 D1 数据库（`mygateway-db`）；
-3. 部署完成后，在 **Cloudflare Dash → Worker → Settings → Variables and Secrets** 添加两个 Secret：
-
-   | Secret | 用途 | 生成方式 |
-   |---|---|---|
-   | `ADMIN_TOKEN` | 管理后台登录 | `openssl rand -base64 24` |
-   | `MASTER_KEY` | Provider Key 加密（AES-GCM） | `openssl rand -base64 32`（必须 base64，解码后恰好 32 字节） |
-
-   > ⚠️ `MASTER_KEY` 一旦设置不可更换（否则已加密的 Provider Key 无法解密）。请保存好。
-
-4. 打开 Worker 的 `workers.dev` 域名，用 `ADMIN_TOKEN` 登录管理后台；
-5. 在 **Channels** 页添加 Provider 渠道、**Models** 页创建模型、**API Keys** 页创建 Gateway Key；
+2. 选择仓库 `Leon00x/mygateway`，Cloudflare 自动创建 Worker（`mygatewaydemo`）和 D1 数据库（`mygateway-db`）；
+3. 首次部署脚本自动生成 `MASTER_KEY` 和管理员初始密码，并在仅账号成员可见的部署日志中显示一次；立即保存这两项；
+4. 打开 `https://mygatewaydemo.<你的 workers.dev 子域>.workers.dev`，使用用户名 `admin` 和日志中的初始密码登录；
+5. 首次登录必须修改用户名和密码，然后在 **Channels**、**Models**、**API Keys** 页面完成配置；
 6. 用 Gateway Key 调用 `/v1/chat/completions`。
+
+> ⚠️ `MASTER_KEY` 一旦生成不可更换，否则已加密的 Provider Key 无法解密。不要把首次部署日志公开。
 
 ### 方式二：本地命令行部署
 
@@ -40,12 +34,10 @@ npm install
 # 2. 登录 Cloudflare（浏览器授权一次）
 npx wrangler login
 
-# 3. 配置 Secrets（交互式，不会落盘）
-npx wrangler secret put ADMIN_TOKEN
-npx wrangler secret put MASTER_KEY
-
-# 4. 一键部署（构建前端 → 自动创建 D1 → 跑 migrations → 部署）
+# 3. 一键部署（构建前端 → 部署 → 生成首次 Secret → 跑 migrations）
 npm run deploy
+
+# 4. 从输出中保存初始密码与 MASTER_KEY，然后登录并修改初始凭据
 ```
 
 ### 自动部署（可选）
@@ -56,12 +48,12 @@ npm run deploy
 2. **Connect** 仓库（选你 fork 后的仓库，分支 `main`）；
 3. 构建配置：
    - 构建命令：`npm ci && npm run build:dashboard`
-   - 部署命令：`npx wrangler deploy && npm run db:migrate:remote`
+   - 部署命令：`npx wrangler deploy && npm run db:migrate:remote && npm run secrets:init`
 
 > ⚠️ 踩坑提醒：
 > - Git 存储库必须选**真实的仓库名**（fork 后是你自己的用户名/mygateway），不能选成 Worker 名；
 > - 如果构建失败，先在 Builds 页面查看构建日志，常见原因是 D1 权限或 Worker 名称不匹配；
-> - Worker 名称以 Deploy 时创建的为准，与仓库 wrangler.jsonc 的 `name` 保持一致。
+> - Worker 名称固定为 `mygatewaydemo`，须与仓库 `wrangler.jsonc` 的 `name` 保持一致。
 
 ### 本地开发
 
@@ -186,19 +178,21 @@ MVP 使用一个 Cloudflare Worker 承载：
 - 自动创建并绑定 D1；
 - 自动执行数据库 migrations；
 - 自动构建和部署管理后台；
-- 部署时要求用户配置 `ADMIN_TOKEN` 和 `MASTER_KEY` 两个 Worker Secret；
+- 首次部署自动生成 `INITIAL_ADMIN_PASSWORD` 和 `MASTER_KEY` 两个 Worker Secret；
 - 部署完成后显示管理地址和 Gateway Base URL。
 
 MVP 不单独部署 Cloudflare Pages，不依赖用户自行运行 GitHub Actions。
 
 ### 5.2 管理员认证
 
-MVP 使用单管理员 Token 登录：
+MVP 使用单管理员用户名和密码登录：
 
-- `ADMIN_TOKEN` 保存为 Worker Secret；
-- 管理员在登录页输入 Token；
+- 初始用户名为 `admin`，初始密码由首次部署脚本随机生成；
+- 首次登录在 D1 创建管理员记录，并强制修改用户名和密码；
+- 密码使用带随机盐的 PBKDF2-SHA256 摘要保存，不保存明文；
 - 验证成功后签发短期、HttpOnly 的管理 Session Cookie；
-- Cookie 使用从 `ADMIN_TOKEN` 派生的 HMAC 密钥签名；
+- Cookie 使用从 `MASTER_KEY` 独立派生的 HMAC 密钥签名；
+- 修改凭据时递增 Session 版本，使其他旧管理会话失效；
 - Cookie 设置 `Secure`、`HttpOnly`、`SameSite=Strict`；
 - 支持查询登录状态和退出登录；
 - 管理 API 拒绝未认证请求；
@@ -426,7 +420,7 @@ MVP 必须满足：
 
 | 页面 | MVP 功能 |
 |---|---|
-| 登录 | 输入管理员 Token、建立 Session、退出登录 |
+| 登录 | 用户名密码登录、首次强制改密、建立 Session、退出登录 |
 | Dashboard | 请求、Token、成功率、模型和渠道统计 |
 | Channels | 渠道 CRUD、启停、更新 Key、测试连接 |
 | Models | 模型卡片、渠道实例、完整别名、拖拽排序、手工价格和套餐 |
@@ -530,13 +524,13 @@ MVP 必须满足：
 
 ## 11. 技术架构
 
-MVP 只用 5 类 Cloudflare 组件：**1 个 Worker + Static Assets + 1 个 D1 数据库 + 2 个 Secrets + 1 个 Cron**，不依赖 Pages/KV/R2/GitHub Actions。
+MVP 只用 5 类 Cloudflare 组件：**1 个 Worker + Static Assets + 1 个 D1 数据库 + 2 个首次部署 Secrets + 1 个 Cron**，不依赖 Pages/KV/R2/GitHub Actions。
 
 ```text
      浏览器 / OpenAI SDK
            │
            ▼
- workers.dev ───────────▶ 单个 Cloudflare Worker（mygateway）
+ workers.dev ───────────▶ 单个 Cloudflare Worker（mygatewaydemo）
                                 │
         ┌───────────────────────┼──────────────────────────┐
         │                       │                          │
@@ -548,10 +542,10 @@ MVP 只用 5 类 Cloudflare 组件：**1 个 Worker + Static Assets + 1 个 D1 �
         └───────────┬───────────┴──────────┬──────────┘
                     │                      │
               D1 数据库                 AI Provider
-             (7 张表：配置、          (OpenAI Compatible:
+             (8 张表：配置、          (OpenAI Compatible:
               加密密钥、用量统计)       DeepSeek/OpenAI 等)
 
- Secrets: ADMIN_TOKEN + MASTER_KEY（Dash 手动配置）
+ Secrets: INITIAL_ADMIN_PASSWORD + MASTER_KEY（首次部署自动生成）
  Cron: 每日 03:17 清理 30 天前用量
 ```
 

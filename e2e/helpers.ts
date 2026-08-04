@@ -7,13 +7,19 @@ import { Page, expect, APIRequestContext } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-// Admin token is read from env/.dev.vars — NEVER hardcode it in the repo.
-// Tests will fail fast if it's missing so we don't silently run unauthenticated.
-export const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? devVar('ADMIN_TOKEN') ?? '';
+// Initial credentials are read from env/.dev.vars — NEVER hardcode secrets.
+export const ADMIN_USERNAME = process.env.INITIAL_ADMIN_USERNAME ?? devVar('INITIAL_ADMIN_USERNAME') ?? 'admin';
+const INITIAL_ADMIN_PASSWORD = process.env.INITIAL_ADMIN_PASSWORD
+  ?? devVar('INITIAL_ADMIN_PASSWORD')
+  ?? process.env.ADMIN_TOKEN
+  ?? devVar('ADMIN_TOKEN')
+  ?? '';
+const E2E_ADMIN_PASSWORD = 'e2e-local-admin-2026';
+let activePassword = E2E_ADMIN_PASSWORD;
 
-if (!ADMIN_TOKEN) {
+if (!INITIAL_ADMIN_PASSWORD) {
   throw new Error(
-    'ADMIN_TOKEN not found. Add it to .dev.vars (or set env) before running E2E tests.',
+    'INITIAL_ADMIN_PASSWORD (or legacy ADMIN_TOKEN) not found. Add it to .dev.vars before running E2E tests.',
   );
 }
 
@@ -37,12 +43,13 @@ export function devVar(name: string): string | undefined {
 /**
  * Log in through the UI. Assumes we're on /login or the app redirected us there.
  */
-export async function loginViaUi(page: Page, token: string = ADMIN_TOKEN): Promise<void> {
+export async function loginViaUi(page: Page, password: string = activePassword): Promise<void> {
   await page.goto('/');
   // Auth guard redirects to /login when unauthenticated
-  await expect(page.getByPlaceholder('Admin Token')).toBeVisible({ timeout: 10_000 });
-  await page.getByPlaceholder('Admin Token').fill(token);
-  await page.getByRole('button', { name: 'Login' }).click();
+  await expect(page.getByPlaceholder('用户名')).toBeVisible({ timeout: 10_000 });
+  await page.getByPlaceholder('用户名').fill(ADMIN_USERNAME);
+  await page.getByPlaceholder('密码').fill(password);
+  await page.getByRole('button', { name: '登录控制台' }).click();
   // After login we land on the dashboard
   await expect(page).toHaveURL(/\/$/, { timeout: 10_000 });
 }
@@ -52,10 +59,20 @@ export async function loginViaUi(page: Page, token: string = ADMIN_TOKEN): Promi
  * (either `request` fixture or `page.request`). Cookie persists on that context.
  */
 export async function loginViaApi(api: APIRequestContext): Promise<void> {
-  const resp = await api.post('/admin/api/auth/login', {
-    data: { token: ADMIN_TOKEN },
-  });
+  let resp = await api.post('/admin/api/auth/login', { data: { username: ADMIN_USERNAME, password: activePassword } });
+  if (!resp.ok()) {
+    activePassword = INITIAL_ADMIN_PASSWORD;
+    resp = await api.post('/admin/api/auth/login', { data: { username: ADMIN_USERNAME, password: activePassword } });
+  }
   expect(resp.ok()).toBeTruthy();
+  const login = await resp.json();
+  if (login.must_change_password) {
+    const changed = await api.post('/admin/api/auth/change-credentials', {
+      data: { username: ADMIN_USERNAME, current_password: activePassword, new_password: E2E_ADMIN_PASSWORD },
+    });
+    expect(changed.ok()).toBeTruthy();
+    activePassword = E2E_ADMIN_PASSWORD;
+  }
   const setCookie = resp.headers()['set-cookie'];
   const match = setCookie?.match(/mg_admin_session=[^;]+/);
   expect(match).not.toBeNull();

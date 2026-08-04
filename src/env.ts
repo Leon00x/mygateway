@@ -5,8 +5,14 @@ export interface Env {
   DB: D1Database;
   ASSETS: Fetcher;
 
-  /** Admin token — at least 32 chars high-entropy. Stored as Worker Secret. */
-  ADMIN_TOKEN: string;
+  /** Initial admin username. Defaults to admin. */
+  INITIAL_ADMIN_USERNAME?: string;
+
+  /** One-time initial password. Generated as a Worker Secret on first deploy. */
+  INITIAL_ADMIN_PASSWORD?: string;
+
+  /** Legacy bootstrap password for deployments upgrading from v0.1. */
+  ADMIN_TOKEN?: string;
 
   /** 32-byte random key, base64-encoded. Used for Provider Key AES-GCM. */
   MASTER_KEY: string;
@@ -54,11 +60,6 @@ const DEFAULTS = {
  * Throws on missing or invalid secrets in production.
  */
 export function parseConfig(env: Env): RuntimeConfig {
-  // Validate secrets
-  if (!env.ADMIN_TOKEN || env.ADMIN_TOKEN.length < 32) {
-    throw new ConfigError('ADMIN_TOKEN must be at least 32 characters');
-  }
-
   if (!env.MASTER_KEY) {
     throw new ConfigError('MASTER_KEY is required');
   }

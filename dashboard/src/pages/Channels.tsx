@@ -123,41 +123,36 @@ export default function Channels() {
   };
 
   return (
-    <div>
-      <div class="flex items-center justify-between mb-6">
-        <h2 class="text-xl font-bold">Channels</h2>
-        <div class="flex gap-2">
-          <button onClick={openPreset} class="px-3 py-1.5 bg-[var(--color-primary)] text-white rounded text-sm font-medium hover:opacity-90">
-            + 添加供应商
-          </button>
-          <button onClick={[setShowCustom, (v: boolean) => !v]} class="px-3 py-1.5 bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-muted)] rounded text-sm hover:text-white">
-            自定义
-          </button>
+    <div class="resource-page">
+      <div class="page-heading">
+        <div><h2>Provider Channels</h2><p>API Key 将加密保存，调用时仅在 Worker 内解密。</p></div>
+        <div class="action-row">
+          <button onClick={() => setShowCustom(!showCustom())} class="secondary-button">自定义渠道</button>
+          <button onClick={openPreset} class="primary-button">+ 添加供应商</button>
         </div>
       </div>
 
       {/* Preset Modal */}
       <Show when={showPreset()}>
-        <div class="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowPreset(false)}>
-          <div class="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg p-6 w-full max-w-lg mx-4 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div class="modal-backdrop" onClick={() => setShowPreset(false)}>
+          <div class="modal-card" onClick={(e) => e.stopPropagation()}>
 
             <Show when={presetStep() === 'select'}>
-              <h3 class="text-base font-bold mb-4">选择供应商</h3>
-              <div class="space-y-2">
+              <div class="modal-title"><div><span class="eyebrow">Quick connect</span><h3>选择供应商</h3></div><button onClick={() => setShowPreset(false)}>×</button></div>
+              <div class="provider-grid">
                 <For each={PROVIDER_PRESETS}>
                   {(p) => (
-                    <button onClick={() => pickPreset(p)} class="w-full text-left bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg p-4 hover:border-[var(--color-primary)] transition-colors">
-                      <div class="flex items-start justify-between">
+                    <button onClick={() => pickPreset(p)} class="provider-option">
+                      <div class="provider-option-top">
+                        <span class="provider-logo">{p.name.slice(0, 1)}</span>
                         <div>
-                          <p class="font-medium text-sm">{p.name}</p>
-                          <p class="text-xs text-[var(--color-muted)] mt-0.5">{p.description}</p>
+                          <strong>{p.name}</strong>
+                          <p>{p.description}</p>
                         </div>
-                        <a href={p.docs_url} target="_blank" class="text-xs text-[var(--color-primary)] hover:underline shrink-0 ml-2" onClick={(e) => e.stopPropagation()}>📄</a>
                       </div>
-                      <div class="flex flex-wrap gap-1 mt-2">
-                        <For each={p.popular_models}>{(m) => <span class="text-[10px] bg-[var(--color-surface)] px-1.5 py-0.5 rounded font-mono">{m}</span>}</For>
+                      <div class="provider-models">
+                        <For each={p.popular_models.slice(0, 2)}>{(m) => <span>{m}</span>}</For>
                       </div>
-                      <p class="text-[10px] text-[var(--color-muted)] mt-2 font-mono">{p.base_url}</p>
                     </button>
                   )}
                 </For>
@@ -165,22 +160,18 @@ export default function Channels() {
             </Show>
 
             <Show when={presetStep() === 'configure' && selectedPreset()}>
-              <button onClick={() => setPresetStep('select')} class="text-xs text-[var(--color-muted)] hover:text-white mb-3 inline-block">← 返回</button>
-              <h3 class="text-base font-bold mb-1">添加 {selectedPreset()!.name}</h3>
-              <p class="text-xs text-[var(--color-muted)] mb-4">
-                <a href={selectedPreset()!.docs_url} target="_blank" class="text-[var(--color-primary)] hover:underline">📄 获取 API Key</a>
-                <span class="ml-2 font-mono">{selectedPreset()!.base_url}</span>
-              </p>
-              <form onSubmit={submitPreset}>
-                <label class="block text-xs text-[var(--color-muted)] mb-1.5">API Key</label>
+              <button onClick={() => setPresetStep('select')} class="back-button">← 返回供应商列表</button>
+              <div class="modal-title"><div><span class="eyebrow">Configure</span><h3>添加 {selectedPreset()!.name}</h3><p>{selectedPreset()!.base_url}</p></div></div>
+              <form onSubmit={submitPreset} class="form-stack">
+                <label>API Key</label>
                 <input type="password" value={presetApiKey()} onInput={(e) => setPresetApiKey(e.currentTarget.value)} placeholder="sk-..." required
-                  class="w-full px-3 py-2 bg-[var(--color-bg)] border border-[var(--color-border)] rounded text-sm mb-2 focus:border-[var(--color-primary)] outline-none" />
-                <Show when={presetError()}><p class="text-xs text-red-400 mb-2">{presetError()}</p></Show>
-                <div class="flex gap-2 mt-3">
-                  <button type="submit" disabled={presetBusy()} class="flex-1 py-2 bg-[var(--color-primary)] text-white rounded text-sm font-medium hover:opacity-90 disabled:opacity-50">
+                />
+                <Show when={presetError()}><div class="form-error">{presetError()}</div></Show>
+                <div class="modal-actions">
+                  <button type="button" onClick={() => setShowPreset(false)} class="secondary-button">取消</button>
+                  <button type="submit" disabled={presetBusy()} class="primary-button">
                     {presetBusy() ? '添加中...' : '确认添加'}
                   </button>
-                  <button type="button" onClick={() => setShowPreset(false)} class="px-4 py-2 bg-[var(--color-bg)] border border-[var(--color-border)] rounded text-sm">取消</button>
                 </div>
               </form>
             </Show>
@@ -190,40 +181,46 @@ export default function Channels() {
 
       {/* Custom Form */}
       <Show when={showCustom()}>
-        <form onSubmit={submitCustom} class="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg p-4 mb-4 space-y-3">
-          <p class="text-sm font-medium">自定义渠道</p>
-          <input placeholder="Name" value={cName()} onInput={(e) => setCName(e.currentTarget.value)} class="w-full px-3 py-2 bg-[var(--color-bg)] border border-[var(--color-border)] rounded text-sm" required />
-          <select value={cType()} onChange={(e) => setCType(e.currentTarget.value)} class="w-full px-3 py-2 bg-[var(--color-bg)] border border-[var(--color-border)] rounded text-sm">
+        <form onSubmit={submitCustom} class="panel inline-form">
+          <div class="inline-form-title"><div><h3>自定义渠道</h3><p>连接任意兼容 OpenAI Chat Completions 的 HTTPS API。</p></div><button type="button" onClick={() => setShowCustom(false)}>×</button></div>
+          <div class="form-grid">
+          <label>渠道名称<input placeholder="Name" value={cName()} onInput={(e) => setCName(e.currentTarget.value)} required /></label>
+          <label>协议类型<select value={cType()} onChange={(e) => setCType(e.currentTarget.value)}>
             <option value="openai">OpenAI</option>
             <option value="openai_compatible">OpenAI Compatible</option>
-          </select>
-          <input placeholder="Base URL (https://...)" value={cUrl()} onInput={(e) => setCUrl(e.currentTarget.value)} class="w-full px-3 py-2 bg-[var(--color-bg)] border border-[var(--color-border)] rounded text-sm" required />
-          <input type="password" placeholder="API Key" value={cKey()} onInput={(e) => setCKey(e.currentTarget.value)} class="w-full px-3 py-2 bg-[var(--color-bg)] border border-[var(--color-border)] rounded text-sm" required />
-          <Show when={cError()}><p class="text-xs text-red-400">{cError()}</p></Show>
-          <button type="submit" disabled={cBusy()} class="px-4 py-2 bg-[var(--color-primary)] text-white rounded text-sm disabled:opacity-50">{cBusy() ? 'Creating...' : 'Create'}</button>
+          </select></label>
+          <label>Base URL<input placeholder="Base URL (https://...)" value={cUrl()} onInput={(e) => setCUrl(e.currentTarget.value)} required /></label>
+          <label>API Key<input type="password" placeholder="API Key" value={cKey()} onInput={(e) => setCKey(e.currentTarget.value)} required /></label>
+          </div>
+          <Show when={cError()}><div class="form-error">{cError()}</div></Show>
+          <div class="inline-form-actions"><button type="submit" disabled={cBusy()} class="primary-button">{cBusy() ? 'Creating...' : 'Create'}</button></div>
         </form>
       </Show>
 
-      {/* List */}
-      {loading() && <p class="text-[var(--color-muted)]">Loading...</p>}
-      <div class="space-y-3">
+      <section class="panel resource-list">
+        <div class="panel-header"><div><h3>已连接渠道</h3><p>{channels().length} 个 Provider 配置</p></div></div>
+      {loading() && <p class="empty-state">Loading...</p>}
+      <Show when={!loading() && channels().length === 0}><div class="empty-state"><span class="provider-logo">+</span><h3>还没有渠道</h3><p>从右上角添加第一个模型供应商。</p></div></Show>
+      <div class="resource-rows">
         <For each={channels()}>
           {(ch) => (
-            <div class="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg p-4 flex items-center justify-between">
-              <div>
-                <p class="font-medium">{ch.name}</p>
-                <p class="text-xs text-[var(--color-muted)] font-mono">{ch.provider_type} · {ch.base_url}</p>
+            <div class="resource-row">
+              <span class="provider-logo">{ch.name.slice(0, 1).toUpperCase()}</span>
+              <div class="resource-main">
+                <strong>{ch.name}</strong>
+                <span>{ch.provider_type} · <code>{ch.base_url}</code></span>
               </div>
-              <div class="flex items-center gap-3">
-                <span class={`text-xs px-2 py-0.5 rounded ${ch.status === 'active' ? 'bg-green-900 text-green-300' : 'bg-gray-700 text-gray-400'}`}>{ch.status}</span>
-                <button onClick={() => test(ch.id)} class="text-xs text-[var(--color-primary)] hover:underline">Test</button>
-                <button onClick={() => toggleStatus(ch)} class="text-xs text-[var(--color-muted)] hover:text-white">Toggle</button>
-                <button onClick={[del, ch.id]} class="text-xs text-red-400 hover:text-red-300">Delete</button>
+              <div class="row-actions">
+                <span class={`badge ${ch.status}`}>{ch.status === 'active' ? '运行中' : '已停用'}</span>
+                <button onClick={() => test(ch.id)}>测试</button>
+                <button onClick={() => toggleStatus(ch)}>{ch.status === 'active' ? '停用' : '启用'}</button>
+                <button onClick={[del, ch.id]} class="danger-link">删除</button>
               </div>
             </div>
           )}
         </For>
       </div>
+      </section>
     </div>
   );
 }

@@ -155,12 +155,12 @@ export default function Models() {
   };
 
   return (
-    <div>
-      <div class="flex items-center justify-between mb-6">
-        <h2 class="text-xl font-bold">Models</h2>
+    <div class="resource-page">
+      <div class="page-heading">
+        <div><h2>Unified Models</h2><p>一个模型 ID 可以绑定多个渠道，并按顺序自动回退。</p></div>
         <button
           onClick={() => setShowCreate(!showCreate())}
-          class="px-3 py-1.5 bg-[var(--color-primary)] text-white rounded text-sm font-medium hover:opacity-90"
+          class="primary-button"
         >
           + 创建模型
         </button>
@@ -168,66 +168,66 @@ export default function Models() {
 
       {/* Create card form */}
       <Show when={showCreate()}>
-        <form onSubmit={submitCreate} class="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg p-4 mb-4 space-y-3">
-          <p class="text-sm font-medium">创建统一模型</p>
+        <form onSubmit={submitCreate} class="panel inline-form form-stack">
+          <div class="inline-form-title"><div><h3>创建统一模型</h3><p>客户端将使用统一模型 ID 发起调用。</p></div><button type="button" onClick={() => setShowCreate(false)}>×</button></div>
           <input
             placeholder="统一模型 ID (如 deepseek-chat)"
             value={newModelId()}
             onInput={(e) => setNewModelId(e.currentTarget.value)}
-            class="w-full px-3 py-2 bg-[var(--color-bg)] border border-[var(--color-border)] rounded text-sm"
             required
           />
           <input
             placeholder="显示名称 (如 DeepSeek Chat)"
             value={newDisplayName()}
             onInput={(e) => setNewDisplayName(e.currentTarget.value)}
-            class="w-full px-3 py-2 bg-[var(--color-bg)] border border-[var(--color-border)] rounded text-sm"
             required
           />
-          <Show when={createError()}><p class="text-xs text-red-400">{createError()}</p></Show>
-          <button type="submit" disabled={creating()} class="px-4 py-2 bg-[var(--color-primary)] text-white rounded text-sm disabled:opacity-50">
+          <Show when={createError()}><div class="form-error">{createError()}</div></Show>
+          <div class="inline-form-actions"><button type="submit" disabled={creating()} class="primary-button">
             {creating() ? '创建中...' : '创建'}
-          </button>
+          </button></div>
         </form>
       </Show>
 
-      {loading() && <p class="text-[var(--color-muted)]">Loading...</p>}
+      {loading() && <p class="empty-state">Loading...</p>}
+      <Show when={!loading() && cards().length === 0}><div class="panel empty-state"><span class="provider-logo">M</span><h3>还没有统一模型</h3><p>创建模型后，再绑定一个或多个渠道实例。</p></div></Show>
 
-      <div class="space-y-3">
+      <div class="model-grid">
         <For each={cards()}>
           {(card) => (
-            <div class="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg p-4">
-              <div class="flex items-center justify-between">
-                <div>
-                  <p class="font-medium">{card.display_name}</p>
-                  <p class="text-xs text-[var(--color-muted)] font-mono">{card.unified_model_id}</p>
+            <div class="panel model-card">
+              <div class="model-card-head">
+                <span class="provider-logo">M</span>
+                <div class="resource-main">
+                  <strong>{card.display_name}</strong>
+                  <span><code>{card.unified_model_id}</code> · {card.instances.length} 个渠道实例</span>
                 </div>
-                <div class="flex items-center gap-3">
-                  <span class={`text-xs px-2 py-0.5 rounded ${card.status === 'active' ? 'bg-green-900 text-green-300' : 'bg-gray-700 text-gray-400'}`}>
-                    {card.status}
+                <div class="row-actions">
+                  <span class={`badge ${card.status}`}>
+                    {card.status === 'active' ? '运行中' : '已停用'}
                   </span>
-                  <button onClick={() => setExpandedCard(expandedCard() === card.id ? null : card.id)} class="text-xs text-[var(--color-primary)] hover:underline">
+                  <button onClick={() => setExpandedCard(expandedCard() === card.id ? null : card.id)}>
                     {expandedCard() === card.id ? '收起' : '实例'}
                   </button>
-                  <button onClick={() => deleteCard(card.id)} class="text-xs text-red-400 hover:text-red-300">Delete</button>
+                  <button onClick={() => deleteCard(card.id)} class="danger-link">删除</button>
                 </div>
               </div>
 
               {/* Instances */}
               <Show when={expandedCard() === card.id}>
-                <div class="mt-4 pt-4 border-t border-[var(--color-border)]">
-                  <div class="flex items-center justify-between mb-2">
-                    <p class="text-xs text-[var(--color-muted)] uppercase tracking-wider">渠道实例 ({card.instances.length})</p>
-                    <button onClick={() => openAdd(card)} class="text-xs px-2 py-1 bg-[var(--color-bg)] border border-[var(--color-border)] rounded hover:text-white">
+                <div class="model-instances">
+                  <div class="instances-title">
+                    <p>渠道实例 <span>{card.instances.length}</span></p>
+                    <button onClick={() => openAdd(card)} class="secondary-button">
                       + 添加实例
                     </button>
                   </div>
 
                   {/* Add instance form */}
                   <Show when={addForCard() === card.id}>
-                    <form onSubmit={submitInstance} class="bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg p-3 mb-3 space-y-2">
-                      <p class="text-xs font-medium">绑定渠道实例</p>
-                      <select value={instChannelId()} onChange={(e) => setInstChannelId(e.currentTarget.value)} class="w-full px-3 py-2 bg-[var(--color-surface)] border border-[var(--color-border)] rounded text-sm">
+                    <form onSubmit={submitInstance} class="instance-form form-stack">
+                      <strong>绑定渠道实例</strong>
+                      <select value={instChannelId()} onChange={(e) => setInstChannelId(e.currentTarget.value)}>
                         <Show when={activeChannels().length === 0}>
                           <option value="">（无可用渠道，请先在 Channels 页添加）</option>
                         </Show>
@@ -235,33 +235,33 @@ export default function Models() {
                           {(ch) => <option value={ch.id}>{ch.name} — {ch.base_url}</option>}
                         </For>
                       </select>
-                      <input placeholder="上游模型 ID (如 deepseek-chat)" value={instUpstreamModel()} onInput={(e) => setInstUpstreamModel(e.currentTarget.value)} class="w-full px-3 py-2 bg-[var(--color-surface)] border border-[var(--color-border)] rounded text-sm" required />
-                      <input placeholder="公开别名 (如 ds-deepseek-chat)" value={instAlias()} onInput={(e) => setInstAlias(e.currentTarget.value)} class="w-full px-3 py-2 bg-[var(--color-surface)] border border-[var(--color-border)] rounded text-sm" required />
-                      <label class="flex items-center gap-2 text-xs text-[var(--color-muted)]">
+                      <input placeholder="上游模型 ID (如 deepseek-chat)" value={instUpstreamModel()} onInput={(e) => setInstUpstreamModel(e.currentTarget.value)} required />
+                      <input placeholder="公开别名 (如 ds-deepseek-chat)" value={instAlias()} onInput={(e) => setInstAlias(e.currentTarget.value)} required />
+                      <label class="checkbox-label">
                         <input type="checkbox" checked={instStreamUsage()} onChange={(e) => setInstStreamUsage(e.currentTarget.checked)} class="accent-[var(--color-primary)]" />
                         支持流式 usage
                       </label>
-                      <Show when={instError()}><p class="text-xs text-red-400">{instError()}</p></Show>
-                      <button type="submit" disabled={instBusy()} class="px-3 py-1.5 bg-[var(--color-primary)] text-white rounded text-xs disabled:opacity-50">
+                      <Show when={instError()}><div class="form-error">{instError()}</div></Show>
+                      <button type="submit" disabled={instBusy()} class="primary-button">
                         {instBusy() ? '添加中...' : '添加实例'}
                       </button>
                     </form>
                   </Show>
 
-                  <div class="space-y-2">
+                  <div class="instance-list">
                     <For each={[...card.instances].sort((a, b) => a.sort_order - b.sort_order)}>
                       {(inst, idx) => (
-                        <div class="flex items-center justify-between bg-[var(--color-bg)] border border-[var(--color-border)] rounded px-3 py-2">
-                          <div>
-                            <p class="text-sm font-mono">{inst.public_model_alias}</p>
-                            <p class="text-xs text-[var(--color-muted)] font-mono">{channelName(inst.channel_id)} → {inst.channel_model_id}{inst.supports_stream_usage ? ' · stream-usage' : ''}</p>
+                        <div class="instance-row">
+                          <div class="resource-main">
+                            <strong><code>{inst.public_model_alias}</code></strong>
+                            <span>{channelName(inst.channel_id)} → <code>{inst.channel_model_id}</code>{inst.supports_stream_usage ? ' · stream usage' : ''}</span>
                           </div>
-                          <div class="flex items-center gap-2">
-                            <span class={`text-[10px] px-2 py-0.5 rounded ${inst.status === 'active' ? 'bg-green-900 text-green-300' : 'bg-gray-700 text-gray-400'}`}>
+                          <div class="instance-order">
+                            <span class={`badge ${inst.status}`}>
                               #{idx() + 1}
                             </span>
-                            <button onClick={() => move(card, inst, -1)} class="text-xs text-[var(--color-muted)] hover:text-white" disabled={idx() === 0}>↑</button>
-                            <button onClick={() => move(card, inst, 1)} class="text-xs text-[var(--color-muted)] hover:text-white" disabled={idx() === card.instances.length - 1}>↓</button>
+                            <button onClick={() => move(card, inst, -1)} disabled={idx() === 0}>↑</button>
+                            <button onClick={() => move(card, inst, 1)} disabled={idx() === card.instances.length - 1}>↓</button>
                           </div>
                         </div>
                       )}

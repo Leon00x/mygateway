@@ -15,7 +15,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { ADMIN_TOKEN, devVar, loginViaApi, resetState, uniq } from './helpers';
+import { devVar, loginViaApi, resetState, uniq } from './helpers';
 
 const providerKey = devVar('DEEPSEEK_TEST_KEY');
 

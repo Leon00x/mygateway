@@ -1,12 +1,6 @@
-import { createSignal, onMount } from 'solid-js';
+import { createSignal, onMount, For, Show } from 'solid-js';
 
-interface ApiKey {
-  id: string;
-  name: string;
-  key_prefix: string;
-  status: string;
-  created_at: number;
-}
+interface ApiKey { id: string; name: string; key_prefix: string; status: string; created_at: number; }
 
 export default function ApiKeys() {
   const [keys, setKeys] = createSignal<ApiKey[]>([]);
@@ -15,80 +9,53 @@ export default function ApiKeys() {
   const [revealedKey, setRevealedKey] = createSignal('');
 
   const fetchKeys = async () => {
-    try {
-      const resp = await fetch('/admin/api/keys');
-      if (resp.ok) setKeys(await resp.json());
-    } catch {}
-    setLoading(false);
+    try { const response = await fetch('/admin/api/keys'); if (response.ok) setKeys(await response.json()); }
+    finally { setLoading(false); }
   };
-
   onMount(fetchKeys);
 
-  const createKey = async (e: Event) => {
-    e.preventDefault();
-    const resp = await fetch('/admin/api/keys', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: newKeyName() }),
-    });
-    if (resp.ok) {
-      const data = await resp.json();
-      setRevealedKey(data.key);
-      setNewKeyName('');
-      fetchKeys();
-    }
+  const createKey = async (event: Event) => {
+    event.preventDefault();
+    const response = await fetch('/admin/api/keys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newKeyName() }) });
+    if (response.ok) { const data = await response.json(); setRevealedKey(data.key); setNewKeyName(''); void fetchKeys(); }
   };
-
+  const toggleKey = async (key: ApiKey) => {
+    await fetch(`/admin/api/keys/${key.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: key.status === 'active' ? 'disabled' : 'active' }) });
+    void fetchKeys();
+  };
+  const regenerate = async (key: ApiKey) => {
+    if (!confirm(`Regenerate ${key.name}? The current key will stop working immediately.`)) return;
+    const response = await fetch(`/admin/api/keys/${key.id}/regenerate`, { method: 'POST' });
+    if (response.ok) { setRevealedKey((await response.json()).key); void fetchKeys(); }
+  };
   const deleteKey = async (id: string) => {
     if (!confirm('Delete this key? It will immediately stop working.')) return;
-    await fetch(`/admin/api/keys/${id}`, { method: 'DELETE' });
-    fetchKeys();
+    await fetch(`/admin/api/keys/${id}`, { method: 'DELETE' }); void fetchKeys();
   };
 
   return (
-    <div>
-      <h2 class="text-xl font-bold mb-6">API Keys</h2>
-
-      {revealedKey() && (
-        <div class="bg-green-900/30 border border-green-700 rounded-lg p-4 mb-4">
-          <p class="text-sm text-green-300 mb-2">Copy this key now — it won't be shown again:</p>
-          <code class="text-sm break-all select-all">{revealedKey()}</code>
-          <button onClick={() => setRevealedKey('')} class="ml-3 text-xs text-[var(--color-muted)]">Dismiss</button>
-        </div>
-      )}
-
-      <form onSubmit={createKey} class="flex gap-3 mb-6">
-        <input
-          placeholder="Key name"
-          value={newKeyName()}
-          onInput={(e) => setNewKeyName(e.currentTarget.value)}
-          class="px-3 py-2 bg-[var(--color-surface)] border border-[var(--color-border)] rounded text-sm flex-1"
-        />
-        <button type="submit" class="px-4 py-2 bg-[var(--color-primary)] text-white rounded text-sm">
-          Create Key
-        </button>
+    <div class="resource-page">
+      <div class="page-heading"><div><h2>Gateway API Keys</h2><p>客户端通过这些密钥访问统一模型接口。</p></div></div>
+      <Show when={revealedKey()}>
+        <div class="secret-reveal panel"><div><span class="eyebrow">仅显示一次</span><h3>复制并安全保存这个密钥</h3><code>{revealedKey()}</code></div><button class="secondary-button" onClick={() => navigator.clipboard.writeText(revealedKey())}>复制密钥</button><button class="secret-close" onClick={() => setRevealedKey('')}>×</button></div>
+      </Show>
+      <form onSubmit={createKey} class="panel key-create">
+        <div><h3>创建新密钥</h3><p>使用容易识别的名称标记调用方或应用。</p></div>
+        <input placeholder="Key name" value={newKeyName()} onInput={(e) => setNewKeyName(e.currentTarget.value)} required />
+        <button type="submit" class="primary-button">＋ Create Key</button>
       </form>
-
-      {loading() && <p class="text-[var(--color-muted)]">Loading...</p>}
-
-      <div class="space-y-3">
-        {keys().map((k) => (
-          <div class="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg p-4 flex items-center justify-between">
-            <div>
-              <p class="font-medium">{k.name}</p>
-              <p class="text-xs text-[var(--color-muted)] font-mono">{k.key_prefix}...</p>
-            </div>
-            <div class="flex items-center gap-3">
-              <span class={`text-xs px-2 py-0.5 rounded ${k.status === 'active' ? 'bg-green-900 text-green-300' : 'bg-gray-700 text-gray-400'}`}>
-                {k.status}
-              </span>
-              <button onClick={() => deleteKey(k.id)} class="text-xs text-red-400 hover:text-red-300">
-                Delete
-              </button>
-            </div>
+      <section class="panel resource-list">
+        <div class="panel-header"><div><h3>密钥列表</h3><p>{keys().filter((key) => key.status === 'active').length} 个有效密钥</p></div></div>
+        {loading() && <p class="empty-state">Loading...</p>}
+        <Show when={!loading() && keys().length === 0}><div class="empty-state"><span class="provider-logo">K</span><h3>还没有 API Key</h3><p>创建一个密钥开始调用网关。</p></div></Show>
+        <div class="resource-rows"><For each={keys()}>{(key) => (
+          <div class="resource-row">
+            <span class="provider-logo key-logo">K</span>
+            <div class="resource-main"><strong>{key.name}</strong><span><code>{key.key_prefix}••••••••••••</code> · 创建于 {new Date(key.created_at * 1000).toLocaleDateString()}</span></div>
+            <div class="row-actions"><span class={`badge ${key.status}`}>{key.status === 'active' ? '有效' : '已停用'}</span><button onClick={() => toggleKey(key)}>{key.status === 'active' ? '停用' : '启用'}</button><button onClick={() => regenerate(key)}>重新生成</button><button class="danger-link" onClick={() => deleteKey(key.id)}>删除</button></div>
           </div>
-        ))}
-      </div>
+        )}</For></div>
+      </section>
     </div>
   );
 }
