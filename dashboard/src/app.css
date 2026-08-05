@@ -241,3 +241,24 @@ input:focus, select:focus { border-color: #9e82fa; box-shadow: 0 0 0 3px rgba(10
   .channel-list-toolbar{align-items:stretch;flex-direction:column}.channel-list-toolbar input{width:100%}.channel-card-grid{grid-template-columns:1fr}.channel-card{min-height:340px}.channel-detail-stats{grid-template-columns:1fr}.channel-detail-stats>div+div{border-left:0;border-top:1px solid var(--color-border)}.detail-protocol-row{align-items:flex-start;flex-direction:column}.detail-protocol-row .secondary-button{width:100%}
   .provider-balance-row{padding:16px}.provider-balance-values{display:grid;grid-template-columns:1fr;gap:10px}.provider-balance-value{padding:10px 0 0;border-left:0;border-top:1px solid #ececf2}
 }
+
+/* Provider brand glyphs (Simple Icons) inside the logo tile. */
+.provider-logo.has-logo { background:#fff; border:1px solid #e7e8ef; color:var(--brand,#5e35d3); }
+.provider-logo svg { width:20px; height:20px; display:block; fill:currentColor; }
+[data-theme="dark"] .provider-logo.has-logo { background:var(--color-surface); border-color:var(--color-border); }
+
+/* Model page — vertical cards mirroring the channel card design. */
+.model-page{gap:20px}.model-card{min-height:340px}.model-card-head{display:flex;align-items:center;gap:11px}
+.model-card-actions{grid-template-columns:1fr 1fr 1fr}
+.model-instance-section{min-width:0}.model-instance-list{display:grid;gap:6px;margin-top:8px}
+.model-instance-row{display:flex;align-items:center;gap:10px;min-width:0;padding:9px 10px;border:1px solid var(--color-border);border-radius:11px;background:var(--color-surface-soft)}
+.model-instance-row .provider-logo{width:30px;height:30px;flex:0 0 30px;font-size:11px;border-radius:9px}
+.model-instance-row .provider-logo svg{width:16px;height:16px}
+.model-instance-copy{min-width:0;flex:1}
+.model-instance-copy strong,.model-instance-copy code{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.model-instance-copy strong{font-size:11px}.model-instance-copy code{margin-top:2px;color:var(--color-muted);font-size:9px}
+.model-instance-copy .instance-alias{color:var(--color-primary)}
+.model-instance-row .instance-order{gap:4px}.model-instance-row .instance-order button{width:24px;height:24px;border:1px solid var(--color-border);border-radius:7px;background:transparent;color:var(--color-muted);font-size:11px}
+.model-instance-row .instance-order button:disabled{opacity:.3;cursor:not-allowed}
+.model-instance-row .instance-order .badge{min-width:24px;justify-content:center}
+[data-theme="dark"] .model-instance-row{background:var(--color-surface)}

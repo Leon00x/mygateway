@@ -1,5 +1,6 @@
 import { createSignal, onMount, For, Show } from 'solid-js';
 import { COMMON_MODEL_TEMPLATES } from '../presets';
+import { ProviderLogo } from '../components/ProviderLogo';
 
 interface Channel {
   id: string;
@@ -52,7 +53,6 @@ export default function Models() {
   const [inventoryLoading, setInventoryLoading] = createSignal(false);
 
   // Add instance — which card is expanded
-  const [expandedCard, setExpandedCard] = createSignal<string | null>(null);
   const [addForCard, setAddForCard] = createSignal<string | null>(null);
   const [instChannelId, setInstChannelId] = createSignal('');
   const [instUpstreamModel, setInstUpstreamModel] = createSignal('');
@@ -60,6 +60,13 @@ export default function Models() {
   const [instStreamUsage, setInstStreamUsage] = createSignal(true);
   const [instError, setInstError] = createSignal('');
   const [instBusy, setInstBusy] = createSignal(false);
+
+  // Edit card
+  const [editCard, setEditCard] = createSignal<ModelCard | null>(null);
+  const [editName, setEditName] = createSignal('');
+  const [editStatus, setEditStatus] = createSignal<'active' | 'disabled'>('active');
+  const [editError, setEditError] = createSignal('');
+  const [editBusy, setEditBusy] = createSignal(false);
 
   const fetchAll = async () => {
     try {
@@ -102,10 +109,11 @@ export default function Models() {
     void loadChannelInventory(channelId);
   };
 
-  const channelName = (id: string) => channels().find((c) => c.id === id)?.name ?? id.slice(0, 8);
+  const channelOf = (id: string) => channels().find((c) => c.id === id);
+  const channelName = (id: string) => channelOf(id)?.name ?? id.slice(0, 8);
 
   const suggestedAlias = (channelId: string, modelId: string) => {
-    const channel = channels().find((item) => item.id === channelId);
+    const channel = channelOf(channelId);
     const prefix = channel?.short_code || channel?.name.toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 6) || 'custom';
     const token = channelId.replace(/-/g, '').slice(0, 6).toLowerCase();
     const model = modelId.trim().replace(/\s+/g, '-').replace(/[^A-Za-z0-9._:/-]+/g, '-');
@@ -182,6 +190,36 @@ export default function Models() {
     setInstBusy(false);
   };
 
+  // --- Edit card (rename / enable-disable) ---
+  const openEdit = (card: ModelCard) => {
+    setEditCard(card);
+    setEditName(card.display_name);
+    setEditStatus(card.status === 'active' ? 'active' : 'disabled');
+    setEditError('');
+  };
+
+  const saveEdit = async (e: Event) => {
+    e.preventDefault();
+    const card = editCard();
+    if (!card || !editName().trim()) return;
+    setEditBusy(true);
+    setEditError('');
+    try {
+      const resp = await fetch(`/admin/api/models/${card.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ display_name: editName().trim(), status: editStatus() }),
+      });
+      if (!resp.ok) {
+        const data = await resp.json();
+        throw new Error(data.error?.message ?? '保存失败');
+      }
+      setEditCard(null);
+      await fetchAll();
+    } catch (err) { setEditError((err as Error).message); }
+    setEditBusy(false);
+  };
+
   // --- Reorder (up/down buttons) ---
   const move = async (card: ModelCard, inst: Instance, dir: -1 | 1) => {
     const sorted = [...card.instances].sort((a, b) => a.sort_order - b.sort_order);
@@ -201,22 +239,20 @@ export default function Models() {
 
   // --- Delete card ---
   const deleteCard = async (id: string) => {
-    if (!confirm('Delete this model card and all its instances?')) return;
+    if (!confirm('删除该模型及其全部渠道实例？历史用量会保留。')) return;
     const resp = await fetch(`/admin/api/models/${id}`, { method: 'DELETE' });
-    if (!resp.ok) alert('Delete failed');
+    if (!resp.ok) alert('删除失败');
     fetchAll();
   };
 
+  const sortedInstances = (card: ModelCard) =>
+    [...card.instances].sort((a, b) => a.sort_order - b.sort_order);
+
   return (
-    <div class="resource-page">
+    <div class="resource-page model-page">
       <div class="page-heading">
         <div><h2>Unified Models</h2><p>一个模型 ID 可以绑定多个渠道，并按顺序自动回退。</p></div>
-        <button
-          onClick={() => setShowCreate(!showCreate())}
-          class="primary-button"
-        >
-          + 创建模型
-        </button>
+        <button onClick={() => setShowCreate(!showCreate())} class="primary-button">+ 创建模型</button>
       </div>
 
       {/* Create card form */}
@@ -269,88 +305,106 @@ export default function Models() {
       {loading() && <p class="empty-state">Loading...</p>}
       <Show when={!loading() && cards().length === 0}><div class="panel empty-state"><span class="provider-logo">M</span><h3>还没有统一模型</h3><p>创建模型后，再绑定一个或多个渠道实例。</p></div></Show>
 
-      <div class="model-grid">
+      <div class="channel-card-grid model-card-grid">
         <For each={cards()}>
           {(card) => (
-            <div class="panel model-card">
-              <div class="model-card-head">
+            <article class="panel channel-card model-card">
+              <header class="channel-card-head">
                 <span class="provider-logo">M</span>
-                <div class="resource-main">
-                  <strong>{card.display_name}</strong>
-                  <span><code>{card.unified_model_id}</code> · {card.instances.length} 个渠道实例</span>
-                </div>
-                <div class="row-actions">
-                  <span class={`badge ${card.status}`}>
-                    {card.status === 'active' ? '运行中' : '已停用'}
-                  </span>
-                  <button onClick={() => setExpandedCard(expandedCard() === card.id ? null : card.id)}>
-                    {expandedCard() === card.id ? '收起' : '实例'}
-                  </button>
-                  <button onClick={() => deleteCard(card.id)} class="danger-link">删除</button>
+                <div><strong>{card.display_name}</strong><span><code>{card.unified_model_id}</code></span></div>
+                <span class={`badge ${card.status}`}>{card.status === 'active' ? '运行中' : '已停用'}</span>
+              </header>
+
+              <div class="channel-card-metrics">
+                <div><span>渠道实例</span><strong>{card.instances.length} 个</strong></div>
+                <div><span>可用渠道</span><strong class="muted-value">{card.instances.filter((i) => i.status === 'active').length} 个</strong></div>
+              </div>
+
+              <div class="channel-card-section model-instance-section">
+                <div class="channel-card-label"><span>回退顺序</span><strong>{sortedInstances(card).length} 个实例</strong></div>
+                <div class="model-instance-list">
+                  <Show when={sortedInstances(card).length === 0} fallback={<For each={sortedInstances(card)}>{(inst, idx) => (
+                    <div class="model-instance-row">
+                      <ProviderLogo presetId={channelOf(inst.channel_id)?.preset_id} name={channelName(inst.channel_id)} />
+                      <div class="model-instance-copy">
+                        <strong>{channelName(inst.channel_id)}</strong>
+                        <code><span class="instance-alias">{inst.public_model_alias}</span> → {inst.channel_model_id}</code>
+                      </div>
+                      <div class="instance-order">
+                        <span class={`badge ${inst.status}`}>#{idx() + 1}</span>
+                        <button title="上移" disabled={idx() === 0} onClick={() => move(card, inst, -1)}>↑</button>
+                        <button title="下移" disabled={idx() === sortedInstances(card).length - 1} onClick={() => move(card, inst, 1)}>↓</button>
+                      </div>
+                    </div>
+                  )}</For>}>
+                    <span class="empty-preview">尚未绑定渠道，点下方"添加实例"。</span>
+                  </Show>
                 </div>
               </div>
 
-              {/* Instances */}
-              <Show when={expandedCard() === card.id}>
-                <div class="model-instances">
-                  <div class="instances-title">
-                    <p>渠道实例 <span>{card.instances.length}</span></p>
-                    <button onClick={() => openAdd(card)} class="secondary-button">
-                      + 添加实例
-                    </button>
-                  </div>
-
-                  {/* Add instance form */}
-                  <Show when={addForCard() === card.id}>
-                    <form onSubmit={submitInstance} class="instance-form form-stack">
-                      <strong>绑定渠道实例</strong>
-                      <select value={instChannelId()} onChange={(e) => chooseInstanceChannel(e.currentTarget.value)}>
-                        <Show when={activeChannels().length === 0}>
-                          <option value="">（无可用渠道，请先在 Channels 页添加）</option>
-                        </Show>
-                        <For each={activeChannels()}>
-                          {(ch) => <option value={ch.id}>{ch.name} — {ch.base_url}</option>}
-                        </For>
-                      </select>
-                      <input list="instance-channel-models" placeholder="选择已发现模型或直接输入上游模型 ID" value={instUpstreamModel()} onInput={(e) => { const value = e.currentTarget.value; setInstUpstreamModel(value); setInstAlias(suggestedAlias(instChannelId(), value)); }} required />
-                      <datalist id="instance-channel-models"><For each={availableInventory(instChannelId())}>{(model) => <option value={model.provider_model_id}>{model.display_name}</option>}</For></datalist>
-                      <input placeholder="公开别名 (如 ds-deepseek-chat)" value={instAlias()} onInput={(e) => setInstAlias(e.currentTarget.value)} required />
-                      <label class="checkbox-label">
-                        <input type="checkbox" checked={instStreamUsage()} onChange={(e) => setInstStreamUsage(e.currentTarget.checked)} class="accent-[var(--color-primary)]" />
-                        支持流式 usage
-                      </label>
-                      <Show when={instError()}><div class="form-error">{instError()}</div></Show>
-                      <button type="submit" disabled={instBusy()} class="primary-button">
-                        {instBusy() ? '添加中...' : '添加实例'}
-                      </button>
-                    </form>
-                  </Show>
-
-                  <div class="instance-list">
-                    <For each={[...card.instances].sort((a, b) => a.sort_order - b.sort_order)}>
-                      {(inst, idx) => (
-                        <div class="instance-row">
-                          <div class="resource-main">
-                            <strong><code>{inst.public_model_alias}</code></strong>
-                            <span>{channelName(inst.channel_id)} → <code>{inst.channel_model_id}</code>{inst.supports_stream_usage ? ' · stream usage' : ''}</span>
-                          </div>
-                          <div class="instance-order">
-                            <span class={`badge ${inst.status}`}>
-                              #{idx() + 1}
-                            </span>
-                            <button onClick={() => move(card, inst, -1)} disabled={idx() === 0}>↑</button>
-                            <button onClick={() => move(card, inst, 1)} disabled={idx() === card.instances.length - 1}>↓</button>
-                          </div>
-                        </div>
-                      )}
-                    </For>
-                  </div>
-                </div>
-              </Show>
-            </div>
+              <footer class="channel-card-actions model-card-actions">
+                <button class="primary-button" onClick={() => openAdd(card)}>+ 添加实例</button>
+                <button class="secondary-button" onClick={() => openEdit(card)}>编辑</button>
+                <button class="secondary-button danger-link" onClick={() => deleteCard(card.id)}>删除</button>
+              </footer>
+            </article>
           )}
         </For>
       </div>
+
+      {/* Add instance modal */}
+      <Show when={addForCard()}>{(cardId) => {
+        const card = () => cards().find((c) => c.id === cardId());
+        return (
+          <div class="modal-backdrop" onClick={() => setAddForCard(null)}>
+            <form class="modal-card form-stack" onSubmit={submitInstance} onClick={(e) => e.stopPropagation()}>
+              <div class="modal-title"><div><span class="eyebrow">Instance</span><h3>绑定渠道实例</h3><p>{card()?.display_name} · {card()?.unified_model_id}</p></div><button type="button" onClick={() => setAddForCard(null)}>×</button></div>
+              <Show when={activeChannels().length === 0}>
+                <div class="form-error">暂无可用渠道，请先在 Channels 页添加并启用渠道。</div>
+              </Show>
+              <label>渠道
+                <select value={instChannelId()} onChange={(e) => chooseInstanceChannel(e.currentTarget.value)}>
+                  <Show when={activeChannels().length === 0}><option value="">（无可用渠道）</option></Show>
+                  <For each={activeChannels()}>
+                    {(ch) => <option value={ch.id}>{ch.name} — {ch.base_url}</option>}
+                  </For>
+                </select>
+              </label>
+              <label>上游模型 ID
+                <input list="instance-channel-models" placeholder="选择已发现模型或直接输入上游模型 ID" value={instUpstreamModel()} onInput={(e) => { const value = e.currentTarget.value; setInstUpstreamModel(value); setInstAlias(suggestedAlias(instChannelId(), value)); }} required />
+                <datalist id="instance-channel-models"><For each={availableInventory(instChannelId())}>{(model) => <option value={model.provider_model_id}>{model.display_name}</option>}</For></datalist>
+              </label>
+              <label>公开别名（客户端可直接用此 ID 调用）
+                <input placeholder="如 ds-deepseek-chat" value={instAlias()} onInput={(e) => setInstAlias(e.currentTarget.value)} required />
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" checked={instStreamUsage()} onChange={(e) => setInstStreamUsage(e.currentTarget.checked)} />
+                支持流式 usage
+              </label>
+              <Show when={instError()}><div class="form-error">{instError()}</div></Show>
+              <div class="modal-actions"><button type="button" class="secondary-button" onClick={() => setAddForCard(null)}>取消</button><button type="submit" disabled={instBusy()} class="primary-button">{instBusy() ? '添加中...' : '添加实例'}</button></div>
+            </form>
+          </div>
+        );
+      }}</Show>
+
+      {/* Edit modal */}
+      <Show when={editCard()}>{(card) => (
+        <div class="modal-backdrop" onClick={() => setEditCard(null)}>
+          <form class="modal-card form-stack" onSubmit={saveEdit} onClick={(e) => e.stopPropagation()}>
+            <div class="modal-title"><div><span class="eyebrow">Model</span><h3>编辑模型</h3><p>{card().unified_model_id}</p></div><button type="button" onClick={() => setEditCard(null)}>×</button></div>
+            <label>显示名称<input value={editName()} onInput={(e) => setEditName(e.currentTarget.value)} required /></label>
+            <label>状态
+              <select value={editStatus()} onChange={(e) => setEditStatus(e.currentTarget.value as 'active' | 'disabled')}>
+                <option value="active">运行中</option>
+                <option value="disabled">已停用</option>
+              </select>
+            </label>
+            <Show when={editError()}><div class="form-error">{editError()}</div></Show>
+            <div class="modal-actions"><button type="button" class="secondary-button" onClick={() => setEditCard(null)}>取消</button><button type="submit" disabled={editBusy()} class="primary-button">{editBusy() ? '保存中…' : '保存'}</button></div>
+          </form>
+        </div>
+      )}</Show>
     </div>
   );
 }

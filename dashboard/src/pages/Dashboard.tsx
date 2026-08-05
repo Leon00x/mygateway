@@ -1,6 +1,7 @@
 import { createSignal, onMount, Show, For } from 'solid-js';
 import { A } from '@solidjs/router';
 import Icon, { IconName } from '../components/Icon';
+import { ProviderLogo } from '../components/ProviderLogo';
 import {
   balanceCurrencySymbol,
   balanceUpdatedAt,
@@ -155,7 +156,7 @@ export default function Dashboard() {
           <div class="provider-balance-list">
             <For each={visibleBalances()}>{(balance) => (
               <div class="provider-balance-row">
-                <div class="provider-balance-name"><span class="provider-logo">D</span><div><strong>{balance.channel_name}</strong><small>DeepSeek 官方 API</small></div></div>
+                <div class="provider-balance-name"><ProviderLogo presetId="deepseek" name="DeepSeek" /><div><strong>{balance.channel_name}</strong><small>DeepSeek 官方 API</small></div></div>
                 <Show when={balance.status === 'not_queried'}><span class="balance-state muted">点击刷新后查询</span></Show>
                 <Show when={balance.status === 'error'}><span class="balance-state error">{balance.status === 'error' ? balance.error : ''}</span></Show>
                 <Show when={balance.status === 'ok'}>{() => {
