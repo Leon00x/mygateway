@@ -29,7 +29,7 @@ Workers Builds 持续更新。
 ### 2.2 关键设计
 
 - 生产 `wrangler.jsonc` 的 D1 **不填 `database_id`** → 首次部署自动创建；若要固化，`wrangler d1 list` 拿 ID 回填
-- Deploy 脚本顺序：`build:dashboard → wrangler deploy → db:migrate:remote → secrets:init`
+- 升级时的 Deploy 脚本顺序：`build:dashboard → db:migrate:remote → wrangler deploy → secrets:init`。必须先让 D1 具备新代码需要的兼容结构，再切换 Worker
 - `secrets:init` 仅在 Secret 不存在时设置 `INITIAL_ADMIN_PASSWORD` 与 `MASTER_KEY`，已有值永不覆盖
 - 管理员初始密码固定为 `mygateway123`；Master Key 随机生成且只在部署日志显示一次，用户必须立即保存
 - `.dev.vars.example` 提供公开的固定初始密码；真实 `MASTER_KEY` 永不入库
@@ -55,8 +55,8 @@ MASTER_KEY=<base64 备份值>
 ```
 push 代码 → GitHub → Cloudflare Workers Builds
   → npm ci → 构建前端（dashboard/dist）
-  → wrangler deploy（上传 Worker + Static Assets）
   → wrangler d1 migrations apply DB --remote（增量建表）
+  → wrangler deploy（上传 Worker + Static Assets）
   → 生产更新
 ```
 
@@ -67,20 +67,25 @@ push 代码 → GitHub → Cloudflare Workers Builds
 | Git 存储库 | `Leon00x/mygateway`（或你 fork 后的真实仓库名，不是 Worker 名） |
 | 生产分支 | `main` |
 | 构建命令 | `npm ci && npm run build:dashboard` |
-| 部署命令 | `npx wrangler deploy && npm run db:migrate:remote && npm run secrets:init` |
+| 部署命令 | `npm run deploy` |
+
+> 不要保留 Workers Builds 默认的 `npx wrangler deploy`。默认命令只发布 Worker，
+> 不会执行仓库中的 D1 migration；需要在 Cloudflare Dashboard 的 Settings → Builds
+> 中将部署命令设为 `npm run deploy`。实际步骤统一维护在 `package.json`，Wrangler
+> 配置里的 Custom Builds 当前也不能代替这项设置。
 
 ## 4. 升级与回滚
 
 ### 4.1 日常升级
 
-合并或推送到生产分支 `main` 后，Workers Builds 会依次构建 Dashboard、部署
-Worker 与 Static Assets、增量执行 D1 migration，并检查首次 Secret：
+合并或推送到生产分支 `main` 后，Workers Builds 会依次构建 Dashboard、增量执行
+D1 migration、部署 Worker 与 Static Assets，并检查首次 Secret：
 
 ```text
-main 更新 → Workers Builds → Worker / Assets → D1 migration → Secret 检查
+main 更新 → Workers Builds → D1 migration → Worker / Assets → Secret 检查
 ```
 
-- migration 必须保持向后兼容，已经执行的 migration 不会重复执行。
+- migration 必须保持向后兼容，已经执行的 migration 不会重复执行。若 migration 失败，部署命令会停止，新 Worker 不会上线。
 - 普通升级不会重置管理员密码，也不会轮换 `MASTER_KEY` 或 Provider Key。
 - 升级前应确认已安全备份首次部署日志中的 `MASTER_KEY`。
 - 生产变更完成后按[测试指南](TESTING.md)执行最小发布检查。
@@ -95,7 +100,7 @@ Cloudflare Dashboard 或 Wrangler 可以回滚 Worker 代码和 Static Assets，
 
 1. **Git 存储库选错**：把 Worker 名 `mygatewaydemo` 当成仓库名 → 连到不存在的仓库，构建永不触发。**仓库名必须与 GitHub 上真实一致**。
 2. **Worker 名称不匹配**：Dash 上 Worker 名和 `wrangler.jsonc` 的 `name` 都必须是 `mygatewaydemo`，否则 Builds 可能尝试创建另一个 Worker。
-3. **构建/部署命令错误**：`npm run build`（会 dry-run deploy）不是纯构建；部署阶段还必须执行 Secret 初始化和 migration，正确组合见上表。
+3. **构建/部署命令错误**：`npm run build`（会 dry-run deploy）不是纯构建；Workers Builds 默认的 `npx wrangler deploy` 也不会执行 migration。部署阶段必须按“migration → deploy → Secret 检查”的顺序执行，正确组合见上表。
 4. **D1 权限缺失**：API Token 若缺 D1: Edit 权限，部署报 `Authentication error`。创建 Token 选 "Edit Cloudflare Workers" 模板并**手动加 D1: Edit**。
 5. **database_id 硬编码**：不要把某个账号的 D1 ID 提交到仓库（未来用户会用别人的库）。
 6. **重复生成 MASTER_KEY**：`secrets:init` 会检查 Secret 名称并复用已有值；不要手工删除或覆盖生产 `MASTER_KEY`。
@@ -108,6 +113,9 @@ npx wrangler deployments list --name mygatewaydemo
 
 # 查看 D1
 npx wrangler d1 list
+
+# 确认生产库没有待执行 migration
+npx wrangler d1 migrations list DB --remote
 
 # 查看实时日志
 npx wrangler tail mygatewaydemo

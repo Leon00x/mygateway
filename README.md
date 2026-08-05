@@ -75,6 +75,8 @@ npm run deploy
 ```
 
 自动部署、Secrets、migration 和排障见 [部署指南](docs/DEPLOY.md)。
+使用 Workers Builds 时必须将部署命令设为 `npm run deploy`；该脚本会确保数据库结构
+先于新 Worker 更新。
 
 ## 3. 已实现能力
 

@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "dev:setup": "npm run db:migrate:local",
-    "deploy": "npm run build:dashboard && wrangler deploy && npm run db:migrate:remote && npm run secrets:init",
+    "deploy": "npm run build:dashboard && npm run db:migrate:remote && wrangler deploy && npm run secrets:init",
     "build": "npm run build:dashboard && wrangler deploy --dry-run",
     "build:dashboard": "vite build --config dashboard/vite.config.ts",
     "secrets:init": "node scripts/init-secrets.mjs",
