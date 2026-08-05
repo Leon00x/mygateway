@@ -15,13 +15,14 @@
 
 ## 2. 单元测试
 
-当前共有 16 个测试文件、74 个用例：
+当前共有 17 个测试文件、93 个用例：
 
 | 文件 | 覆盖重点 |
 |---|---|
 | `access-resolver.test.ts` | Key 与模型冷请求 batch、缓存状态 |
 | `balance-refresh-repro.test.ts` | 强制刷新、五分钟缓存和概览回读 |
 | `deepseek-balance.test.ts` | 官方 host、金额精度、鉴权和错误清理 |
+| `key-quota.test.ts` | 密钥到期、RPM 窗口、每日预算、响应缓存与成本计算 |
 | `fallback-policy.test.ts` | HTTP / Provider 错误分类 |
 | `model-discovery.test.ts` | OpenAI / Gemini / Anthropic 模型列表、分页和 ID 规范化 |
 | `passive-circuit-breaker.test.ts` | 阈值、冷却、恢复和容量 |

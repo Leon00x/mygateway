@@ -4,6 +4,27 @@
 [README](README.md)；技术细节分别见[架构](docs/ARCHITECTURE.md)、
 [详细设计](docs/DESIGN.md)、[部署](docs/DEPLOY.md)和[测试](docs/TESTING.md)。
 
+## 2026-08-06：虚拟密钥限额、费用统计、请求日志与响应缓存
+
+状态：已合入 `main`。
+
+- Gateway Key 支持虚拟密钥能力：每分钟 RPM、每日请求/Token 预算、到期时间和模型白名单；
+  超额返回 429/403，密钥过期返回 401；管理页可创建和编辑限额。
+- 每日预算以 D1 权威扣减（密钥每日聚合表），RPM 为 isolate 内尽力窗口。
+- 渠道实例可配置 $/M Token 输入/输出单价，按 Provider 上报 Token 计算费用（整数 micro-USD），
+  汇总到用量、密钥每日用量与首页“预估费用”指标。
+- 新增请求日志：记录最近请求的密钥、模型、渠道、状态、Token、费用、耗时和回退，管理页
+  “请求日志”可筛选查看，默认保留 7 天，每日 Cron 清理。
+- 新增可选响应缓存：`RESPONSE_CACHE_TTL_MS` 开启后缓存相同非流式请求，响应带
+  `X-Gateway-Cache: HIT/MISS`，命中不重复计费。
+- 模型页改为竖向卡片布局（对齐渠道页），实例可配置/修改定价。
+- 项目标准开源化：MIT License、CONTRIBUTING、SECURITY、GitHub Actions CI。
+- 单元测试 93 例。
+
+本文只记录已经合入并部署的用户可见变化。产品现状与 Roadmap 见
+[README](README.md)；技术细节分别见[架构](docs/ARCHITECTURE.md)、
+[详细设计](docs/DESIGN.md)、[部署](docs/DEPLOY.md)和[测试](docs/TESTING.md)。
+
 ## 2026-08-05：控制台侧边栏与暗黑模式
 
 状态：已合入 `main`，已部署到 Cloudflare Worker `mygatewaydemo`。

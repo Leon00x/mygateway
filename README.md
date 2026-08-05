@@ -2,15 +2,20 @@
 
 MyGateway 是一个部署在用户自己 Cloudflare 账号中的轻量 AI API 网关。它统一管理多个
 模型供应商，对外提供 OpenAI Chat、OpenAI Responses 和 Anthropic Messages 接口，并以
-固定、可解释的顺序完成模型路由、响应前 Fallback 和基础用量统计。
+固定、可解释的顺序完成模型路由、响应前 Fallback、虚拟密钥限流与预算、费用统计和请求日志。
 
 项目优先适配 Cloudflare Free：不需要自建服务器，默认不依赖 KV、R2、Queues 或
 Durable Objects。
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Leon00x/mygateway)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![CI](https://github.com/Leon00x/mygateway/actions/workflows/ci.yml/badge.svg)](https://github.com/Leon00x/mygateway/actions/workflows/ci.yml)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 
 文档：[架构](docs/ARCHITECTURE.md) · [详细设计](docs/DESIGN.md) ·
 [部署](docs/DEPLOY.md) · [测试](docs/TESTING.md) · [更新记录](CHANGELOG.md)
+
+参与贡献：[CONTRIBUTING](CONTRIBUTING.md) · 安全：[SECURITY](SECURITY.md) · 许可：MIT（[LICENSE](LICENSE)）
 
 ## 1. 产品定位
 
@@ -85,7 +90,11 @@ npm run deploy
 | 管理认证 | D1 单管理员账号、HttpOnly Session、首次强制改密 |
 | 渠道 | 预制或自定义 Provider，一份 Key 配置多个协议端点；按需发现、刷新和手工维护模型库存 |
 | 模型 | 从渠道库存勾选导入，或从 30 个常见模板/自由输入创建；统一模型、渠道实例、可编辑 ID 和稳定直达别名 |
-| Gateway Key | 创建、一次性展示、启停、删除和重新生成 |
+| Gateway Key | 创建、一次性展示、启停、删除、重新生成 |
+| 虚拟密钥限额 | 每个密钥可配置 RPM、每日请求/Token 预算、到期时间和模型白名单；超额返回 429/403 |
+| 费用统计 | 渠道实例可配置 $/M Token 单价；按 Provider 上报 Token 计算并汇总到用量、密钥和首页 |
+| 请求日志 | 最近请求的密钥、模型、渠道、状态、Token、费用和耗时；管理页查看，保留 7 天 |
+| 响应缓存 | 可选 isolate 内存 TTL 缓存相同非流式请求，命中返回 `X-Gateway-Cache: HIT` 且不重复计费 |
 | 协议 | OpenAI Chat、OpenAI Responses、Anthropic Messages |
 | 协议转换 | Chat ↔ Messages 的文本、工具调用、usage 和 SSE 公共子集 |
 | 路由 | 原生协议优先、固定优先级、完整别名直达 |
@@ -175,8 +184,8 @@ curl https://your-gateway.workers.dev/v1/chat/completions \
 | 外部子请求 | 50/请求 | 最多尝试 3 个 Provider，候选串行而非广播 |
 | 并发出站连接 | 6/请求 | 单请求顺序尝试渠道 |
 | D1 读取 | 5,000,000 行/天 | 索引、一次 batch、短 TTL isolate 缓存 |
-| D1 写入 | 100,000 行/天 | 每个完成请求一次 usage UPSERT，不保存原始请求 |
-| D1 存储 | 500MB/数据库、账号总计 5GB | 一个数据库，只保留配置和 30 天分钟聚合 |
+| D1 写入 | 100,000 行/天 | 每个完成请求一次 usage + 密钥用量 + 日志写入（同一 waitUntil）；轻量使用建议不超过约 30,000 次调用/天 |
+| D1 存储 | 500MB/数据库、账号总计 5GB | 一个数据库，分钟聚合 30 天、请求日志 7 天、密钥用量 30 天 |
 | Workers Logs | 200,000 事件/天、保留 3 天 | 10% head sampling 和脱敏事件 |
 
 ### 我们如何减少额度消耗
@@ -184,10 +193,10 @@ curl https://your-gateway.workers.dev/v1/chat/completions \
 - 热请求使用有容量上限的 isolate 内存缓存；缓存命中时不查询 D1。
 - 冷请求通过一次 `DB.batch()` 完成 Gateway Key 鉴权与模型路由。
 - SSE 按事件增量处理，不把完整生成结果读入内存。
-- 用量只写分钟聚合；失败候选不会分别写统计记录。
-- 用量写入通过 `waitUntil()` 异步执行，失败不阻断模型响应。
+- 用量、密钥用量和请求日志在同一 `waitUntil()` 内顺序写入；失败不阻断模型响应。
+- 密钥未配置每日预算时，配额检查跳过 D1 读取；响应缓存命中不写用量（不重复计费）。
 - 每日 Cron 只清理过期统计，不执行余额、模型同步或健康探测。
-- 熔断状态保存在 isolate 内存，不使用 KV、DO 或额外数据库写入。
+- 熔断、RPM 窗口和响应缓存保存在 isolate 内存，不使用 KV、DO 或额外数据库写入。
 - DeepSeek 余额只有用户主动刷新时才访问 Provider，并缓存 5 分钟。
 - 浏览器会话会保留最后一次余额刷新结果，避免其他 Worker isolate 的 `not_queried` 覆盖，
   不增加 D1、KV 或 Durable Objects 写入。
@@ -217,6 +226,22 @@ D1 索引写放大、Cloudflare 账号中的其他 Worker，以及异常或恶�
 - 请求体和上游错误体均有大小限制；
 - D1 是配置的唯一权威数据源，内存缓存可随时丢失。
 
+### 可调配置（Worker Secrets / Vars）
+
+| 配置 | 默认 | 说明 |
+|---|---|---|
+| `MASTER_KEY` | 必填 | 32 字节 base64，用于加密 Provider Key |
+| `INITIAL_ADMIN_USERNAME` / `INITIAL_ADMIN_PASSWORD` | `admin` / 文档引导值 | 首次登录凭据，登录后强制修改 |
+| `APP_VERSION` | `0.1.0` | 展示在 `/health` 和控制台 |
+| `DEFAULT_TIMEZONE` | `Asia/Shanghai` | “今日”统计边界 |
+| `MAX_REQUEST_BYTES` | `2097152` | 请求体上限 |
+| `MAX_CHANNEL_ATTEMPTS` | `3` | 每请求最多尝试渠道数 |
+| `UPSTREAM_HEADER_TIMEOUT_MS` | `30000` | 上游响应头超时 |
+| `USAGE_RETENTION_DAYS` | `30` | 分钟用量与密钥用量保留天数 |
+| `REQUEST_LOG_RETENTION_DAYS` | `7` | 请求日志保留天数 |
+| `RESPONSE_CACHE_TTL_MS` | `0`（关闭） | 相同非流式请求的响应缓存 TTL |
+| `RESPONSE_CACHE_MAX_ENTRIES` | `1000` | isolate 内缓存条目上限 |
+
 ## 6. 当前产品边界
 
 当前明确不包含：
@@ -225,9 +250,9 @@ D1 索引写放大、Cloudflare 账号中的其他 Worker，以及异常或恶�
 - Gemini 原生协议、Embeddings、Images、Audio、Realtime、Batch 和 Files；
 - 同渠道自动重试、流输出后的 Fallback；
 - 动态价格路由、自动套餐扣减和精确账单；
-- OAuth Provider、多用户、RBAC、Key 级 RPM/TPM 和预算；
-- Prompt/Response 存储或响应缓存；
-- 跨 isolate 强一致的熔断、限流或预算状态。
+- OAuth Provider、多用户、RBAC、Team/Project；
+- Prompt/Response 存储或语义缓存；
+- 跨 isolate 强一致的熔断、限流或预算状态（RPM 为 per-isolate 尽力窗口，每日预算以 D1 为准）。
 
 ## 7. Roadmap
 
@@ -237,14 +262,14 @@ D1 索引写放大、Cloudflare 账号中的其他 Worker，以及异常或恶�
 - 使用 Anthropic SDK 验证原生 Messages 和 Messages → Chat 转换；
 - 完善自定义渠道的协议端点编辑校验和变更影响提示；
 - 完善 Anthropic 错误 envelope 和图片内容公共子集；
-- 建立 Free Tier 生产指标基线：CPU、D1 rows read/write、缓存命中率。
+- 建立 Free Tier 生产指标基线：CPU、D1 rows read/write、缓存命中率；
+- 密钥页面展示每日用量与剩余预算。
 
 后续候选：
 
 - Provider Adapter 能力矩阵与更多官方余额接口；
 - Responses ↔ Chat 转换；
-- 手工成本估算和预算展示；
-- API Key 模型权限与轻量限流；
+- 缓存命中的预算扣减策略；
 - 多用户和 RBAC；
 - 只有需要共享强状态时再评估 Durable Objects。
 
@@ -263,6 +288,6 @@ npm run build
 npm run test:e2e
 ```
 
-当前测试包括 74 个单元测试、11 个无需真实 Provider Key 的 UI E2E，以及 10 个需要真实
+当前测试包括 93 个单元测试、11 个无需真实 Provider Key 的 UI E2E，以及 10 个需要真实
 `DEEPSEEK_TEST_KEY` 的集成测试。环境准备、用例清单和运行边界见
 [测试指南](docs/TESTING.md)。
