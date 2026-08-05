@@ -150,6 +150,17 @@ export async function createChannelModel(
     .run();
 }
 
+export async function getChannelModelForCardChannel(
+  db: D1Database,
+  modelCardId: string,
+  channelId: string,
+): Promise<ChannelModelRow | null> {
+  return db.prepare(
+    `SELECT * FROM channel_models
+     WHERE model_card_id = ? AND channel_id = ? AND deleted_at IS NULL LIMIT 1`,
+  ).bind(modelCardId, channelId).first<ChannelModelRow>();
+}
+
 export async function reorderInstances(
   db: D1Database,
   modelCardId: string,

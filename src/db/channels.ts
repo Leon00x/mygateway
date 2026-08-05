@@ -12,6 +12,8 @@ export interface ChannelRow {
   api_key_version: number;
   status: 'active' | 'disabled';
   notes: string | null;
+  preset_id: string | null;
+  short_code: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -25,6 +27,8 @@ export interface ChannelPublic {
   has_api_key: boolean;
   status: 'active' | 'disabled';
   notes: string | null;
+  preset_id: string | null;
+  short_code: string | null;
   created_at: number;
   updated_at: number;
   protocols: ChannelProtocol[];
@@ -43,6 +47,8 @@ export function toPublicChannel(row: ChannelWithProtocols): ChannelPublic {
     has_api_key: true,
     status: row.status,
     notes: row.notes,
+    preset_id: row.preset_id,
+    short_code: row.short_code,
     created_at: row.created_at,
     updated_at: row.updated_at,
     protocols: row.protocols,
@@ -95,8 +101,8 @@ export async function createChannel(
 ): Promise<void> {
   await db
     .prepare(
-      `INSERT INTO channels (id, name, provider_type, base_url, api_key_ciphertext, api_key_iv, api_key_version, status, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO channels (id, name, provider_type, base_url, api_key_ciphertext, api_key_iv, api_key_version, status, notes, preset_id, short_code)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       channel.id,
@@ -108,6 +114,8 @@ export async function createChannel(
       channel.api_key_version,
       channel.status,
       channel.notes,
+      channel.preset_id,
+      channel.short_code,
     )
     .run();
 }
@@ -144,6 +152,8 @@ export async function updateChannel(
     api_key_iv?: string;
     status?: string;
     notes?: string | null;
+    preset_id?: string | null;
+    short_code?: string | null;
   },
 ): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
@@ -174,6 +184,14 @@ export async function updateChannel(
     fields.push('notes = ?');
     values.push(updates.notes);
   }
+  if (updates.preset_id !== undefined) {
+    fields.push('preset_id = ?');
+    values.push(updates.preset_id);
+  }
+  if (updates.short_code !== undefined) {
+    fields.push('short_code = ?');
+    values.push(updates.short_code);
+  }
 
   values.push(id);
   await db.prepare(`UPDATE channels SET ${fields.join(', ')} WHERE id = ? AND deleted_at IS NULL`).bind(...values).run();
@@ -198,6 +216,70 @@ export async function isChannelReferenced(db: D1Database, channelId: string): Pr
     .bind(channelId)
     .first<{ cnt: number }>();
   return (result?.cnt ?? 0) > 0;
+}
+
+export interface ChannelDeleteModelImpact {
+  model_card_id: string;
+  unified_model_id: string;
+  display_name: string;
+  channel_instances: number;
+  total_instances: number;
+  remaining_instances: number;
+  will_delete_model: boolean;
+}
+
+/** Read-only impact used before the destructive confirmation. */
+export async function getChannelDeleteImpact(
+  db: D1Database,
+  channelId: string,
+): Promise<ChannelDeleteModelImpact[]> {
+  const result = await db.prepare(
+    `SELECT mc.id AS model_card_id, mc.unified_model_id, mc.display_name,
+       (SELECT COUNT(*) FROM channel_models target
+        WHERE target.model_card_id = mc.id AND target.channel_id = ? AND target.deleted_at IS NULL) AS channel_instances,
+       (SELECT COUNT(*) FROM channel_models all_instances
+        WHERE all_instances.model_card_id = mc.id AND all_instances.deleted_at IS NULL) AS total_instances
+     FROM model_cards mc
+     WHERE mc.deleted_at IS NULL AND EXISTS (
+       SELECT 1 FROM channel_models target
+       WHERE target.model_card_id = mc.id AND target.channel_id = ? AND target.deleted_at IS NULL
+     )
+     ORDER BY mc.unified_model_id ASC`,
+  ).bind(channelId, channelId).all<Omit<ChannelDeleteModelImpact, 'remaining_instances' | 'will_delete_model'>>();
+  return result.results.map((row) => {
+    const channelInstances = Number(row.channel_instances);
+    const totalInstances = Number(row.total_instances);
+    const remainingInstances = Math.max(0, totalInstances - channelInstances);
+    return {
+      ...row,
+      channel_instances: channelInstances,
+      total_instances: totalInstances,
+      remaining_instances: remainingInstances,
+      will_delete_model: remainingInstances === 0,
+    };
+  });
+}
+
+/** Soft-delete model cards that became unroutable after a channel was removed. */
+export async function softDeleteOrphanModelCards(
+  db: D1Database,
+  modelCardIds: string[],
+): Promise<void> {
+  const now = Math.floor(Date.now() / 1000);
+  for (const modelCardId of modelCardIds) {
+    const remaining = await db.prepare(
+      'SELECT COUNT(*) AS count FROM channel_models WHERE model_card_id = ? AND deleted_at IS NULL',
+    ).bind(modelCardId).first<{ count: number }>();
+    if ((remaining?.count ?? 0) > 0) continue;
+    await db.prepare('DELETE FROM model_identifiers WHERE model_card_id = ?').bind(modelCardId).run();
+    await db.prepare(
+      `UPDATE model_cards SET deleted_at = ?, updated_at = ?, unified_model_id = ?
+       WHERE id = ? AND deleted_at IS NULL`,
+    ).bind(now, now, `deleted:${modelCardId}:${now}`, modelCardId).run();
+    await db.prepare(
+      'UPDATE channel_provider_models SET imported_model_card_id = NULL, updated_at = ? WHERE imported_model_card_id = ?',
+    ).bind(now, modelCardId).run();
+  }
 }
 
 /**

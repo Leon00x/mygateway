@@ -1,7 +1,7 @@
 /* @refresh reload */
 import { render } from 'solid-js/web';
 import { Router, Route, Navigate, A, useLocation } from '@solidjs/router';
-import { createContext, useContext, createSignal, Show, onMount, For } from 'solid-js';
+import { createContext, useContext, createSignal, Show, onMount, onCleanup, For } from 'solid-js';
 import './app.css';
 import Login from './pages/Login';
 import ChangeCredentials from './pages/ChangeCredentials';
@@ -78,12 +78,12 @@ function RequireReady(props: { children: JSX.Element }) {
   return props.children;
 }
 
-const navigation: { href: string; label: string; detail: string; icon: IconName; end?: boolean }[] = [
-  { href: '/', label: '概览', detail: 'Dashboard', icon: 'home', end: true },
-  { href: '/channels', label: '渠道', detail: 'Providers', icon: 'channels' },
-  { href: '/models', label: '模型', detail: 'Routing', icon: 'models' },
-  { href: '/keys', label: 'API 密钥', detail: 'Access', icon: 'keys' },
-  { href: '/system', label: '系统设置', detail: 'Settings', icon: 'system' },
+const navigation: { href: string; label: string; icon: IconName; end?: boolean }[] = [
+  { href: '/', label: '概览', icon: 'home', end: true },
+  { href: '/channels', label: '渠道', icon: 'channels' },
+  { href: '/models', label: '模型', icon: 'models' },
+  { href: '/keys', label: 'API 密钥', icon: 'keys' },
+  { href: '/system', label: '系统设置', icon: 'system' },
 ];
 
 const titles: Record<string, { title: string; subtitle: string }> = {
@@ -127,25 +127,18 @@ function AppLayout(props: { children?: JSX.Element }) {
             <span class="brand-symbol">M</span>
             <span><strong>MyGateway</strong><small>AI ROUTER</small></span>
           </A>
-          <div class="sidebar-label">工作台</div>
           <nav class="sidebar-nav">
             <For each={navigation}>{(item) => (
               <A href={item.href} end={item.end} class="nav-item" activeClass="active" title={sidebarCollapsed() ? item.label : undefined}>
                 <Icon name={item.icon} size={19} />
-                <span><strong>{item.label}</strong><small>{item.detail}</small></span>
+                <span><strong>{item.label}</strong></span>
               </A>
             )}</For>
           </nav>
           <div class="sidebar-bottom">
             <a href="/v1/api-docs" target="_blank" class="nav-item compact" title={sidebarCollapsed() ? '接口文档' : undefined}><Icon name="docs" size={18} /><span><strong>接口文档</strong></span></a>
-            <div class="user-tile">
-              <span class="avatar">{auth.username().slice(0, 1).toUpperCase()}</span>
-              <span class="user-copy"><strong>{auth.username()}</strong><small>管理员</small></span>
-              <button class="logout-button" aria-label="退出登录" title="退出登录" onClick={auth.logout}><Icon name="logout" size={17} /></button>
-            </div>
             <button class="sidebar-toggle" aria-label={sidebarCollapsed() ? '展开侧边栏' : '收起侧边栏'} title={sidebarCollapsed() ? '展开侧边栏' : '收起侧边栏'} onClick={toggleSidebar}>
               <Icon name={sidebarCollapsed() ? 'panel-expand' : 'panel-collapse'} size={18} />
-              <span>{sidebarCollapsed() ? '展开侧边栏' : '收起侧边栏'}</span>
             </button>
           </div>
         </aside>
@@ -153,9 +146,10 @@ function AppLayout(props: { children?: JSX.Element }) {
           <header class="topbar">
             <div><h1>{page().title}</h1><p>{page().subtitle}</p></div>
             <div class="topbar-actions">
-              <ThemeToggle theme={theme()} onToggle={toggleTheme} />
               <a class="ghost-button" href="/v1/api-docs" target="_blank"><Icon name="docs" size={16} /> API Docs</a>
               <span class="status-pill"><i /> Gateway Online</span>
+              <ThemeToggle theme={theme()} onToggle={toggleTheme} />
+              <UserMenu username={auth.username()} onLogout={auth.logout} />
             </div>
           </header>
           <main class="page-content">{props.children}</main>
@@ -183,6 +177,41 @@ function ThemeToggle(props: { theme: 'light' | 'dark'; onToggle: () => void; pub
   return <button class="theme-toggle" classList={{ 'public-theme-toggle': Boolean(props.public) }} aria-label={label()} title={label()} aria-pressed={props.theme === 'dark'} onClick={props.onToggle}>
     <Icon name={props.theme === 'light' ? 'moon' : 'sun'} size={18} />
   </button>;
+}
+
+function UserMenu(props: { username: string; onLogout: () => Promise<void> }) {
+  let menu!: HTMLDetailsElement;
+  const close = () => menu.removeAttribute('open');
+
+  onMount(() => {
+    const closeFromOutside = (event: PointerEvent) => {
+      if (!menu.contains(event.target as Node)) close();
+    };
+    const closeFromKeyboard = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') close();
+    };
+    document.addEventListener('pointerdown', closeFromOutside);
+    document.addEventListener('keydown', closeFromKeyboard);
+    onCleanup(() => {
+      document.removeEventListener('pointerdown', closeFromOutside);
+      document.removeEventListener('keydown', closeFromKeyboard);
+    });
+  });
+
+  return <details class="user-menu" ref={menu}>
+    <summary role="button" aria-haspopup="menu" aria-label={`管理员菜单：${props.username}`} title={props.username}>
+      <span class="avatar topbar-avatar">{props.username.slice(0, 1).toUpperCase()}</span>
+    </summary>
+    <div class="user-menu-panel" role="menu">
+      <div class="user-menu-head">
+        <span class="avatar">{props.username.slice(0, 1).toUpperCase()}</span>
+        <span><strong>{props.username}</strong><small>管理员</small></span>
+      </div>
+      <A href="/system" class="user-menu-item" role="menuitem" onClick={close}><Icon name="system" size={17} />系统设置</A>
+      <A href="/change-password" class="user-menu-item" role="menuitem" onClick={close}><Icon name="keys" size={17} />修改登录凭据</A>
+      <button class="user-menu-item danger" role="menuitem" onClick={() => { close(); void props.onLogout(); }}><Icon name="logout" size={17} />退出登录</button>
+    </div>
+  </details>;
 }
 
 render(() => (

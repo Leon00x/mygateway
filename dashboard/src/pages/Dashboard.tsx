@@ -99,40 +99,6 @@ export default function Dashboard() {
         <Metric title="自动回退" value={fmt(overview()?.fallbacks)} note={`${fmt(overview()?.errors)} 次失败`} tone="blue" />
       </section>
 
-      <Show when={visibleBalances().length > 0}>
-        <section class="panel provider-balance-panel">
-          <div class="panel-header">
-            <div><h2>Provider Balance</h2><p>DeepSeek 官方账户余额 · 各渠道独立展示，不跨账户或币种汇总</p></div>
-            <button class="secondary-button" disabled={balanceBusy()} onClick={refreshBalances}>
-              {balanceBusy() ? '查询中…' : '刷新余额'}
-            </button>
-          </div>
-          <div class="provider-balance-list">
-            <For each={visibleBalances()}>{(balance) => (
-              <div class="provider-balance-row">
-                <div class="provider-balance-name"><span class="provider-logo">D</span><div><strong>{balance.channel_name}</strong><small>DeepSeek 官方 API</small></div></div>
-                <Show when={balance.status === 'not_queried'}><span class="balance-state muted">点击刷新后查询</span></Show>
-                <Show when={balance.status === 'error'}><span class="balance-state error">{balance.status === 'error' ? balance.error : ''}</span></Show>
-                <Show when={balance.status === 'ok'}>{() => {
-                  if (balance.status !== 'ok') return null;
-                  return <div class="provider-balance-values">
-                    <span class={`balance-state ${balance.is_available ? 'available' : 'unavailable'}`}>{balance.is_available ? '账户可用' : '账户不可用'}</span>
-                    <For each={balance.balance_infos}>{(item) => (
-                      <div class="provider-balance-value">
-                        <small>{item.currency} 总余额</small>
-                        <strong>{balanceCurrencySymbol(item.currency)}{item.total_balance}</strong>
-                        <span>赠金 {balanceCurrencySymbol(item.currency)}{item.granted_balance} · 充值 {balanceCurrencySymbol(item.currency)}{item.topped_up_balance}</span>
-                      </div>
-                    )}</For>
-                    <small class="balance-updated">{balanceUpdatedAt(balance.fetched_at)}{balance.cached ? ' · 缓存' : ''}</small>
-                  </div>;
-                }}</Show>
-              </div>
-            )}</For>
-          </div>
-        </section>
-      </Show>
-
       <section class="dashboard-main-grid">
         <div class="panel endpoint-panel">
           <div class="panel-header">
@@ -170,6 +136,40 @@ export default function Dashboard() {
           </div>
         </div>
       </section>
+
+      <Show when={visibleBalances().length > 0}>
+        <section class="panel provider-balance-panel">
+          <div class="panel-header">
+            <div><h2>Provider Balance</h2><p>DeepSeek 官方账户余额 · 各渠道独立展示，不跨账户或币种汇总</p></div>
+            <button class="secondary-button" disabled={balanceBusy()} onClick={refreshBalances}>
+              {balanceBusy() ? '查询中…' : '刷新余额'}
+            </button>
+          </div>
+          <div class="provider-balance-list">
+            <For each={visibleBalances()}>{(balance) => (
+              <div class="provider-balance-row">
+                <div class="provider-balance-name"><span class="provider-logo">D</span><div><strong>{balance.channel_name}</strong><small>DeepSeek 官方 API</small></div></div>
+                <Show when={balance.status === 'not_queried'}><span class="balance-state muted">点击刷新后查询</span></Show>
+                <Show when={balance.status === 'error'}><span class="balance-state error">{balance.status === 'error' ? balance.error : ''}</span></Show>
+                <Show when={balance.status === 'ok'}>{() => {
+                  if (balance.status !== 'ok') return null;
+                  return <div class="provider-balance-values">
+                    <span class={`balance-state ${balance.is_available ? 'available' : 'unavailable'}`}>{balance.is_available ? '账户可用' : '账户不可用'}</span>
+                    <For each={balance.balance_infos}>{(item) => (
+                      <div class="provider-balance-value">
+                        <small>{item.currency} 总余额</small>
+                        <strong>{balanceCurrencySymbol(item.currency)}{item.total_balance}</strong>
+                        <span>赠金 {balanceCurrencySymbol(item.currency)}{item.granted_balance} · 充值 {balanceCurrencySymbol(item.currency)}{item.topped_up_balance}</span>
+                      </div>
+                    )}</For>
+                    <small class="balance-updated">{balanceUpdatedAt(balance.fetched_at)}{balance.cached ? ' · 缓存' : ''}</small>
+                  </div>;
+                }}</Show>
+              </div>
+            )}</For>
+          </div>
+        </section>
+      </Show>
 
       <section class="panel quickstart-panel">
         <div class="panel-header"><div><h2>快速开始</h2><p>复制下面的示例，替换为完整 Gateway Key 即可调用</p></div><button class="secondary-button" onClick={() => copy(curlExample(baseUrl(), activeModels()[0]?.unified_model_id), 'curl')}>{copied() === 'curl' ? '已复制' : '复制命令'}</button></div>

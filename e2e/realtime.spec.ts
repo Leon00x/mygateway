@@ -5,19 +5,19 @@
  * Skipped when the key is missing (e.g. CI without secrets).
  *
  * Flow:
- *   1. add channel with real key
+ *   1. preflight without persistence, then add channel with its model result
  *   2. channel connection test → 200
  *   3. official account balance query → exact monetary strings
- *   4. create model card + instance
+ *   4. import a discovered model
  *   5. create gateway key
  *   6. non-streaming chat via gateway → real completion + usage
  *   7. streaming chat via gateway → [DONE] + usage chunk
- *   8. Anthropic Messages non-stream and stream → converted through Chat
+ *   8. native Anthropic Messages non-stream and stream
  *   9. admin usage overview reflects the calls
  */
 
 import { test, expect } from '@playwright/test';
-import { devVar, loginViaApi, resetState, uniq } from './helpers';
+import { devVar, loginViaApi, loginViaUi, resetState, uniq } from './helpers';
 
 const providerKey = devVar('DEEPSEEK_TEST_KEY');
 
@@ -27,28 +27,44 @@ test.describe.configure({ mode: 'serial' });
 test.skip(!providerKey, 'DEEPSEEK_TEST_KEY not set in .dev.vars — skipping real integration test');
 
 const upstreamModel = 'deepseek-v4-flash';
-const channelName = uniq('DS');
-const modelId = uniq('ds4');
-const alias = uniq('ds4-alias-');
+const channelName = 'DeepSeek';
+const modelId = upstreamModel;
+let alias = '';
 let gwKey = '';
 
 test.beforeAll(async ({ request }) => {
   await resetState(request);
 });
 
-test('realtime: add channel with real key', async ({ request }) => {
-  await loginViaApi(request);
-  const resp = await request.post('/admin/api/channels', {
-    data: {
-      name: channelName,
-      provider_type: 'openai_compatible',
-      base_url: 'https://api.deepseek.com/v1',
-      api_key: providerKey,
-    },
-  });
-  expect(resp.ok()).toBeTruthy();
-  const ch = await resp.json();
+test('realtime: UI preflight then save and import', async ({ page }) => {
+  await loginViaUi(page);
+  await page.locator('.sidebar').getByRole('link', { name: /渠道/ }).click();
+  await page.getByRole('button', { name: '+ 添加供应商' }).click();
+  await page.getByRole('button', { name: /DeepSeek/ }).first().click();
+  await page.getByPlaceholder('sk-...').fill(providerKey!);
+  await expect(page.getByRole('button', { name: '保存', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: '检测连接与模型' }).click();
+  await expect(page.getByText(/检测成功 · 2 个模型/)).toBeVisible({ timeout: 15_000 });
+  const preflightList = page.locator('.preflight-model-list');
+  await expect(preflightList.getByText('deepseek-v4-flash', { exact: true })).toBeVisible();
+  await expect(preflightList.getByText('deepseek-v4-pro', { exact: true })).toBeVisible();
+  await expect(page.getByText('已选 2 / 2')).toBeVisible();
+  await preflightList.locator('label', { hasText: 'deepseek-v4-pro' }).locator('input[type="checkbox"]').uncheck();
+  await expect(page.getByText('已选 1 / 2')).toBeVisible();
+  // A successful preflight still must not persist a draft channel.
+  expect(await page.request.get('/admin/api/channels').then((response) => response.json())).toHaveLength(0);
+  await page.getByRole('button', { name: '保存并导入 1 个模型' }).click();
+  const detail = page.locator('.channel-detail-modal');
+  await expect(detail.getByRole('heading', { name: channelName })).toBeVisible({ timeout: 15_000 });
+  await expect(detail.locator('.catalog-row', { hasText: upstreamModel }).getByText('已导入')).toBeVisible({ timeout: 15_000 });
+  await expect(detail.locator('.catalog-row', { hasText: 'deepseek-v4-pro' }).getByText('已导入')).toHaveCount(0);
+
+  const channels = await page.request.get('/admin/api/channels').then((response) => response.json());
+  const ch = channels.find((channel: any) => channel.name === channelName);
   expect(ch.has_api_key).toBe(true);
+  expect(ch.protocols.map((protocol: any) => protocol.protocol)).toEqual([
+    'anthropic_messages', 'openai_chat',
+  ]);
 });
 
 test('realtime: channel connection test returns 200', async ({ request }) => {
@@ -83,27 +99,25 @@ test('realtime: official DeepSeek balance returns exact monetary strings', async
   }
 });
 
-test('realtime: create model + instance', async ({ request }) => {
+test('realtime: preflight inventory was imported without rediscovery', async ({ request }) => {
   await loginViaApi(request);
   const channels = await request.get('/admin/api/channels').then((r) => r.json());
   const ch = channels.find((c: any) => c.name === channelName);
+  // The preflight result is reused on save, so opening inventory does not make
+  // a second provider request.
+  const discovery = await request.get(`/admin/api/channels/${ch.id}/models`);
+  expect(discovery.ok()).toBeTruthy();
+  const discovered = await discovery.json();
+  expect(discovered.models.map((model: any) => model.provider_model_id)).toEqual(
+    expect.arrayContaining(['deepseek-v4-flash', 'deepseek-v4-pro']),
+  );
 
-  const m = await request.post('/admin/api/models', {
-    data: { unified_model_id: modelId, display_name: 'E2E Real' },
-  });
-  expect(m.ok()).toBeTruthy();
-  const card = await m.json();
-
-  const inst = await request.post(`/admin/api/models/${card.id}/instances`, {
-    data: {
-      channel_id: ch.id,
-      channel_model_id: upstreamModel,
-      public_model_alias: alias,
-      sort_order: 0,
-      supports_stream_usage: true,
-    },
-  });
-  expect(inst.ok()).toBeTruthy();
+  const models = await request.get('/admin/api/models').then((response) => response.json());
+  const imported = models.find((model: any) => model.unified_model_id === modelId);
+  expect(imported?.instances).toHaveLength(1);
+  expect(models.some((model: any) => model.unified_model_id === 'deepseek-v4-pro')).toBe(false);
+  alias = imported.instances[0].public_model_alias;
+  expect(alias).toContain('deepseek-v4-flash');
 });
 
 test('realtime: create gateway key', async ({ request }) => {
@@ -162,7 +176,7 @@ test('realtime: streaming chat → [DONE] + usage chunk', async ({ request }) =>
   expect(usageChunk, 'final usage chunk should be present').toBeTruthy();
 });
 
-test('realtime: Anthropic Messages → Chat conversion', async ({ request }) => {
+test('realtime: native DeepSeek Anthropic Messages', async ({ request }) => {
   const resp = await request.post('/v1/messages', {
     headers: { 'x-api-key': gwKey, 'anthropic-version': '2023-06-01' },
     data: {
@@ -182,7 +196,7 @@ test('realtime: Anthropic Messages → Chat conversion', async ({ request }) => 
   expect(body.usage.output_tokens).toBeGreaterThan(0);
 });
 
-test('realtime: streaming Messages conversion emits Anthropic events', async ({ request }) => {
+test('realtime: native DeepSeek Messages stream emits Anthropic events', async ({ request }) => {
   const resp = await request.post('/v1/messages', {
     headers: { 'x-api-key': gwKey, 'anthropic-version': '2023-06-01' },
     data: {

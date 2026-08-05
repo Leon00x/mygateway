@@ -21,6 +21,10 @@ import {
   ChannelModelRow,
 } from '../db/models.ts';
 import { invalidateModelRouteCache } from '../gateway/access-resolver.ts';
+import { getChannel } from '../db/channels.ts';
+import { getPresetById } from '../shared/provider-presets.ts';
+import { markProviderModelImported } from '../db/provider-models.ts';
+import { normalizeModelIdentifier, stableChannelModelAlias } from './model-discovery.ts';
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -52,27 +56,73 @@ export async function handleModelsCollection(
       const body = (await request.json()) as {
         unified_model_id?: string;
         display_name?: string;
+        channel_id?: string;
+        channel_model_id?: string;
       };
 
       if (!body.unified_model_id || !body.display_name) {
         return gatewayErrorResponse('invalid_request', 'unified_model_id and display_name are required', requestId);
       }
 
+      const unifiedModelId = normalizeModelIdentifier(body.unified_model_id);
+      if (!unifiedModelId) {
+        return gatewayErrorResponse('invalid_request', 'unified_model_id is invalid', requestId);
+      }
+      if (Boolean(body.channel_id) !== Boolean(body.channel_model_id)) {
+        return gatewayErrorResponse('invalid_request', 'channel_id and channel_model_id must be provided together', requestId);
+      }
+
+      const channel = body.channel_id ? await getChannel(env.DB, body.channel_id) : null;
+      if (body.channel_id && !channel) {
+        return gatewayErrorResponse('invalid_request', 'Channel not found', requestId);
+      }
+
       // Check identifier uniqueness
-      const existing = await resolveIdentifier(env.DB, body.unified_model_id);
+      const existing = await resolveIdentifier(env.DB, unifiedModelId);
       if (existing) {
-        return gatewayErrorResponse('invalid_request', `Identifier '${body.unified_model_id}' is already in use`, requestId);
+        return gatewayErrorResponse('invalid_request', `Identifier '${unifiedModelId}' is already in use`, requestId);
       }
 
       const id = generateId();
+      let instanceId: string | null = null;
+      try {
+        // D1 local has historically hung on batch(), so keep the short sequence
+        // explicit and compensate on failure.
+        await createModelCard(env.DB, { id, unified_model_id: unifiedModelId, display_name: body.display_name });
+        await createIdentifier(env.DB, { identifier: unifiedModelId, identifier_type: 'unified', model_card_id: id, channel_model_id: null });
 
-      // Create model card + identifier (sequential, not batch — D1 batch can hang in local dev)
-      await createModelCard(env.DB, { id, unified_model_id: body.unified_model_id, display_name: body.display_name });
-      await createIdentifier(env.DB, { identifier: body.unified_model_id, identifier_type: 'unified', model_card_id: id, channel_model_id: null });
-      invalidateModelRouteCache();
+        if (channel && body.channel_model_id) {
+          const upstreamModelId = body.channel_model_id.trim();
+          if (!upstreamModelId) throw new Error('channel_model_id is invalid');
+          const aliasBase = stableChannelModelAlias(channel, upstreamModelId);
+          let alias = aliasBase;
+          for (let suffix = 0; alias === unifiedModelId || await resolveIdentifier(env.DB, alias); suffix++) {
+            alias = `${aliasBase}-direct${suffix ? `-${suffix + 1}` : ''}`;
+          }
+          instanceId = generateId();
+          await createChannelModel(env.DB, {
+            id: instanceId, model_card_id: id, channel_id: channel.id,
+            channel_model_id: upstreamModelId, public_model_alias: alias,
+            sort_order: 0, status: 'active',
+            supports_stream_usage: getPresetById(channel.preset_id ?? '')?.supports_stream_usage ? 1 : 0,
+            input_price_micros_per_million: null, output_price_micros_per_million: null,
+            currency: null, plan_tokens_total: null, plan_tokens_remaining: null, plan_expires_at: null,
+          });
+          await createIdentifier(env.DB, {
+            identifier: alias, identifier_type: 'alias', model_card_id: id, channel_model_id: instanceId,
+          });
+          await markProviderModelImported(env.DB, channel.id, upstreamModelId, id);
+        }
 
-      const card = await getModelCard(env.DB, id);
-      return json({ ...card, instances: [] }, 201);
+        invalidateModelRouteCache();
+        const card = await getModelCard(env.DB, id);
+        return json({ ...card, instances: await listChannelModels(env.DB, id) }, 201);
+      } catch (error) {
+        await env.DB.prepare('DELETE FROM model_identifiers WHERE model_card_id = ?').bind(id).run();
+        await env.DB.prepare('DELETE FROM channel_models WHERE model_card_id = ?').bind(id).run();
+        await env.DB.prepare('DELETE FROM model_cards WHERE id = ?').bind(id).run();
+        throw error;
+      }
     } catch (e) {
       return gatewayErrorResponse('invalid_request', (e as Error).message, requestId);
     }
@@ -123,6 +173,9 @@ export async function handleModelItem(
     await env.DB.prepare('UPDATE channel_models SET deleted_at = ?, updated_at = ? WHERE model_card_id = ?')
       .bind(now, now, id)
       .run();
+    await env.DB.prepare(
+      'UPDATE channel_provider_models SET imported_model_card_id = NULL, updated_at = ? WHERE imported_model_card_id = ?',
+    ).bind(now, id).run();
     invalidateModelRouteCache();
     return new Response(null, { status: 204 });
   }

@@ -12,17 +12,20 @@ import {
   updateChannel,
   softDeleteChannel,
   softDeleteInstancesByChannel,
-  isChannelReferenced,
+  getChannelDeleteImpact,
+  softDeleteOrphanModelCards,
   toPublicChannel,
   ChannelRow,
   replaceChannelProtocols,
-  type ChannelProtocolInput,
 } from '../db/channels.ts';
 import { encryptProviderKey } from '../crypto/provider-key.ts';
 import { invalidateModelRouteCache } from '../gateway/access-resolver.ts';
 import { channelCircuitBreaker } from '../gateway/passive-circuit-breaker.ts';
-import { isGatewayProtocol, type GatewayProtocol } from '../gateway/protocols.ts';
+import { isGatewayProtocol, type ChannelProtocol, type GatewayProtocol } from '../gateway/protocols.ts';
 import { invalidateProviderBalanceCache } from './provider-balances.ts';
+import { getPresetById, providerShortCode } from '../shared/provider-presets.ts';
+import { discoverProviderModels, persistDiscoveredProviderModels } from './model-discovery.ts';
+import type { DiscoveredProviderModel } from '../db/provider-models.ts';
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -49,7 +52,7 @@ function normalizeBaseUrl(url: string): string {
   return parsed.href.replace(/\/+$/, '');
 }
 
-function normalizeProtocols(input: unknown, fallbackBaseUrl: string): ChannelProtocolInput[] {
+function normalizeProtocols(input: unknown, fallbackBaseUrl: string): ChannelProtocol[] {
   const source = input === undefined
     ? [{ protocol: 'openai_chat', base_url: fallbackBaseUrl, auth_scheme: 'bearer' }]
     : input;
@@ -75,6 +78,101 @@ function normalizeProtocols(input: unknown, fallbackBaseUrl: string): ChannelPro
   });
 }
 
+interface ChannelInput {
+  name?: string;
+  provider_type?: string;
+  base_url?: string;
+  api_key?: string;
+  notes?: string;
+  protocols?: unknown;
+  preset_id?: string;
+  detected_models?: unknown;
+}
+
+function resolveChannelInput(body: ChannelInput) {
+  const presetId = body.preset_id?.trim() || null;
+  const preset = presetId ? getPresetById(presetId) : undefined;
+  if (presetId && !preset) throw new Error('Unknown provider preset');
+  if (!body.api_key) throw new Error('api_key is required');
+  const name = body.name?.trim() || preset?.name || '';
+  const providerType = preset?.provider_type ?? body.provider_type;
+  const requestedBaseUrl = preset?.base_url ?? body.base_url;
+  if (!name || !providerType || !requestedBaseUrl) {
+    throw new Error('name, provider_type, and base_url are required');
+  }
+  if (providerType !== 'openai' && providerType !== 'openai_compatible') {
+    throw new Error('provider_type must be openai or openai_compatible');
+  }
+  const baseUrl = normalizeBaseUrl(requestedBaseUrl);
+  return {
+    presetId,
+    name,
+    providerType,
+    baseUrl,
+    protocols: normalizeProtocols(preset?.protocols ?? body.protocols, baseUrl),
+  };
+}
+
+function normalizeDetectedModels(input: unknown): DiscoveredProviderModel[] {
+  if (input === undefined) return [];
+  if (!Array.isArray(input) || input.length > 500) throw new Error('detected_models must contain at most 500 items');
+  const found = new Map<string, DiscoveredProviderModel>();
+  for (const raw of input) {
+    if (!raw || typeof raw !== 'object') throw new Error('Invalid detected model');
+    const item = raw as Record<string, unknown>;
+    const id = typeof item.provider_model_id === 'string' ? item.provider_model_id.trim() : '';
+    if (!id || id.length > 200) throw new Error('Invalid detected model ID');
+    found.set(id, {
+      id,
+      displayName: typeof item.display_name === 'string' && item.display_name.trim()
+        ? item.display_name.trim() : id,
+      capabilities: item.capabilities,
+    });
+  }
+  return [...found.values()];
+}
+
+/** POST /admin/api/channels/preflight — no D1 writes. */
+export async function handleChannelPreflight(
+  request: Request,
+  requestId: string,
+): Promise<Response> {
+  if (request.method !== 'POST') return gatewayErrorResponse('invalid_request', 'Method not allowed', requestId);
+  let body: ChannelInput;
+  let resolved: ReturnType<typeof resolveChannelInput>;
+  try {
+    body = await request.json() as ChannelInput;
+    resolved = resolveChannelInput(body);
+  } catch (error) {
+    return gatewayErrorResponse('invalid_request', (error as Error).message, requestId);
+  }
+  try {
+    const models = await discoverProviderModels({
+      preset_id: resolved.presetId,
+      protocols: resolved.protocols,
+    }, body.api_key!);
+    return json({
+      ok: true,
+      resolved: {
+        name: resolved.name,
+        provider_type: resolved.providerType,
+        base_url: resolved.baseUrl,
+        preset_id: resolved.presetId,
+        protocols: resolved.protocols,
+      },
+      models: models.map((model) => ({
+        provider_model_id: model.id,
+        display_name: model.displayName,
+        capabilities: model.capabilities,
+      })),
+    });
+  } catch (error) {
+    const message = error instanceof Error && error.name === 'TimeoutError'
+      ? 'Provider model discovery timed out' : error instanceof Error ? error.message : 'Model discovery failed';
+    return json({ ok: false, error: { message } }, 502);
+  }
+}
+
 /**
  * GET/POST /admin/api/channels
  */
@@ -90,34 +188,13 @@ export async function handleChannelsCollection(
 
   if (request.method === 'POST') {
     try {
-      const body = (await request.json()) as {
-        name?: string;
-        provider_type?: string;
-        base_url?: string;
-        api_key?: string;
-        notes?: string;
-        protocols?: unknown;
-      };
-
-      if (!body.name || !body.provider_type || !body.base_url || !body.api_key) {
-        return gatewayErrorResponse('invalid_request', 'name, provider_type, base_url, and api_key are required', requestId);
-      }
-
-      if (!['openai', 'openai_compatible'].includes(body.provider_type)) {
-        return gatewayErrorResponse('invalid_request', 'provider_type must be openai or openai_compatible', requestId);
-      }
-
-      let baseUrl: string;
-      try {
-        baseUrl = normalizeBaseUrl(body.base_url);
-      } catch (e) {
-        return gatewayErrorResponse('invalid_request', (e as Error).message, requestId);
-      }
-      const protocols = normalizeProtocols(body.protocols, baseUrl);
+      const body = await request.json() as ChannelInput;
+      const { presetId, name, providerType, baseUrl, protocols } = resolveChannelInput(body);
+      const detectedModels = normalizeDetectedModels(body.detected_models);
 
       const id = generateId();
       const { ciphertext, iv } = await encryptProviderKey(
-        body.api_key,
+        body.api_key!,
         env.MASTER_KEY,
         id,
         1,
@@ -125,16 +202,21 @@ export async function handleChannelsCollection(
 
       await createChannel(env.DB, {
         id,
-        name: body.name,
-        provider_type: body.provider_type as 'openai' | 'openai_compatible',
+        name,
+        provider_type: providerType as 'openai' | 'openai_compatible',
         base_url: baseUrl,
         api_key_ciphertext: ciphertext,
         api_key_iv: iv,
         api_key_version: 1,
         status: 'active',
         notes: body.notes ?? null,
+        preset_id: presetId,
+        short_code: providerShortCode(presetId, name),
       });
       await replaceChannelProtocols(env.DB, id, protocols);
+      if (body.detected_models !== undefined) {
+        await persistDiscoveredProviderModels(env.DB, id, detectedModels);
+      }
       invalidateModelRouteCache();
       channelCircuitBreaker.reset(id);
 
@@ -176,6 +258,13 @@ export async function handleChannelItem(
 
       const channel = await getChannel(env.DB, id);
       if (!channel) return gatewayErrorResponse('model_not_found', 'Channel not found', requestId);
+      if (channel.preset_id && (body.base_url !== undefined || body.protocols !== undefined)) {
+        return gatewayErrorResponse(
+          'invalid_request',
+          'Preset protocol endpoints are managed by the server; create a custom channel to change them',
+          requestId,
+        );
+      }
 
       const updates: Parameters<typeof updateChannel>[2] = {};
 
@@ -224,8 +313,12 @@ export async function handleChannelItem(
   }
 
   if (request.method === 'DELETE') {
-    // Cascade: soft-delete all model instances referencing this channel
+    const impact = await getChannelDeleteImpact(env.DB, id);
     await softDeleteInstancesByChannel(env.DB, id);
+    await softDeleteOrphanModelCards(
+      env.DB,
+      impact.filter((item) => item.will_delete_model).map((item) => item.model_card_id),
+    );
     await softDeleteChannel(env.DB, id);
     invalidateModelRouteCache();
     channelCircuitBreaker.reset(id);
@@ -234,6 +327,26 @@ export async function handleChannelItem(
   }
 
   return gatewayErrorResponse('invalid_request', 'Method not allowed', requestId);
+}
+
+/** GET /admin/api/channels/:id/delete-impact */
+export async function handleChannelDeleteImpact(
+  request: Request,
+  id: string,
+  env: Env,
+): Promise<Response> {
+  if (request.method !== 'GET') return json({ error: { message: 'Method not allowed' } }, 405);
+  const channel = await getChannel(env.DB, id);
+  if (!channel) return json({ error: { message: 'Channel not found' } }, 404);
+  const models = await getChannelDeleteImpact(env.DB, id);
+  return json({
+    channel_id: id,
+    channel_name: channel.name,
+    instance_count: models.reduce((total, item) => total + item.channel_instances, 0),
+    affected_model_count: models.length,
+    orphan_model_count: models.filter((item) => item.will_delete_model).length,
+    models,
+  });
 }
 
 /**
@@ -263,8 +376,10 @@ export async function handleChannelTest(
     return json({ ok: false, error: 'Failed to decrypt provider key' }, 500);
   }
 
-  // Test the provider's model listing with the first configured protocol auth.
-  const protocol = channel.protocols[0];
+  // Model listing is OpenAI-compatible for the presets that expose multiple
+  // inference protocols (for example DeepSeek Chat + Anthropic Messages).
+  const protocol = channel.protocols.find((item) => item.protocol === 'openai_chat')
+    ?? channel.protocols[0];
   const testUrl = `${protocol?.base_url ?? channel.base_url}/models`;
   const start = Date.now();
 

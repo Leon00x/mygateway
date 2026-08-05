@@ -13,7 +13,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { loginViaUi, loginViaApi, resetState, uniq } from './helpers';
+import { ADMIN_USERNAME, loginViaUi, loginViaApi, resetState, uniq } from './helpers';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -21,6 +21,8 @@ let gwKey = '';
 const channelName = 'DeepSeek'; // preset name, fixed by the modal
 const channelAlias = uniq('ds-');
 const modelId = 'e2e-' + Date.now().toString(36);
+const catalogModelId = 'catalog-' + Date.now().toString(36);
+const directModelId = 'direct-' + Date.now().toString(36);
 
 test.beforeAll(async ({ request }) => {
   await resetState(request);
@@ -66,11 +68,57 @@ test('4. add channel via preset modal', async ({ page }) => {
   await page.getByRole('button', { name: '+ 添加供应商' }).click();
   await page.getByRole('button', { name: /DeepSeek/ }).first().click();
   await page.getByPlaceholder('sk-...').fill('sk-e2e-dummy-123456');
-  await page.getByRole('button', { name: '确认添加' }).click();
+  await expect(page.getByRole('button', { name: '保存', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: '检测连接与模型' }).click();
+  await expect(page.getByText('检测未通过')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('button', { name: '保存并导入 0 个模型' })).toBeDisabled();
+  await page.getByRole('button', { name: '仍然保存' }).click();
+
+  // A failed preflight still offers an explicit save-only fallback and the
+  // catalog remains available for manual maintenance.
+  await expect(page.locator('.channel-detail-modal').getByRole('heading', { name: 'DeepSeek' })).toBeVisible({ timeout: 15_000 });
+  const completionStatus = page.getByRole('status');
+  await expect(completionStatus.getByText('渠道添加完成')).toBeVisible();
+  expect(await completionStatus.evaluate((element) => getComputedStyle(element).animationName)).toContain('creation-success-enter');
+  await expect(page.locator('.channel-detail-modal').getByText('查询失败')).toBeVisible();
+
+  // Manual fallback can still populate inventory and import a ready-to-call
+  // unified model without visiting the Models page.
+  await page.getByPlaceholder('手工增加上游模型 ID').fill('deepseek-catalog-e2e');
+  await page.getByRole('button', { name: '添加', exact: true }).click();
+  const catalogRow = page.locator('.catalog-row', { hasText: 'deepseek-catalog-e2e' });
+  await catalogRow.locator('input[type="checkbox"]').check();
+  await catalogRow.getByLabel('统一模型 ID').fill(catalogModelId);
+  await page.getByRole('button', { name: '导入为网关模型' }).click();
+  await expect(catalogRow.getByText('已导入')).toBeVisible();
+
+  const importedModels = await page.request.get('/admin/api/models').then((response) => response.json());
+  const imported = importedModels.find((model: any) => model.unified_model_id === catalogModelId);
+  expect(imported?.instances).toHaveLength(1);
+  expect(imported.instances[0].channel_model_id).toBe('deepseek-catalog-e2e');
+  const channelOverview = await page.request.get('/admin/api/channels/overview').then((response) => response.json());
+  const createdChannel = channelOverview.channels.find((channel: any) => channel.name === channelName);
+  expect(createdChannel.preset_id).toBe('deepseek');
+  expect(createdChannel.protocols.map((protocol: any) => protocol.protocol)).toEqual([
+    'anthropic_messages', 'openai_chat',
+  ]);
+  expect(channelOverview.summaries.find((summary: any) => summary.channel_id === createdChannel.id)?.available_count).toBe(1);
+  await page.getByRole('button', { name: '关闭', exact: true }).click();
 
   // List should show the channel (created from the DeepSeek preset)
   await expect(page.getByText(channelName).first()).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByRole('button', { name: '查询余额' })).toBeVisible();
+  const channelCard = page.locator('.channel-card', { hasText: channelName });
+  await expect(channelCard.getByText('账户余额')).toBeVisible();
+  await expect(channelCard.getByText('查询失败')).toBeVisible();
+  await expect(channelCard.getByRole('button', { name: '编辑' })).toBeVisible();
+  await channelCard.getByRole('button', { name: '编辑' }).click();
+  await page.locator('.channel-detail-modal').getByRole('button', { name: '修改连接配置' }).click();
+  const editModal = page.locator('.modal-card', { hasText: '连接配置' });
+  await expect(editModal.getByText('Chat', { exact: true })).toBeVisible();
+  await expect(editModal.getByText('Messages', { exact: true })).toBeVisible();
+  await expect(editModal.getByText('https://api.deepseek.com/v1', { exact: true })).toBeVisible();
+  await expect(editModal.getByText('https://api.deepseek.com/anthropic', { exact: true })).toBeVisible();
+  await editModal.getByRole('button', { name: '×' }).click();
 });
 
 test('5. create model card + add instance via UI', async ({ page, request }) => {
@@ -96,13 +144,13 @@ test('5. create model card + add instance via UI', async ({ page, request }) => 
   expect(ch, `channel '${channelName}' from test 4 should exist`).toBeTruthy();
 
   // Expand the card and add an instance through the UI
-  const cardRow = page.locator('div', { hasText: modelId }).first();
+  const cardRow = page.locator('.model-card', { hasText: modelId });
   await cardRow.getByRole('button', { name: '实例' }).click();
   await page.getByRole('button', { name: '+ 添加实例' }).click();
 
   // Select the channel in the dropdown
   await page.locator('form select').selectOption(ch.id);
-  await page.getByPlaceholder('上游模型 ID (如 deepseek-chat)').fill('deepseek-chat');
+  await page.getByPlaceholder('选择已发现模型或直接输入上游模型 ID').fill('deepseek-chat');
   await page.getByPlaceholder('公开别名 (如 ds-deepseek-chat)').fill(channelAlias);
   await page.getByRole('button', { name: '添加实例', exact: true }).click();
 
@@ -116,6 +164,20 @@ test('5. create model card + add instance via UI', async ({ page, request }) => 
   expect(created).toBeTruthy();
   expect(created.instances.length).toBe(1);
   expect(created.instances[0].public_model_alias).toBe(channelAlias);
+
+  // The create form can also bind a channel model in one operation.
+  await page.getByRole('button', { name: '+ 创建模型' }).click();
+  await page.getByPlaceholder('统一模型 ID (如 deepseek-chat)').fill(directModelId);
+  await page.getByPlaceholder('显示名称 (如 DeepSeek Chat)').fill('Direct E2E Model');
+  await page.locator('.model-bind-fields select').selectOption(ch.id);
+  await page.getByPlaceholder('选择已发现模型或直接输入').fill('deepseek-direct-e2e');
+  await page.getByRole('button', { name: '创建', exact: true }).click();
+  await expect(page.getByText(directModelId, { exact: true })).toBeVisible();
+
+  const modelsAfterDirectCreate = await request.get('/admin/api/models').then((r) => r.json());
+  const direct = modelsAfterDirectCreate.find((m: any) => m.unified_model_id === directModelId);
+  expect(direct?.instances).toHaveLength(1);
+  expect(direct.instances[0].channel_model_id).toBe('deepseek-direct-e2e');
 });
 
 test('6. create gateway key → plaintext shown once', async ({ page }) => {
@@ -191,9 +253,59 @@ test('9. dashboard shows channel and model', async ({ page }) => {
   await expect(page.getByText('点击刷新后查询')).toBeVisible();
 });
 
-test('10. logout returns to login', async ({ page }) => {
+test('10. delete channel reports impact and removes orphan models', async ({ page }) => {
   await loginViaUi(page);
-  await page.getByRole('button', { name: '退出登录' }).click();
+  const backupResponse = await page.request.post('/admin/api/channels', {
+    data: {
+      name: 'Backup E2E',
+      provider_type: 'openai_compatible',
+      base_url: 'https://example.com/v1',
+      api_key: 'sk-e2e-backup-dummy',
+      protocols: [{ protocol: 'openai_chat', base_url: 'https://example.com/v1', auth_scheme: 'bearer' }],
+    },
+  });
+  expect(backupResponse.ok()).toBeTruthy();
+  const backupChannel = await backupResponse.json();
+  const modelsBeforeDelete = await page.request.get('/admin/api/models').then((response) => response.json());
+  const retainedModel = modelsBeforeDelete.find((model: any) => model.unified_model_id === modelId);
+  const backupInstance = await page.request.post(`/admin/api/models/${retainedModel.id}/instances`, {
+    data: {
+      channel_id: backupChannel.id,
+      channel_model_id: 'backup-deepseek-chat',
+      public_model_alias: uniq('backup-alias'),
+    },
+  });
+  expect(backupInstance.ok()).toBeTruthy();
+
+  await page.locator('.sidebar').getByRole('link', { name: /渠道/ }).click();
+  const channelCard = page.locator('.channel-card', { hasText: channelName });
+  await channelCard.locator('summary').click();
+  const dialogMessagePromise = new Promise<string>((resolve) => {
+    page.once('dialog', async (dialog) => {
+      resolve(dialog.message());
+      await dialog.accept();
+    });
+  });
+  await channelCard.getByRole('button', { name: '删除渠道' }).click();
+  const dialogMessage = await dialogMessagePromise;
+  expect(dialogMessage).toContain('关联 3 个实例');
+  expect(dialogMessage).toContain('2 个模型将失去最后渠道并一并删除');
+  expect(dialogMessage).toContain('其他仍有渠道的模型只移除当前实例');
+  await expect(channelCard).toHaveCount(0);
+
+  const remainingModels = await page.request.get('/admin/api/models').then((response) => response.json());
+  expect(remainingModels.map((model: any) => model.unified_model_id)).toContain(modelId);
+  expect(remainingModels.map((model: any) => model.unified_model_id)).not.toEqual(
+    expect.arrayContaining([catalogModelId, directModelId]),
+  );
+  expect(remainingModels.find((model: any) => model.unified_model_id === modelId)?.instances).toHaveLength(1);
+});
+
+test('11. logout returns to login', async ({ page }) => {
+  await loginViaUi(page);
+  await page.getByRole('button', { name: /管理员菜单/ }).click();
+  await expect(page.getByText(ADMIN_USERNAME, { exact: true })).toBeVisible();
+  await page.getByRole('menuitem', { name: '退出登录' }).click();
   await expect(page.getByPlaceholder('用户名')).toBeVisible({ timeout: 10_000 });
 });
 

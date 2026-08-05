@@ -1,12 +1,12 @@
 # MyGateway 更新日志
 
-本文记录已经合入并部署的用户可见变化。架构设计见
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)，后续计划见
-[docs/ROADMAP.md](docs/ROADMAP.md)。
+本文只记录已经合入并部署的用户可见变化。产品现状与 Roadmap 见
+[README](README.md)；技术细节分别见[架构](docs/ARCHITECTURE.md)、
+[详细设计](docs/DESIGN.md)、[部署](docs/DEPLOY.md)和[测试](docs/TESTING.md)。
 
 ## 2026-08-05：控制台侧边栏与暗黑模式
 
-状态：已实现，待随当前版本发布。
+状态：已合入 `main`，已部署到 Cloudflare Worker `mygatewaydemo`。
 
 - 左侧栏底部按钮改为桌面端展开/收缩控制，收起后保留图标导航并记忆用户选择。
 - 退出登录保留在管理员信息行，不再与侧边栏控制混用。
@@ -16,7 +16,7 @@
 
 ## 2026-08-04：多协议路由、供应商预制与 DeepSeek 余额
 
-状态：已实现，待部署到 Cloudflare Worker `mygatewaydemo`。
+状态：已合入 `main`，已部署到 Cloudflare Worker `mygatewaydemo`。
 
 - 对外新增 `POST /v1/responses` 和 `POST /v1/messages`，保留现有 Chat 接口。
 - 新增 `channel_protocols`，一个供应商渠道可用一份 Key 配置多个原生协议。
@@ -101,7 +101,7 @@
 
 - 41 个单元测试通过，包括 usage 时区、Token 校验、SSE fixtures、终态幂等、
   TTL/LRU、D1 batch 和被动熔断。
-- 10 个无外部依赖的 Playwright E2E 用例通过。
+- 10 个无需真实 Provider Key 的 Playwright UI E2E 用例通过。
 - TypeScript 检查、Dashboard 生产构建和 Worker dry-run 通过。
 - 生产健康页、控制台资源和网关计时响应头完成 smoke test。
 

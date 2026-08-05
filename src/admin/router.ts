@@ -22,11 +22,23 @@ import {
   updateAdminCredentials,
 } from '../db/admin-users.ts';
 import { logAuthFailed } from '../shared/log.ts';
-import { handleChannelsCollection, handleChannelItem, handleChannelTest } from './channels.ts';
+import {
+  handleChannelsCollection,
+  handleChannelPreflight,
+  handleChannelDeleteImpact,
+  handleChannelItem,
+  handleChannelTest,
+} from './channels.ts';
 import { handleChannelBalance, handleChannelBalances } from './provider-balances.ts';
 import { handleModelsCollection, handleModelItem, handleModelInstances, handleReorderInstances } from './models.ts';
 import { handleKeysCollection, handleKeyItem, handleKeyRegenerate } from './keys.ts';
 import { handleUsageOverview, handleUsageByModel, handleUsageByChannel, handleUsageClear } from './usage.ts';
+import {
+  handleChannelModelImport,
+  handleChannelModelRefresh,
+  handleChannelProviderModels,
+} from './model-discovery.ts';
+import { handleChannelOverview } from './channel-overview.ts';
 
 /** JSON response helper. */
 export function json(data: unknown, status = 200, headers?: Record<string, string>): Response {
@@ -101,6 +113,12 @@ export async function handleAdminApi(
   }
 
   // --- Channels ---
+  if (path === '/admin/api/channels/overview') {
+    return handleChannelOverview(request, env);
+  }
+  if (path === '/admin/api/channels/preflight') {
+    return handleChannelPreflight(request, requestId);
+  }
   if (path === '/admin/api/channels') {
     return handleChannelsCollection(request, env, requestId);
   }
@@ -116,6 +134,26 @@ export async function handleAdminApi(
     const parts = path.split('/');
     const id = parts[parts.length - 2];
     return handleChannelTest(request, id, env, requestId);
+  }
+  if (path.match(/^\/admin\/api\/channels\/[^/]+\/delete-impact$/)) {
+    const parts = path.split('/');
+    return handleChannelDeleteImpact(request, parts[parts.length - 2], env);
+  }
+  if (path.match(/^\/admin\/api\/channels\/[^/]+\/models\/refresh$/)) {
+    const parts = path.split('/');
+    return request.method === 'POST'
+      ? handleChannelModelRefresh(parts[parts.length - 3], env)
+      : gatewayErrorResponse('invalid_request', 'Method not allowed', requestId);
+  }
+  if (path.match(/^\/admin\/api\/channels\/[^/]+\/models\/import$/)) {
+    const parts = path.split('/');
+    return request.method === 'POST'
+      ? handleChannelModelImport(request, parts[parts.length - 3], env)
+      : gatewayErrorResponse('invalid_request', 'Method not allowed', requestId);
+  }
+  if (path.match(/^\/admin\/api\/channels\/[^/]+\/models$/)) {
+    const parts = path.split('/');
+    return handleChannelProviderModels(request, parts[parts.length - 2], env);
   }
   if (path.match(/^\/admin\/api\/channels\/[^/]+$/)) {
     const id = path.split('/').pop()!;

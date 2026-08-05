@@ -34,6 +34,17 @@ export interface ProviderPreset {
   }>;
 }
 
+export interface ProviderModelDiscovery {
+  /** Path appended to the selected protocol base URL. */
+  path: string;
+  /** Documented discovery base when it differs from inference base URL. */
+  base_url?: string;
+  /** Protocol endpoint whose authentication and base URL should be used. */
+  protocol: ProviderPresetProtocol;
+  /** Pagination convention documented by the provider. */
+  pagination: 'none' | 'anthropic_cursor' | 'page_token';
+}
+
 export const PROVIDER_PRESETS: ProviderPreset[] = [
   {
     id: 'deepseek',
@@ -41,10 +52,18 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     provider_type: 'openai_compatible',
     base_url: 'https://api.deepseek.com/v1',
     docs_url: 'https://api-docs.deepseek.com/zh-cn/',
-    description: 'DeepSeek 官方 API，OpenAI Chat 兼容接口',
-    popular_models: ['deepseek-chat', 'deepseek-reasoner'],
+    description: 'DeepSeek V4 官方 API，原生支持 Chat 与 Messages',
+    popular_models: ['deepseek-v4-flash', 'deepseek-v4-pro'],
     supports_stream_usage: true,
-    protocols: [{ protocol: 'openai_chat', base_url: 'https://api.deepseek.com/v1', auth_scheme: 'bearer' }],
+    protocols: [
+      { protocol: 'openai_chat', base_url: 'https://api.deepseek.com/v1', auth_scheme: 'bearer' },
+      {
+        protocol: 'anthropic_messages',
+        base_url: 'https://api.deepseek.com/anthropic',
+        auth_scheme: 'x_api_key',
+        api_version: '2023-06-01',
+      },
+    ],
   },
   {
     id: 'zai',
@@ -290,3 +309,43 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
 export function getPresetById(id: string): ProviderPreset | undefined {
   return PROVIDER_PRESETS.find((preset) => preset.id === id);
 }
+
+const DEFAULT_MODEL_DISCOVERY: ProviderModelDiscovery = {
+  path: '/models', protocol: 'openai_chat', pagination: 'none',
+};
+
+/**
+ * Preset discovery adapters. Most OpenAI-compatible providers document the
+ * standard GET /models shape. Anthropic documents cursor pagination.
+ * Presets without a documented exception use the standard adapter.
+ */
+const PROVIDER_MODEL_DISCOVERY: Partial<Record<string, ProviderModelDiscovery>> = {
+  anthropic: { path: '/models', protocol: 'anthropic_messages', pagination: 'anthropic_cursor' },
+  google_gemini: { path: '/models', protocol: 'openai_chat', pagination: 'page_token' },
+  huawei_cloud_cn: {
+    path: '/models', base_url: 'https://api.modelarts-maas.com/v1',
+    protocol: 'openai_chat', pagination: 'none',
+  },
+};
+
+export function providerModelDiscovery(presetId: string | null | undefined): ProviderModelDiscovery {
+  return (presetId && PROVIDER_MODEL_DISCOVERY[presetId]) || DEFAULT_MODEL_DISCOVERY;
+}
+
+const PROVIDER_SHORT_CODES: Record<string, string> = {
+  custom: 'custom', deepseek: 'ds', zai: 'zai', huawei_cloud_cn: 'hw',
+  alibaba_cloud_intl: 'ali', byteplus_modelark: 'volc', google_gemini: 'gem',
+  groq: 'groq', minimax_intl: 'mm', xai: 'xai', mistral: 'mis', openai: 'oai',
+  siliconflow: 'sf', moonshot: 'kimi', zhipu: 'glm', anthropic: 'claude',
+};
+
+export function providerShortCode(presetId: string | null | undefined, channelName = 'channel'): string {
+  const known = presetId ? PROVIDER_SHORT_CODES[presetId] : undefined;
+  if (known) return known;
+  const normalized = channelName.toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 6);
+  return normalized || 'custom';
+}
+
+export const COMMON_MODEL_TEMPLATES = [...new Set(
+  PROVIDER_PRESETS.flatMap((preset) => preset.popular_models),
+)].slice(0, 30);

@@ -195,6 +195,14 @@ function notQueriedResult(
   };
 }
 
+/** Read current isolate cache for already-loaded channels without another D1 query. */
+export function cachedProviderBalances(channels: ChannelWithProtocols[]): ProviderBalanceResult[] {
+  return channels.filter(isOfficialDeepSeekChannel).map((channel) => {
+    const cached = readCached(channel.id);
+    return cached ? successResult(channel, cached, true) : notQueriedResult(channel);
+  });
+}
+
 async function queryBalance(
   channel: ChannelWithProtocols,
   env: Env,

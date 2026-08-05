@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'vitest';
-import { getPresetById, PROVIDER_PRESETS } from '../src/shared/provider-presets.ts';
+import {
+  COMMON_MODEL_TEMPLATES,
+  getPresetById,
+  providerModelDiscovery,
+  providerShortCode,
+  PROVIDER_PRESETS,
+} from '../src/shared/provider-presets.ts';
 
 describe('provider presets', () => {
   test('use unique ids and normalized HTTPS URLs', () => {
@@ -44,7 +50,7 @@ describe('provider presets', () => {
   test('configures only documented native protocols for new presets', () => {
     const protocols = (id: string) => getPresetById(id)?.protocols.map((item) => item.protocol);
 
-    expect(protocols('deepseek')).toEqual(['openai_chat']);
+    expect(protocols('deepseek')).toEqual(['openai_chat', 'anthropic_messages']);
     expect(protocols('zai')).toEqual(['openai_chat']);
     expect(protocols('huawei_cloud_cn')).toEqual(['openai_chat', 'anthropic_messages']);
     expect(protocols('alibaba_cloud_intl')).toEqual(['openai_chat', 'anthropic_messages']);
@@ -57,6 +63,11 @@ describe('provider presets', () => {
   });
 
   test('uses the correct endpoint parents and authentication', () => {
+    expect(getPresetById('deepseek')?.protocols[1]).toMatchObject({
+      protocol: 'anthropic_messages',
+      base_url: 'https://api.deepseek.com/anthropic',
+      auth_scheme: 'x_api_key',
+    });
     expect(getPresetById('huawei_cloud_cn')?.protocols[1]).toMatchObject({
       base_url: 'https://api.modelarts-maas.com/anthropic/v1',
       auth_scheme: 'x_api_key',
@@ -85,5 +96,22 @@ describe('provider presets', () => {
       base_url: 'https://api.mistral.ai/v1',
       auth_scheme: 'bearer',
     });
+  });
+
+  test('provides bounded common templates and documented discovery exceptions', () => {
+    expect(COMMON_MODEL_TEMPLATES).toHaveLength(30);
+    expect(new Set(COMMON_MODEL_TEMPLATES).size).toBe(30);
+    expect(providerModelDiscovery('deepseek')).toEqual({
+      path: '/models', protocol: 'openai_chat', pagination: 'none',
+    });
+    expect(providerModelDiscovery('anthropic')).toEqual({
+      path: '/models', protocol: 'anthropic_messages', pagination: 'anthropic_cursor',
+    });
+    expect(providerModelDiscovery('huawei_cloud_cn')).toEqual({
+      path: '/models', base_url: 'https://api.modelarts-maas.com/v1',
+      protocol: 'openai_chat', pagination: 'none',
+    });
+    expect(providerShortCode('deepseek')).toBe('ds');
+    expect(providerShortCode(null, 'Internal Gateway')).toBe('intern');
   });
 });
