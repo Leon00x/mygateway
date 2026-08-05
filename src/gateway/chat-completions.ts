@@ -3,7 +3,7 @@
  */
 
 import { Env, parseConfig } from '../env.ts';
-import { gatewayErrorResponse } from '../http/errors.ts';
+import { gatewayError, gatewayErrorResponse } from '../http/errors.ts';
 import { buildUpstreamHeaders, gatewayResponseHeaders } from '../http/headers.ts';
 import { readLimitedBody, BodyTooLargeError } from '../http/body-limit.ts';
 import { applyServerTiming } from '../http/server-timing.ts';
@@ -12,9 +12,15 @@ import { channelCircuitBreaker, selectCircuitCandidates } from './passive-circui
 import { decryptProviderKey } from '../crypto/provider-key.ts';
 import { SseDecoder, extractNonStreamUsage, Usage } from '../streaming/sse-decoder.ts';
 import { onceAsync } from '../streaming/once-async.ts';
-import { upsertUsageMinute } from '../db/usage.ts';
-import { nowMinute } from '../shared/ids.ts';
 import { logEvent } from '../shared/log.ts';
+import { checkDailyQuota, checkRpm, keyIsExpired } from './key-quota.ts';
+import {
+  recordCachedHit,
+  recordRejectedRequest,
+  recordRequestCompletion,
+  type UsageRecordContext,
+} from './usage-recorder.ts';
+import { getSharedResponseCache, type ResponseCache } from './response-cache.ts';
 import {
   authenticateGatewayKeyHash,
   resolveGatewayAccess,
@@ -166,6 +172,19 @@ async function handleProtocolCompletion(
 
   const isStream = body.stream === true;
 
+  const key = access.key;
+  const resolvedModel = access.model?.status === 'resolved'
+    ? { model: access.model.value.unifiedModelId, modelCardId: access.model.value.modelCardId }
+    : { model: typeof model === 'string' ? model : null, modelCardId: null };
+
+  // 2a. Virtual-key expiry
+  if (keyIsExpired(key)) {
+    ctx.waitUntil(recordRejectedRequest(env, {
+      ...resolvedModel, keyId: key.id, keyName: key.name, requestId,
+    }, 'expired', elapsedMs(requestStartedAt)));
+    return timed(gatewayErrorResponse('invalid_api_key', 'API key has expired', requestId));
+  }
+
   // 2. Authentication and model routing were resolved together above.
   if (!access.model || access.model.status === 'not_found') {
     return timed(gatewayErrorResponse('model_not_found', `Model '${model}' not found`, requestId, 'model'));
@@ -180,6 +199,67 @@ async function handleProtocolCompletion(
   }
 
   const { direct, candidates, unifiedModelId, modelCardId } = access.model.value;
+
+  // 2b. Virtual-key model allowlist
+  if (key.modelAllowlist.length > 0 && !key.modelAllowlist.includes(unifiedModelId)) {
+    ctx.waitUntil(recordRejectedRequest(env, {
+      model: unifiedModelId, modelCardId, keyId: key.id, keyName: key.name, requestId,
+    }, 'not_allowed', elapsedMs(requestStartedAt)));
+    return timed(gatewayErrorResponse(
+      'model_not_allowed',
+      `Model '${unifiedModelId}' is not allowed for this API key`,
+      requestId,
+      'model',
+    ));
+  }
+
+  // 2c. Per-minute rate limit (per-isolate best effort)
+  if (!checkRpm(key.id, key.rpmLimit)) {
+    ctx.waitUntil(recordRejectedRequest(env, {
+      model: unifiedModelId, modelCardId, keyId: key.id, keyName: key.name, requestId,
+    }, 'rate_limited', elapsedMs(requestStartedAt)));
+    const respHeaders = gatewayResponseHeaders(requestId);
+    respHeaders.set('Retry-After', '60');
+    return timed(new Response(JSON.stringify(gatewayError(
+      'gateway_rate_limited',
+      'Request rate limit exceeded for this API key',
+      null,
+    )), { status: 429, headers: respHeaders }));
+  }
+
+  // 2d. Daily budget (authoritative, D1)
+  const quota = await checkDailyQuota(env.DB, key);
+  if (!quota.allowed) {
+    const isTokens = quota.reason === 'daily_tokens';
+    ctx.waitUntil(recordRejectedRequest(env, {
+      model: unifiedModelId, modelCardId, keyId: key.id, keyName: key.name, requestId,
+    }, 'budget_exceeded', elapsedMs(requestStartedAt)));
+    return timed(gatewayErrorResponse(
+      'budget_exceeded',
+      isTokens
+        ? 'Daily token budget exceeded for this API key'
+        : 'Daily request budget exceeded for this API key',
+      requestId,
+    ));
+  }
+
+  // 2e. Response cache (opt-in via RESPONSE_CACHE_TTL_MS, non-streaming only)
+  const responseCache = getSharedResponseCache(config.responseCacheMaxEntries, config.responseCacheTtlMs);
+  const cacheEnabled = responseCache.enabled && !isStream;
+  const cacheKey = cacheEnabled ? responseCache.key(unifiedModelId, bodyText ?? '') : null;
+  if (cacheKey) {
+    const hit = responseCache.get(cacheKey);
+    if (hit) {
+      ctx.waitUntil(recordCachedHit(env, {
+        modelCardId, unifiedModelId, keyId: key.id, keyName: key.name, requestId,
+      }, hit, elapsedMs(requestStartedAt)));
+      const headers = gatewayResponseHeaders(requestId);
+      headers.set('Content-Type', 'application/json');
+      headers.set('X-Gateway-Cache', 'HIT');
+      return timed(new Response(hit.body, { status: hit.status, headers }), undefined);
+    }
+  }
+
   const protocolCandidates = routeCandidatesForProtocol(candidates, requestedProtocol);
   if (protocolCandidates.length === 0) {
     return timed(gatewayErrorResponse(
@@ -434,6 +514,22 @@ async function handleProtocolCompletion(
       circuitSkippedCount,
     };
 
+    const usageCtx: UsageRecordContext = {
+      modelCardId,
+      unifiedModelId,
+      channelId: candidate.channel_id,
+      channelName: candidate.channel_name,
+      inputPriceMicrosPerMillion: candidate.input_price_micros_per_million,
+      outputPriceMicrosPerMillion: candidate.output_price_micros_per_million,
+      attemptCount: attempt + 1,
+      fallbackOccurred,
+      stream: isStream,
+      cached: false,
+      keyId: key.id,
+      keyName: key.name,
+      requestId,
+    };
+
     // 4a. Non-streaming
     if (!isStream) {
       return applyServerTiming(await handleNonStreamResponse(
@@ -441,15 +537,11 @@ async function handleProtocolCompletion(
         requestId,
         env,
         ctx,
-        config,
-        modelCardId,
-        unifiedModelId,
-        candidate,
-        attempt + 1,
-        fallbackOccurred,
+        usageCtx,
         requestPerformance,
         requestedProtocol,
         candidate.upstreamProtocol,
+        cacheKey ? { enabled: cacheEnabled, cacheKey, cache: responseCache } : null,
       ), requestPerformance);
     }
 
@@ -460,12 +552,7 @@ async function handleProtocolCompletion(
       abortController,
       env,
       ctx,
-      config,
-      modelCardId,
-      unifiedModelId,
-      candidate,
-      attempt + 1,
-      fallbackOccurred,
+      usageCtx,
       requestPerformance,
       requestedProtocol,
       candidate.upstreamProtocol,
@@ -486,22 +573,19 @@ async function handleProtocolCompletion(
 }
 
 /**
- * Handle non-streaming response: tee body, parse usage async via ctx.waitUntil.
+ * Handle non-streaming response: parse usage async via ctx.waitUntil, and
+ * optionally store the full body in the response cache.
  */
 async function handleNonStreamResponse(
   upstream: Response,
   requestId: string,
   env: Env,
   ctx: ExecutionContext,
-  config: ReturnType<typeof parseConfig>,
-  modelCardId: string,
-  unifiedModelId: string,
-  candidate: { channel_id: string; channel_name: string },
-  attemptCount: number,
-  fallbackOccurred: boolean,
+  usageCtx: UsageRecordContext,
   requestPerformance: RequestPerformance,
   requestedProtocol: GatewayProtocol,
   upstreamProtocol: GatewayProtocol,
+  cache: { enabled: boolean; cacheKey: string; cache: ResponseCache } | null,
 ): Promise<Response> {
   if (requestedProtocol !== upstreamProtocol) {
     let raw: Record<string, unknown>;
@@ -519,13 +603,35 @@ async function handleNonStreamResponse(
       return gatewayErrorResponse('unsupported_protocol_feature', message, requestId, feature);
     }
     const usage = extractNonStreamUsage(raw);
-    ctx.waitUntil(writeUsage(
-      env, modelCardId, unifiedModelId, candidate, attemptCount,
-      fallbackOccurred, 'success', usage,
+    ctx.waitUntil(recordRequestCompletion(
+      env, usageCtx, 'success', usage, elapsedMs(requestPerformance.requestStartedAt),
     ));
     const headers = gatewayResponseHeaders(requestId);
     headers.set('Content-Type', 'application/json');
+    if (cache?.enabled) headers.set('X-Gateway-Cache', 'MISS');
     return new Response(JSON.stringify(converted), { status: upstream.status, headers });
+  }
+
+  // Cache path: read the full body so it can be stored and reused.
+  if (cache?.enabled) {
+    const text = await upstream.text();
+    let usage: Usage | null = null;
+    try {
+      usage = extractNonStreamUsage(JSON.parse(text) as Record<string, unknown>);
+    } catch { /* usage stays unknown */ }
+    cache.cache.set(cache.cacheKey, {
+      body: text,
+      status: upstream.status,
+      inputTokens: usage?.inputTokens ?? 0,
+      outputTokens: usage?.outputTokens ?? 0,
+    });
+    const respHeaders = gatewayResponseHeaders(requestId);
+    respHeaders.set('Content-Type', 'application/json');
+    respHeaders.set('X-Gateway-Cache', 'MISS');
+    ctx.waitUntil(recordRequestCompletion(
+      env, usageCtx, 'success', usage, elapsedMs(requestPerformance.requestStartedAt),
+    ));
+    return new Response(text, { status: upstream.status, headers: respHeaders });
   }
 
   // Clone the body so we can parse usage while forwarding
@@ -548,7 +654,9 @@ async function handleNonStreamResponse(
     }
 
     try {
-      await writeUsage(env, modelCardId, unifiedModelId, candidate, attemptCount, fallbackOccurred, 'success', usage);
+      await recordRequestCompletion(
+        env, usageCtx, 'success', usage, elapsedMs(requestPerformance.requestStartedAt),
+      );
     } catch {
       logEvent({
         event: 'usage_write_failed',
@@ -563,8 +671,8 @@ async function handleNonStreamResponse(
         stream: false,
         outcome,
         total_ms: elapsedMs(requestPerformance.requestStartedAt),
-        attempt_count: attemptCount,
-        fallback_occurred: fallbackOccurred,
+        attempt_count: usageCtx.attemptCount,
+        fallback_occurred: usageCtx.fallbackOccurred,
         cache_status: requestPerformance.access.cacheStatus,
         d1_ms: requestPerformance.access.d1Ms,
         upstream_ttfb_ms: requestPerformance.upstreamTtfbMs,
@@ -590,12 +698,7 @@ function handleStreamResponse(
   abortController: AbortController,
   env: Env,
   ctx: ExecutionContext,
-  config: ReturnType<typeof parseConfig>,
-  modelCardId: string,
-  unifiedModelId: string,
-  candidate: { channel_id: string; channel_name: string; supports_stream_usage: 0 | 1 },
-  attemptCount: number,
-  fallbackOccurred: boolean,
+  usageCtx: UsageRecordContext,
   requestPerformance: RequestPerformance,
   requestedProtocol: GatewayProtocol,
   upstreamProtocol: GatewayProtocol,
@@ -604,13 +707,15 @@ function handleStreamResponse(
   const reader = upstream.body!.getReader();
   const transformer = requestedProtocol === upstreamProtocol
     ? null
-    : new ProtocolSseTransformer(upstreamProtocol, requestedProtocol, unifiedModelId);
+    : new ProtocolSseTransformer(upstreamProtocol, requestedProtocol, usageCtx.unifiedModelId);
 
   const finalize = onceAsync(async (outcome: 'success' | 'error' | 'cancelled') => {
     decoder.flush();
     const usage = decoder.parseError ? null : decoder.usage;
     try {
-      await writeUsage(env, modelCardId, unifiedModelId, candidate, attemptCount, fallbackOccurred, outcome, usage);
+      await recordRequestCompletion(
+        env, usageCtx, outcome, usage, elapsedMs(requestPerformance.requestStartedAt),
+      );
     } catch {
       logEvent({
         event: 'usage_write_failed',
@@ -625,8 +730,8 @@ function handleStreamResponse(
         stream: true,
         outcome,
         total_ms: elapsedMs(requestPerformance.requestStartedAt),
-        attempt_count: attemptCount,
-        fallback_occurred: fallbackOccurred,
+        attempt_count: usageCtx.attemptCount,
+        fallback_occurred: usageCtx.fallbackOccurred,
         cache_status: requestPerformance.access.cacheStatus,
         d1_ms: requestPerformance.access.d1Ms,
         upstream_ttfb_ms: requestPerformance.upstreamTtfbMs,
@@ -685,38 +790,5 @@ function handleStreamResponse(
   return new Response(clientStream, {
     status: upstream.status,
     headers: respHeaders,
-  });
-}
-
-/**
- * Write usage to D1.
- */
-async function writeUsage(
-  env: Env,
-  modelCardId: string,
-  unifiedModelId: string,
-  candidate: { channel_id: string; channel_name: string },
-  attemptCount: number,
-  fallbackOccurred: boolean,
-  outcome: 'success' | 'error' | 'cancelled',
-  usage: Usage | null,
-): Promise<void> {
-  const minute = nowMinute();
-
-  await upsertUsageMinute(env.DB, {
-    timestamp_minute: minute,
-    model_card_id: modelCardId,
-    channel_id: candidate.channel_id,
-    unified_model_id_snapshot: unifiedModelId,
-    channel_name_snapshot: candidate.channel_name,
-    request_count: 1,
-    success_count: outcome === 'success' ? 1 : 0,
-    error_count: outcome === 'error' ? 1 : 0,
-    cancelled_count: outcome === 'cancelled' ? 1 : 0,
-    fallback_count: fallbackOccurred ? 1 : 0,
-    attempt_count_total: attemptCount,
-    input_tokens: usage?.inputTokens ?? 0,
-    output_tokens: usage?.outputTokens ?? 0,
-    usage_unknown_count: usage === null ? 1 : 0,
   });
 }

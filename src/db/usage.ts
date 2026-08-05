@@ -11,6 +11,7 @@ export interface UsageOverview {
   input_tokens: number;
   output_tokens: number;
   usage_unknown: number;
+  cost_micros: number;
 }
 
 export interface UsageByModel extends UsageOverview {
@@ -106,7 +107,8 @@ export async function getOverview(
         COALESCE(SUM(fallback_count), 0) AS fallbacks,
         COALESCE(SUM(input_tokens), 0) AS input_tokens,
         COALESCE(SUM(output_tokens), 0) AS output_tokens,
-        COALESCE(SUM(usage_unknown_count), 0) AS usage_unknown
+        COALESCE(SUM(usage_unknown_count), 0) AS usage_unknown,
+        COALESCE(SUM(cost_micros), 0) AS cost_micros
       FROM usage_minutes
       WHERE timestamp_minute >= ? AND timestamp_minute < ?`,
     )
@@ -123,6 +125,7 @@ export async function getOverview(
       input_tokens: 0,
       output_tokens: 0,
       usage_unknown: 0,
+      cost_micros: 0,
     }
   );
 }
@@ -144,6 +147,7 @@ export async function upsertUsageMinute(
     input_tokens: number;
     output_tokens: number;
     usage_unknown_count: number;
+    cost_micros: number;
   },
 ): Promise<void> {
   await db
@@ -153,8 +157,8 @@ export async function upsertUsageMinute(
         unified_model_id_snapshot, channel_name_snapshot,
         request_count, success_count, error_count, cancelled_count,
         fallback_count, attempt_count_total,
-        input_tokens, output_tokens, usage_unknown_count
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        input_tokens, output_tokens, usage_unknown_count, cost_micros
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(timestamp_minute, model_card_id, channel_id) DO UPDATE SET
         request_count = request_count + excluded.request_count,
         success_count = success_count + excluded.success_count,
@@ -164,7 +168,8 @@ export async function upsertUsageMinute(
         attempt_count_total = attempt_count_total + excluded.attempt_count_total,
         input_tokens = input_tokens + excluded.input_tokens,
         output_tokens = output_tokens + excluded.output_tokens,
-        usage_unknown_count = usage_unknown_count + excluded.usage_unknown_count`,
+        usage_unknown_count = usage_unknown_count + excluded.usage_unknown_count,
+        cost_micros = cost_micros + excluded.cost_micros`,
     )
     .bind(
       data.timestamp_minute,
@@ -181,6 +186,7 @@ export async function upsertUsageMinute(
       data.input_tokens,
       data.output_tokens,
       data.usage_unknown_count,
+      data.cost_micros,
     )
     .run();
 }

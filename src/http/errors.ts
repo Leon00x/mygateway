@@ -18,6 +18,8 @@ export type ErrorCode =
   | 'resource_in_use'
   | 'request_too_large'
   | 'gateway_rate_limited'
+  | 'budget_exceeded'
+  | 'model_not_allowed'
   | 'model_unavailable'
   | 'protocol_unavailable'
   | 'unsupported_protocol_feature'
@@ -33,6 +35,8 @@ const HTTP_MAP: Record<ErrorCode, number> = {
   resource_in_use: 409,
   request_too_large: 413,
   gateway_rate_limited: 429,
+  budget_exceeded: 403,
+  model_not_allowed: 403,
   model_unavailable: 503,
   protocol_unavailable: 422,
   unsupported_protocol_feature: 422,

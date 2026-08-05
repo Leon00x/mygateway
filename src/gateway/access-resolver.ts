@@ -12,6 +12,11 @@ const modelCache = new TtlLruCache<string, CachedModelResolution>(200);
 export interface GatewayKeyIdentity {
   id: string;
   name: string;
+  rpmLimit: number | null;
+  dailyRequestLimit: number | null;
+  dailyTokenLimit: number | null;
+  expiresAt: number | null;
+  modelAllowlist: string[];
 }
 
 export interface ResolvedModel {
@@ -54,7 +59,7 @@ interface RouteQueryRow extends Partial<CandidateQueryRow> {
 }
 
 const KEY_QUERY = `
-  SELECT id, name
+  SELECT id, name, rpm_limit, daily_request_limit, daily_token_limit, expires_at, model_allowlist
   FROM gateway_api_keys
   WHERE key_hash = ? AND status = 'active' AND revoked_at IS NULL
   LIMIT 1
@@ -72,6 +77,8 @@ const ROUTE_QUERY = `
     cm.public_model_alias,
     cm.sort_order,
     cm.supports_stream_usage,
+    cm.input_price_micros_per_million,
+    cm.output_price_micros_per_million,
     c.id AS channel_id,
     c.name AS channel_name,
     c.provider_type,
@@ -104,8 +111,38 @@ const ROUTE_QUERY = `
 `;
 
 function readKeyResult(rows: unknown[]): CachedGatewayKey {
-  const row = rows[0] as GatewayKeyIdentity | undefined;
-  return row ? { active: true, identity: row } : { active: false };
+  const row = rows[0] as (GatewayKeyIdentity & {
+    rpm_limit: number | null;
+    daily_request_limit: number | null;
+    daily_token_limit: number | null;
+    expires_at: number | null;
+    model_allowlist: string | null;
+  }) | undefined;
+  if (!row) return { active: false };
+  return {
+    active: true,
+    identity: {
+      id: row.id,
+      name: row.name,
+      rpmLimit: row.rpm_limit ?? null,
+      dailyRequestLimit: row.daily_request_limit ?? null,
+      dailyTokenLimit: row.daily_token_limit ?? null,
+      expiresAt: row.expires_at ?? null,
+      modelAllowlist: parseAllowlist(row.model_allowlist),
+    },
+  };
+}
+
+function parseAllowlist(value: string | null): string[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === 'string' && item.length > 0)
+      : [];
+  } catch {
+    return [];
+  }
 }
 
 function readModelResult(modelName: string, rows: unknown[]): ModelResolution {

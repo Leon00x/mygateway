@@ -44,7 +44,15 @@ class FakeD1 {
 
   rowsFor(statement: FakeStatement): unknown[] {
     if (statement.sql.includes('FROM gateway_api_keys')) {
-      return this.keyActive ? [{ id: 'key-1', name: 'default' }] : [];
+      return this.keyActive ? [{
+        id: 'key-1',
+        name: 'default',
+        rpm_limit: null,
+        daily_request_limit: null,
+        daily_token_limit: null,
+        expires_at: null,
+        model_allowlist: null,
+      }] : [];
     }
     if (statement.sql.includes('FROM model_identifiers')) {
       const modelName = statement.params[0];
@@ -58,6 +66,8 @@ class FakeD1 {
         public_model_alias: 'provider-model-1@primary',
         sort_order: 0,
         supports_stream_usage: 1,
+        input_price_micros_per_million: null,
+        output_price_micros_per_million: null,
         channel_id: 'channel-1',
         channel_name: 'Primary',
         provider_type: 'openai_compatible',
@@ -79,7 +89,15 @@ describe('gateway access resolver', () => {
     const db = fake as unknown as D1Database;
 
     const first = await resolveGatewayAccess(db, 'hash-1', 'unified-model');
-    expect(first.key).toEqual({ id: 'key-1', name: 'default' });
+    expect(first.key).toEqual({
+      id: 'key-1',
+      name: 'default',
+      rpmLimit: null,
+      dailyRequestLimit: null,
+      dailyTokenLimit: null,
+      expiresAt: null,
+      modelAllowlist: [],
+    });
     expect(first.model.status).toBe('resolved');
     expect(first.metrics).toMatchObject({
       cacheStatus: 'miss',
@@ -111,6 +129,11 @@ describe('gateway access resolver', () => {
     await expect(authenticateGatewayKeyHash(db, 'hash-2')).resolves.toEqual({
       id: 'key-1',
       name: 'default',
+      rpmLimit: null,
+      dailyRequestLimit: null,
+      dailyTokenLimit: null,
+      expiresAt: null,
+      modelAllowlist: [],
     });
     const result = await resolveGatewayAccess(db, 'hash-2', 'unified-model');
 

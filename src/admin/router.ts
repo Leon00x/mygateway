@@ -30,9 +30,10 @@ import {
   handleChannelTest,
 } from './channels.ts';
 import { handleChannelBalance, handleChannelBalances } from './provider-balances.ts';
-import { handleModelsCollection, handleModelItem, handleModelInstances, handleReorderInstances } from './models.ts';
+import { handleModelsCollection, handleModelItem, handleModelInstances, handleReorderInstances, handleModelInstanceItem } from './models.ts';
 import { handleKeysCollection, handleKeyItem, handleKeyRegenerate } from './keys.ts';
 import { handleUsageOverview, handleUsageByModel, handleUsageByChannel, handleUsageClear } from './usage.ts';
+import { handleRequests } from './requests.ts';
 import {
   handleChannelModelImport,
   handleChannelModelRefresh,
@@ -174,6 +175,16 @@ export async function handleAdminApi(
     const modelId = parts[parts.length - 2];
     return handleModelInstances(request, modelId, env, requestId);
   }
+  if (path.match(/^\/admin\/api\/models\/[^/]+\/instances\/[^/]+$/)) {
+    const parts = path.split('/');
+    return handleModelInstanceItem(
+      request,
+      parts[parts.length - 3],
+      parts[parts.length - 1],
+      env,
+      requestId,
+    );
+  }
   if (path.match(/^\/admin\/api\/models\/[^/]+$/)) {
     const id = path.split('/').pop()!;
     return handleModelItem(request, id, env, requestId);
@@ -191,6 +202,11 @@ export async function handleAdminApi(
   if (path.match(/^\/admin\/api\/keys\/[^/]+$/)) {
     const id = path.split('/').pop()!;
     return handleKeyItem(request, id, env, requestId);
+  }
+
+  // --- Recent requests ---
+  if (path === '/admin/api/requests') {
+    return handleRequests(request, url, env, requestId);
   }
 
   // --- Usage ---

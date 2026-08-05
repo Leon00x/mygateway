@@ -206,6 +206,8 @@ export async function handleModelInstances(
       public_model_alias?: string;
       sort_order?: number;
       supports_stream_usage?: boolean;
+      input_price_micros_per_million?: number | null;
+      output_price_micros_per_million?: number | null;
     };
 
     if (!body.channel_id || !body.channel_model_id || !body.public_model_alias) {
@@ -231,9 +233,9 @@ export async function handleModelInstances(
       sort_order: sortOrder,
       status: 'active',
       supports_stream_usage: body.supports_stream_usage ? 1 : 0,
-      input_price_micros_per_million: null,
-      output_price_micros_per_million: null,
-      currency: null,
+      input_price_micros_per_million: parseOptionalPrice(body.input_price_micros_per_million),
+      output_price_micros_per_million: parseOptionalPrice(body.output_price_micros_per_million),
+      currency: 'USD',
       plan_tokens_total: null,
       plan_tokens_remaining: null,
       plan_expires_at: null,
@@ -249,8 +251,63 @@ export async function handleModelInstances(
 }
 
 /**
- * PUT /admin/api/models/:id/instances/reorder
+ * PUT /admin/api/models/:id/instances/:instanceId — update pricing / stream usage.
  */
+export async function handleModelInstanceItem(
+  request: Request,
+  modelId: string,
+  instanceId: string,
+  env: Env,
+  requestId: string,
+): Promise<Response> {
+  if (request.method !== 'PUT') {
+    return gatewayErrorResponse('invalid_request', 'Method not allowed', requestId);
+  }
+  const card = await getModelCard(env.DB, modelId);
+  if (!card) return gatewayErrorResponse('model_not_found', 'Model not found', requestId);
+
+  const instance = (await listChannelModels(env.DB, modelId)).find((item) => item.id === instanceId);
+  if (!instance) return gatewayErrorResponse('model_not_found', 'Instance not found', requestId);
+
+  try {
+    const body = (await request.json()) as {
+      input_price_micros_per_million?: number | null;
+      output_price_micros_per_million?: number | null;
+      supports_stream_usage?: boolean;
+    };
+    const now = Math.floor(Date.now() / 1000);
+    const fields: string[] = ['updated_at = ?'];
+    const values: unknown[] = [now];
+    if (body.input_price_micros_per_million !== undefined) {
+      fields.push('input_price_micros_per_million = ?');
+      values.push(parseOptionalPrice(body.input_price_micros_per_million));
+    }
+    if (body.output_price_micros_per_million !== undefined) {
+      fields.push('output_price_micros_per_million = ?');
+      values.push(parseOptionalPrice(body.output_price_micros_per_million));
+    }
+    if (body.supports_stream_usage !== undefined) {
+      fields.push('supports_stream_usage = ?');
+      values.push(body.supports_stream_usage ? 1 : 0);
+    }
+    values.push(instanceId);
+    await env.DB.prepare(`UPDATE channel_models SET ${fields.join(', ')} WHERE id = ?`).bind(...values).run();
+
+    const instances = await listChannelModels(env.DB, modelId);
+    return json({ ...card, instances });
+  } catch (e) {
+    return gatewayErrorResponse('invalid_request', (e as Error).message, requestId);
+  }
+}
+
+function parseOptionalPrice(value: unknown): number | null {
+  if (value === undefined || value === null || value === '') return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new Error('price must be a non-negative number (micros per million tokens)');
+  }
+  return Math.round(parsed);
+}
 export async function handleReorderInstances(
   request: Request,
   modelId: string,

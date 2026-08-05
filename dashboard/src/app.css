@@ -262,3 +262,12 @@ input:focus, select:focus { border-color: #9e82fa; box-shadow: 0 0 0 3px rgba(10
 .model-instance-row .instance-order button:disabled{opacity:.3;cursor:not-allowed}
 .model-instance-row .instance-order .badge{min-width:24px;justify-content:center}
 [data-theme="dark"] .model-instance-row{background:var(--color-surface)}
+
+/* Virtual key limits + request log page. */
+.key-create-form{display:grid;gap:14px;padding:22px}.key-create-actions{display:flex;align-items:center;gap:9px;justify-content:flex-end}.key-create-actions .primary-button{margin-left:auto}
+.key-limit-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.key-limit-fields .key-allowlist{grid-column:1/-1}.key-limit-fields small{color:var(--color-muted);font-weight:400}
+.key-row{align-items:flex-start}.key-row .resource-main>span{display:block}.key-limits-hint{margin-top:4px;color:var(--color-muted);font-size:9px}
+.requests-toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}.requests-toolbar label{display:flex;align-items:center;gap:7px;color:var(--color-muted);font-size:10px;font-weight:650}.requests-toolbar select{width:auto;min-height:36px;padding:0 10px;font-size:11px}.requests-count{margin-left:auto;color:var(--color-muted);font-size:10px}
+.request-log-panel{overflow:hidden}.request-log-table{display:grid}.request-log-head,.request-log-row{display:grid;grid-template-columns:130px minmax(90px,.9fr) minmax(120px,1.3fr) minmax(80px,.8fr) 90px 110px 70px 110px;align-items:center;gap:10px;padding:11px 18px}.request-log-head{background:var(--color-surface-soft);color:var(--color-muted);font-size:9px;font-weight:700}.request-log-row{border-top:1px solid var(--color-divider);font-size:10px}.request-log-row span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.req-time{color:var(--color-muted)}.req-key{font-weight:650}.req-model code{color:var(--color-primary);font-size:9px}.req-tokens,.req-cost,.req-latency{color:var(--color-muted)}.req-cost{font-weight:700;color:var(--color-text)}
+.instance-price{display:inline-block;margin-top:3px;color:var(--color-muted);font-size:8px}.pricing-note{color:var(--color-muted);font-size:9px;line-height:1.6}
+@media (max-width:900px){.request-log-head{display:none}.request-log-row{grid-template-columns:1fr 1fr;gap:6px;padding:12px 16px}.request-log-row span{white-space:normal}.request-log-row .req-model{grid-column:1/-1}.req-time{grid-column:1/-1}.key-limit-fields{grid-template-columns:1fr}}

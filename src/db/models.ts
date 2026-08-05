@@ -217,6 +217,8 @@ export async function getCandidatesForModel(
         cm.public_model_alias,
         cm.sort_order,
         cm.supports_stream_usage,
+        cm.input_price_micros_per_million,
+        cm.output_price_micros_per_million,
         c.id AS channel_id,
         c.name AS channel_name,
         c.provider_type,
@@ -250,6 +252,8 @@ export interface CandidateRow {
   public_model_alias: string;
   sort_order: number;
   supports_stream_usage: 0 | 1;
+  input_price_micros_per_million: number | null;
+  output_price_micros_per_million: number | null;
   channel_id: string;
   channel_name: string;
   provider_type: string;

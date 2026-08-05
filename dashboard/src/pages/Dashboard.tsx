@@ -10,7 +10,7 @@ import {
   type ProviderBalancesResponse,
 } from '../provider-balances';
 
-interface UsageOverview { requests: number; successes: number; errors: number; input_tokens: number; output_tokens: number; usage_unknown: number; fallbacks?: number; }
+interface UsageOverview { requests: number; successes: number; errors: number; input_tokens: number; output_tokens: number; usage_unknown: number; fallbacks?: number; cost_micros?: number; }
 interface ApiKey { id: string; name: string; key_prefix: string; status: string; }
 interface Channel { id: string; name: string; provider_type: string; base_url: string; status: string; }
 interface ModelItem { id: string; unified_model_id: string; display_name: string; status: string; }
@@ -87,6 +87,10 @@ export default function Dashboard() {
   const usageCoverage = () => overview()?.requests
     ? Math.round(((overview()!.requests - overview()!.usage_unknown) / overview()!.requests) * 100)
     : 100;
+  const spendLabel = () => {
+    const micros = overview()?.cost_micros ?? 0;
+    return micros > 0 ? `$${(micros / 1_000_000).toFixed(4)}` : '—';
+  };
   const fmt = (value = 0) => value.toLocaleString();
 
   return (
@@ -104,7 +108,7 @@ export default function Dashboard() {
         <Metric title="总请求" value={fmt(overview()?.requests)} note={range() === 'today' ? '今日调用' : `${range()} 调用`} tone="violet" />
         <Metric title="成功率" value={`${successRate()}%`} note={`${fmt(overview()?.successes)} 次成功`} tone="green" />
         <Metric title="Token 用量" value={fmt((overview()?.input_tokens ?? 0) + (overview()?.output_tokens ?? 0))} note={`Provider 上报 · 覆盖率 ${usageCoverage()}%`} tone="orange" />
-        <Metric title="自动回退" value={fmt(overview()?.fallbacks)} note={`${fmt(overview()?.errors)} 次失败`} tone="blue" />
+        <Metric title="预估费用" value={spendLabel()} note="按渠道模型单价计算" tone="blue" />
       </section>
 
       <section class="dashboard-main-grid">

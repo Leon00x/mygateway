@@ -9,6 +9,8 @@ function candidate(id: string, order: number, protocols: ChannelProtocol[]): Can
     public_model_alias: `alias-${id}`,
     sort_order: order,
     supports_stream_usage: 1,
+    input_price_micros_per_million: null,
+    output_price_micros_per_million: null,
     channel_id: id,
     channel_name: id,
     provider_type: 'openai_compatible',

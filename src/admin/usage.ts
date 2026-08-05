@@ -57,7 +57,8 @@ export async function handleUsageByModel(
         COALESCE(SUM(success_count), 0) AS successes,
         COALESCE(SUM(error_count), 0) AS errors,
         COALESCE(SUM(input_tokens), 0) AS input_tokens,
-        COALESCE(SUM(output_tokens), 0) AS output_tokens
+        COALESCE(SUM(output_tokens), 0) AS output_tokens,
+        COALESCE(SUM(cost_micros), 0) AS cost_micros
       FROM usage_minutes
       WHERE timestamp_minute >= ? AND timestamp_minute < ?
       GROUP BY model_card_id, unified_model_id_snapshot`,
@@ -88,7 +89,8 @@ export async function handleUsageByChannel(
         COALESCE(SUM(success_count), 0) AS successes,
         COALESCE(SUM(error_count), 0) AS errors,
         COALESCE(SUM(input_tokens), 0) AS input_tokens,
-        COALESCE(SUM(output_tokens), 0) AS output_tokens
+        COALESCE(SUM(output_tokens), 0) AS output_tokens,
+        COALESCE(SUM(cost_micros), 0) AS cost_micros
       FROM usage_minutes
       WHERE timestamp_minute >= ? AND timestamp_minute < ?
       GROUP BY channel_id, channel_name_snapshot`,

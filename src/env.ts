@@ -34,6 +34,18 @@ export interface Env {
 
   /** Usage retention in days. Default: 30 */
   USAGE_RETENTION_DAYS?: string;
+
+  /** Recent request log retention in days. Default: 7 */
+  REQUEST_LOG_RETENTION_DAYS?: string;
+
+  /**
+   * TTL for the non-streaming response cache, in ms. 0 disables caching.
+   * Default: 0 (disabled). The cache is isolate-local.
+   */
+  RESPONSE_CACHE_TTL_MS?: string;
+
+  /** Max entries in the per-isolate response cache. Default: 1000 */
+  RESPONSE_CACHE_MAX_ENTRIES?: string;
 }
 
 /** Parsed numeric config with validated defaults. */
@@ -44,6 +56,9 @@ export interface RuntimeConfig {
   maxChannelAttempts: number;
   upstreamHeaderTimeoutMs: number;
   usageRetentionDays: number;
+  requestLogRetentionDays: number;
+  responseCacheTtlMs: number;
+  responseCacheMaxEntries: number;
 }
 
 const DEFAULTS = {
@@ -53,6 +68,9 @@ const DEFAULTS = {
   maxChannelAttempts: 3,
   upstreamHeaderTimeoutMs: 30_000,
   usageRetentionDays: 30,
+  requestLogRetentionDays: 7,
+  responseCacheTtlMs: 0,
+  responseCacheMaxEntries: 1_000,
 } as const;
 
 /**
@@ -81,6 +99,11 @@ export function parseConfig(env: Env): RuntimeConfig {
     upstreamHeaderTimeoutMs:
       parseInt(env.UPSTREAM_HEADER_TIMEOUT_MS ?? '', 10) || DEFAULTS.upstreamHeaderTimeoutMs,
     usageRetentionDays: parseInt(env.USAGE_RETENTION_DAYS ?? '', 10) || DEFAULTS.usageRetentionDays,
+    requestLogRetentionDays:
+      parseInt(env.REQUEST_LOG_RETENTION_DAYS ?? '', 10) || DEFAULTS.requestLogRetentionDays,
+    responseCacheTtlMs: parseInt(env.RESPONSE_CACHE_TTL_MS ?? '', 10) || DEFAULTS.responseCacheTtlMs,
+    responseCacheMaxEntries:
+      parseInt(env.RESPONSE_CACHE_MAX_ENTRIES ?? '', 10) || DEFAULTS.responseCacheMaxEntries,
   };
 }
 

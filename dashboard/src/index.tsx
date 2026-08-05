@@ -9,6 +9,7 @@ import Dashboard from './pages/Dashboard';
 import Channels from './pages/Channels';
 import Models from './pages/Models';
 import ApiKeys from './pages/ApiKeys';
+import Requests from './pages/Requests';
 import System from './pages/System';
 import Icon, { IconName } from './components/Icon';
 
@@ -83,6 +84,7 @@ const navigation: { href: string; label: string; icon: IconName; end?: boolean }
   { href: '/channels', label: '渠道', icon: 'channels' },
   { href: '/models', label: '模型', icon: 'models' },
   { href: '/keys', label: 'API 密钥', icon: 'keys' },
+  { href: '/requests', label: '请求日志', icon: 'requests' },
   { href: '/system', label: '系统设置', icon: 'system' },
 ];
 
@@ -91,6 +93,7 @@ const titles: Record<string, { title: string; subtitle: string }> = {
   '/channels': { title: '渠道管理', subtitle: '连接并管理 OpenAI Compatible 模型服务' },
   '/models': { title: '模型路由', subtitle: '配置统一模型、渠道实例和故障回退顺序' },
   '/keys': { title: 'API 密钥', subtitle: '创建和管理调用 MyGateway 的访问凭据' },
+  '/requests': { title: '请求日志', subtitle: '查看最近调用的用量、费用与状态' },
   '/system': { title: '系统设置', subtitle: '查看运行状态并维护管理员账号' },
 };
 
@@ -223,6 +226,7 @@ render(() => (
       <Route path="/channels" component={() => <RequireReady><Channels /></RequireReady>} />
       <Route path="/models" component={() => <RequireReady><Models /></RequireReady>} />
       <Route path="/keys" component={() => <RequireReady><ApiKeys /></RequireReady>} />
+      <Route path="/requests" component={() => <RequireReady><Requests /></RequireReady>} />
       <Route path="/system" component={() => <RequireReady><System /></RequireReady>} />
     </Router>
   </AuthProvider>

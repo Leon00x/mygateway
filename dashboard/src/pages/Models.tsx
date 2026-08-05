@@ -2,6 +2,15 @@ import { createSignal, onMount, For, Show } from 'solid-js';
 import { COMMON_MODEL_TEMPLATES } from '../presets';
 import { ProviderLogo } from '../components/ProviderLogo';
 
+const dollarsToMicros = (value: string): number | null => {
+  if (!value.trim()) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed * 1_000_000) : null;
+};
+
+const microsToDollars = (micros: number | null): string =>
+  micros === null ? '' : String(micros / 1_000_000);
+
 interface Channel {
   id: string;
   name: string;
@@ -26,6 +35,8 @@ interface Instance {
   sort_order: number;
   status: string;
   supports_stream_usage: number;
+  input_price_micros_per_million: number | null;
+  output_price_micros_per_million: number | null;
 }
 
 interface ModelCard {
@@ -58,8 +69,16 @@ export default function Models() {
   const [instUpstreamModel, setInstUpstreamModel] = createSignal('');
   const [instAlias, setInstAlias] = createSignal('');
   const [instStreamUsage, setInstStreamUsage] = createSignal(true);
+  const [instInputPrice, setInstInputPrice] = createSignal('');
+  const [instOutputPrice, setInstOutputPrice] = createSignal('');
   const [instError, setInstError] = createSignal('');
   const [instBusy, setInstBusy] = createSignal(false);
+
+  // Edit instance pricing
+  const [editInst, setEditInst] = createSignal<{ card: ModelCard; instance: Instance } | null>(null);
+  const [editInstInput, setEditInstInput] = createSignal('');
+  const [editInstOutput, setEditInstOutput] = createSignal('');
+  const [editInstBusy, setEditInstBusy] = createSignal(false);
 
   // Edit card
   const [editCard, setEditCard] = createSignal<ModelCard | null>(null);
@@ -158,6 +177,8 @@ export default function Models() {
     setInstUpstreamModel('');
     setInstAlias('');
     setInstStreamUsage(true);
+    setInstInputPrice('');
+    setInstOutputPrice('');
     setInstError('');
     if (activeChannels()[0]?.id) void loadChannelInventory(activeChannels()[0].id);
   };
@@ -177,6 +198,8 @@ export default function Models() {
           channel_model_id: instUpstreamModel(),
           public_model_alias: instAlias(),
           supports_stream_usage: instStreamUsage(),
+          input_price_micros_per_million: dollarsToMicros(instInputPrice()),
+          output_price_micros_per_million: dollarsToMicros(instOutputPrice()),
         }),
       });
       if (resp.ok) {
@@ -247,6 +270,37 @@ export default function Models() {
 
   const sortedInstances = (card: ModelCard) =>
     [...card.instances].sort((a, b) => a.sort_order - b.sort_order);
+
+  const openEditPricing = (card: ModelCard, instance: Instance) => {
+    setEditInst({ card, instance });
+    setEditInstInput(microsToDollars(instance.input_price_micros_per_million));
+    setEditInstOutput(microsToDollars(instance.output_price_micros_per_million));
+  };
+
+  const savePricing = async (e: Event) => {
+    e.preventDefault();
+    const target = editInst();
+    if (!target) return;
+    setEditInstBusy(true);
+    try {
+      const resp = await fetch(`/admin/api/models/${target.card.id}/instances/${target.instance.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          input_price_micros_per_million: dollarsToMicros(editInstInput()),
+          output_price_micros_per_million: dollarsToMicros(editInstOutput()),
+        }),
+      });
+      if (resp.ok) { setEditInst(null); await fetchAll(); }
+    } finally { setEditInstBusy(false); }
+  };
+
+  const priceLabel = (inst: Instance): string => {
+    const input = inst.input_price_micros_per_million;
+    const output = inst.output_price_micros_per_million;
+    if (input === null && output === null) return '未定价';
+    return `$${((input ?? 0) / 1_000_000).toFixed(2)} / $${((output ?? 0) / 1_000_000).toFixed(2)} M`;
+  };
 
   return (
     <div class="resource-page model-page">
@@ -329,9 +383,11 @@ export default function Models() {
                       <div class="model-instance-copy">
                         <strong>{channelName(inst.channel_id)}</strong>
                         <code><span class="instance-alias">{inst.public_model_alias}</span> → {inst.channel_model_id}</code>
+                        <span class="instance-price">{priceLabel(inst)}</span>
                       </div>
                       <div class="instance-order">
                         <span class={`badge ${inst.status}`}>#{idx() + 1}</span>
+                        <button title="定价" onClick={() => openEditPricing(card, inst)}>$</button>
                         <button title="上移" disabled={idx() === 0} onClick={() => move(card, inst, -1)}>↑</button>
                         <button title="下移" disabled={idx() === sortedInstances(card).length - 1} onClick={() => move(card, inst, 1)}>↓</button>
                       </div>
@@ -381,12 +437,39 @@ export default function Models() {
                 <input type="checkbox" checked={instStreamUsage()} onChange={(e) => setInstStreamUsage(e.currentTarget.checked)} />
                 支持流式 usage
               </label>
+              <div class="model-bind-fields">
+                <label>输入价格 ($/M token，用于费用统计)
+                  <input type="number" min="0" step="0.01" placeholder="留空不统计" value={instInputPrice()} onInput={(e) => setInstInputPrice(e.currentTarget.value)} />
+                </label>
+                <label>输出价格 ($/M token)
+                  <input type="number" min="0" step="0.01" placeholder="留空不统计" value={instOutputPrice()} onInput={(e) => setInstOutputPrice(e.currentTarget.value)} />
+                </label>
+              </div>
               <Show when={instError()}><div class="form-error">{instError()}</div></Show>
               <div class="modal-actions"><button type="button" class="secondary-button" onClick={() => setAddForCard(null)}>取消</button><button type="submit" disabled={instBusy()} class="primary-button">{instBusy() ? '添加中...' : '添加实例'}</button></div>
             </form>
           </div>
         );
       }}</Show>
+
+      {/* Edit instance pricing modal */}
+      <Show when={editInst()}>{(target) => (
+        <div class="modal-backdrop" onClick={() => setEditInst(null)}>
+          <form class="modal-card form-stack" onSubmit={savePricing} onClick={(e) => e.stopPropagation()}>
+            <div class="modal-title"><div><span class="eyebrow">Pricing</span><h3>实例定价</h3><p>{target().instance.public_model_alias} · {target().card.unified_model_id}</p></div><button type="button" onClick={() => setEditInst(null)}>×</button></div>
+            <div class="model-bind-fields">
+              <label>输入价格 ($/M token)
+                <input type="number" min="0" step="0.01" placeholder="留空不统计" value={editInstInput()} onInput={(e) => setEditInstInput(e.currentTarget.value)} />
+              </label>
+              <label>输出价格 ($/M token)
+                <input type="number" min="0" step="0.01" placeholder="留空不统计" value={editInstOutput()} onInput={(e) => setEditInstOutput(e.currentTarget.value)} />
+              </label>
+            </div>
+            <small class="pricing-note">费用 = (输入 tokens × 输入价 + 输出 tokens × 输出价) / 1,000,000，按美元统计。</small>
+            <div class="modal-actions"><button type="button" class="secondary-button" onClick={() => setEditInst(null)}>取消</button><button type="submit" disabled={editInstBusy()} class="primary-button">保存定价</button></div>
+          </form>
+        </div>
+      )}</Show>
 
       {/* Edit modal */}
       <Show when={editCard()}>{(card) => (

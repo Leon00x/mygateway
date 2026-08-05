@@ -11,8 +11,10 @@ import {
   createGatewayKey,
   findActiveKeyByHash,
   updateGatewayKeyStatus,
+  updateGatewayKeyLimits,
   revokeGatewayKey,
   deleteGatewayKey,
+  serializeModelAllowlist,
   toPublicKey,
 } from '../db/keys.ts';
 import { invalidateGatewayKeyCache } from '../gateway/access-resolver.ts';
@@ -22,6 +24,36 @@ function json(data: unknown, status = 200): Response {
     status,
     headers: { 'Content-Type': 'application/json' },
   });
+}
+
+function parseOptionalInt(value: unknown): number | null {
+  if (value === undefined || value === null || value === '') return null;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    throw new Error('Limit must be a non-negative integer');
+  }
+  return parsed;
+}
+
+function parseOptionalExpiry(value: unknown): number | null {
+  if (value === undefined || value === null || value === '') return null;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error('expires_at must be a unix timestamp in seconds');
+  }
+  return parsed;
+}
+
+function parseModelAllowlistInput(value: unknown): string[] {
+  if (value === undefined || value === null) return [];
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+      .map((item) => item.trim());
+  }
+  if (typeof value === 'string') {
+    return value.split(',').map((item) => item.trim()).filter(Boolean);
+  }
+  throw new Error('model_allowlist must be an array of model ids');
 }
 
 /**
@@ -39,7 +71,14 @@ export async function handleKeysCollection(
 
   if (request.method === 'POST') {
     try {
-      const body = (await request.json()) as { name?: string };
+      const body = (await request.json()) as {
+        name?: string;
+        rpm_limit?: unknown;
+        daily_request_limit?: unknown;
+        daily_token_limit?: unknown;
+        expires_at?: unknown;
+        model_allowlist?: unknown;
+      };
       if (!body.name) {
         return gatewayErrorResponse('invalid_request', 'name is required', requestId);
       }
@@ -49,7 +88,17 @@ export async function handleKeysCollection(
       const prefix = gatewayKeyPrefix(rawKey);
       const id = generateId();
 
-      await createGatewayKey(env.DB, { id, name: body.name, key_prefix: prefix, key_hash: keyHash });
+      await createGatewayKey(env.DB, {
+        id,
+        name: body.name,
+        key_prefix: prefix,
+        key_hash: keyHash,
+        rpm_limit: parseOptionalInt(body.rpm_limit),
+        daily_request_limit: parseOptionalInt(body.daily_request_limit),
+        daily_token_limit: parseOptionalInt(body.daily_token_limit),
+        expires_at: parseOptionalExpiry(body.expires_at),
+        model_allowlist: serializeModelAllowlist(parseModelAllowlistInput(body.model_allowlist)),
+      });
       invalidateGatewayKeyCache();
 
       // Return the raw key ONCE
@@ -75,12 +124,44 @@ export async function handleKeyItem(
 ): Promise<Response> {
   if (request.method === 'PUT') {
     try {
-      const body = (await request.json()) as { name?: string; status?: string };
-      if (body.status) {
+      const body = (await request.json()) as {
+        name?: string;
+        status?: string;
+        rpm_limit?: unknown;
+        daily_request_limit?: unknown;
+        daily_token_limit?: unknown;
+        expires_at?: unknown;
+        model_allowlist?: unknown;
+      };
+
+      const limitUpdates: Parameters<typeof updateGatewayKeyLimits>[2] = {};
+      if (body.rpm_limit !== undefined) limitUpdates.rpm_limit = parseOptionalInt(body.rpm_limit);
+      if (body.daily_request_limit !== undefined) {
+        limitUpdates.daily_request_limit = parseOptionalInt(body.daily_request_limit);
+      }
+      if (body.daily_token_limit !== undefined) {
+        limitUpdates.daily_token_limit = parseOptionalInt(body.daily_token_limit);
+      }
+      if (body.expires_at !== undefined) limitUpdates.expires_at = parseOptionalExpiry(body.expires_at);
+      if (body.model_allowlist !== undefined) {
+        limitUpdates.model_allowlist = serializeModelAllowlist(parseModelAllowlistInput(body.model_allowlist));
+      }
+      if (Object.keys(limitUpdates).length > 0) {
+        await updateGatewayKeyLimits(env.DB, id, limitUpdates);
+      }
+
+      if (body.name !== undefined) {
+        await env.DB.prepare('UPDATE gateway_api_keys SET name = ?, updated_at = ? WHERE id = ?')
+          .bind(body.name.trim() || 'unnamed', Math.floor(Date.now() / 1000), id)
+          .run();
+      }
+      if (body.status !== undefined) {
         if (!['active', 'disabled'].includes(body.status)) {
           return gatewayErrorResponse('invalid_request', 'Invalid status', requestId);
         }
         await updateGatewayKeyStatus(env.DB, id, body.status as 'active' | 'disabled');
+      }
+      if (body.name !== undefined || Object.keys(limitUpdates).length > 0 || body.status !== undefined) {
         invalidateGatewayKeyCache();
       }
       const keys = await listGatewayKeys(env.DB);

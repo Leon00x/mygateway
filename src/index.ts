@@ -73,13 +73,19 @@ export default {
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
     const config = parseConfig(env);
     const { cleanupOldUsage } = await import('./db/usage.ts');
+    const { cleanupRequestLogs, cleanupKeyDailyUsage } = await import('./db/requests.ts');
     const deletedRows = await cleanupOldUsage(env.DB, config.usageRetentionDays);
+    const deletedLogs = await cleanupRequestLogs(env.DB, config.requestLogRetentionDays);
+    const deletedKeyUsage = await cleanupKeyDailyUsage(env.DB, config.usageRetentionDays);
 
     logEvent({
       event: 'cron_cleanup_completed',
       timestamp: new Date().toISOString(),
       deleted_rows: deletedRows,
+      deleted_logs: deletedLogs,
+      deleted_key_usage: deletedKeyUsage,
       retention_days: config.usageRetentionDays,
+      request_log_retention_days: config.requestLogRetentionDays,
     });
   },
 };
