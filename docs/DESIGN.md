@@ -175,6 +175,8 @@ Dashboard 刷新附带 `active=1`，不会查询停用渠道。Channels 页面�
 ### 6.3 缓存与失败
 
 - 成功结果在当前 Worker isolate 缓存 5 分钟，最多 200 个渠道；
+- 浏览器保留当前会话最后一次成功或失败的查询结果；后续其他 isolate 返回的 `not_queried`
+  不能覆盖已经展示的刷新结果，显式刷新返回的新成功或错误仍会替换旧值；
 - 同渠道并发查询合并为一次 Provider 请求；
 - 更新或删除渠道立即使当前 isolate 缓存失效；
 - 配置更新期间尚未完成的旧 Key 查询不能回填缓存；
@@ -182,8 +184,8 @@ Dashboard 刷新附带 `active=1`，不会查询停用渠道。Channels 页面�
 - 上游错误只返回清理后的说明，不回显正文或 Key；
 - 查询失败不影响渠道路由和模型请求。
 
-该能力不写 D1/KV/DO，也不由 Cron 主动执行。isolate 回收后状态回到 `not_queried`，属于
-预期的尽力缓存行为。
+该能力不写 D1/KV/DO，也不由 Cron 主动执行。isolate 回收后服务端状态回到 `not_queried`；
+当前浏览器会话仍保留其最后一次已解析结果，属于不增加共享状态成本的尽力缓存行为。
 
 DeepSeek 接口定义：<https://api-docs.deepseek.com/zh-cn/api/get-user-balance>。
 

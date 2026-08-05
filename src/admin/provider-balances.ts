@@ -111,6 +111,10 @@ export function parseDeepSeekBalance(value: unknown): DeepSeekBalance {
     };
   });
 
+  // The upstream API does not guarantee a stable currency order; normalize it
+  // so refreshed and cached responses render identically (CNY before USD).
+  balanceInfos.sort((a, b) => a.currency.localeCompare(b.currency));
+
   return { is_available: body.is_available, balance_infos: balanceInfos };
 }
 
@@ -232,7 +236,11 @@ async function queryBalance(
       );
       const value = await fetchDeepSeekBalance(providerKey);
       if ((cacheGeneration.get(channel.id) ?? 0) !== generation) {
-        throw new Error('Channel configuration changed; query the balance again');
+        // The channel was edited/deleted while this query was in flight; the
+        // result was produced with stale credentials or config. Do not backfill
+        // the cache and do not surface a confusing error — treat it as not
+        // queried so the next refresh re-queries with current settings.
+        return notQueriedResult(channel);
       }
       return successResult(channel, storeCached(channel.id, value), false);
     } catch (error) {

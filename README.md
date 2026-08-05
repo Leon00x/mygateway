@@ -187,6 +187,8 @@ curl https://your-gateway.workers.dev/v1/chat/completions \
 - 每日 Cron 只清理过期统计，不执行余额、模型同步或健康探测。
 - 熔断状态保存在 isolate 内存，不使用 KV、DO 或额外数据库写入。
 - DeepSeek 余额只有用户主动刷新时才访问 Provider，并缓存 5 分钟。
+- 浏览器会话会保留最后一次余额刷新结果，避免其他 Worker isolate 的 `not_queried` 覆盖，
+  不增加 D1、KV 或 Durable Objects 写入。
 - 不引入 Pages、KV、R2、Queues、Durable Objects 或额外后台服务。
 
 ### 边界与超额行为
@@ -259,6 +261,6 @@ npm run build
 npm run test:e2e
 ```
 
-当前测试包括 66 个单元测试、11 个无需真实 Provider Key 的 UI E2E，以及 10 个需要真实
+当前测试包括 74 个单元测试、11 个无需真实 Provider Key 的 UI E2E，以及 10 个需要真实
 `DEEPSEEK_TEST_KEY` 的集成测试。环境准备、用例清单和运行边界见
 [测试指南](docs/TESTING.md)。

@@ -3,6 +3,8 @@ import { PROVIDER_PRESETS, type ProviderPreset } from '../presets';
 import {
   balanceCurrencySymbol,
   balanceUpdatedAt,
+  forgetProviderBalance,
+  mergeProviderBalances,
   type ProviderBalance,
 } from '../provider-balances';
 
@@ -133,17 +135,8 @@ export default function Channels() {
       const data = await response.json() as ChannelOverviewResponse;
       setChannels(data.channels);
       setSummaries(Object.fromEntries(data.summaries.map((item) => [item.channel_id, item])));
-      setBalances((current) => {
-        const next: Record<string, ProviderBalance> = {};
-        for (const item of data.balances) {
-          const previous = current[item.channel_id];
-          // Balance errors are intentionally not cached server-side, but the
-          // creation result should keep the outcome of the query just made.
-          next[item.channel_id] = item.status === 'not_queried' && previous?.status === 'error'
-            ? previous : item;
-        }
-        return next;
-      });
+      setBalances(Object.fromEntries(mergeProviderBalances(data.balances)
+        .map((item) => [item.channel_id, item])));
     } finally { setLoading(false); }
   };
 
@@ -164,7 +157,11 @@ export default function Channels() {
     try {
       const response = await fetch(`/admin/api/channels/${channel.id}/balance?refresh=1`);
       const data = await response.json() as ProviderBalance | { error?: string };
-      if ('channel_id' in data) setBalances((current) => ({ ...current, [channel.id]: data }));
+      if ('channel_id' in data) setBalances((current) => ({
+        ...current,
+        ...Object.fromEntries(mergeProviderBalances([data])
+          .map((item) => [item.channel_id, item])),
+      }));
     } finally { setBalanceBusy((current) => ({ ...current, [channel.id]: false })); }
   };
 
@@ -190,6 +187,7 @@ export default function Channels() {
     if (!confirm(message)) return;
     const response = await fetch(`/admin/api/channels/${id}`, { method: 'DELETE' });
     if (!response.ok) alert('删除失败');
+    else forgetProviderBalance(id);
     await loadOverview();
   };
 
@@ -373,6 +371,7 @@ export default function Channels() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error?.message ?? '保存失败');
+      forgetProviderBalance(channel.id);
       setEditChannel(null); await loadOverview(); await openDetails(data as Channel);
     } catch (error) { setEditError((error as Error).message); }
     finally { setEditBusy(false); }
@@ -446,8 +445,10 @@ export default function Channels() {
     if (!supportsBalance(channel)) return '暂不支持';
     if (!balance || balance.status === 'not_queried') return '尚未查询';
     if (balance.status === 'error') return '查询失败';
-    const first = balance.balance_infos[0];
-    return first ? `${balanceCurrencySymbol(first.currency)}${first.total_balance}${balance.balance_infos.length > 1 ? ` +${balance.balance_infos.length - 1}` : ''}` : '0';
+    return [...balance.balance_infos]
+      .sort((a, b) => a.currency.localeCompare(b.currency))
+      .map((item) => `${balanceCurrencySymbol(item.currency)}${item.total_balance}`)
+      .join(' / ') || '0';
   };
 
   return <div class="resource-page channel-page">

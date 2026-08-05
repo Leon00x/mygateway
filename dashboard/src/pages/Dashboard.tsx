@@ -4,6 +4,7 @@ import Icon, { IconName } from '../components/Icon';
 import {
   balanceCurrencySymbol,
   balanceUpdatedAt,
+  mergeProviderBalances,
   type ProviderBalance,
   type ProviderBalancesResponse,
 } from '../provider-balances';
@@ -48,7 +49,10 @@ export default function Dashboard() {
       if (responses[1].ok) setKeys(await responses[1].json());
       if (responses[2].ok) setModels(await responses[2].json());
       if (responses[3].ok) setChannels(await responses[3].json());
-      if (responses[4].ok) setBalances(((await responses[4].json()) as ProviderBalancesResponse).balances);
+      if (responses[4].ok) {
+        const incoming = ((await responses[4].json()) as ProviderBalancesResponse).balances;
+        setBalances(mergeProviderBalances(incoming));
+      }
     } finally { setLoading(false); }
   };
   onMount(fetchData);
@@ -62,7 +66,10 @@ export default function Dashboard() {
     setBalanceBusy(true);
     try {
       const response = await fetch('/admin/api/channels/balances?refresh=1&active=1');
-      if (response.ok) setBalances(((await response.json()) as ProviderBalancesResponse).balances);
+      if (response.ok) {
+        const incoming = ((await response.json()) as ProviderBalancesResponse).balances;
+        setBalances(mergeProviderBalances(incoming));
+      }
     } finally { setBalanceBusy(false); }
   };
   const copy = async (text: string, label: string) => {

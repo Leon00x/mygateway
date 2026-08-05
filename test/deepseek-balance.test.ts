@@ -41,6 +41,26 @@ describe('DeepSeek provider balance', () => {
     });
   });
 
+  test('normalizes an unstable upstream currency order to CNY before USD', () => {
+    const parsed = parseDeepSeekBalance({
+      is_available: true,
+      balance_infos: [
+        { currency: 'USD', total_balance: '1.23', granted_balance: '0.00', topped_up_balance: '1.23' },
+        { currency: 'CNY', total_balance: '88.36', granted_balance: '2.00', topped_up_balance: '86.36' },
+      ],
+    });
+    expect(parsed.balance_infos.map((item) => item.currency)).toEqual(['CNY', 'USD']);
+    // The reverse upstream order produces the same normalized array.
+    const again = parseDeepSeekBalance({
+      is_available: true,
+      balance_infos: [
+        { currency: 'CNY', total_balance: '88.36', granted_balance: '2.00', topped_up_balance: '86.36' },
+        { currency: 'USD', total_balance: '1.23', granted_balance: '0.00', topped_up_balance: '1.23' },
+      ],
+    });
+    expect(again).toEqual(parsed);
+  });
+
   test('rejects malformed amounts and unsupported currencies', () => {
     expect(() => parseDeepSeekBalance({
       is_available: true,
