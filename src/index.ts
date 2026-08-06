@@ -74,18 +74,26 @@ export default {
     const config = parseConfig(env);
     const { cleanupOldUsage } = await import('./db/usage.ts');
     const { cleanupRequestLogs, cleanupKeyDailyUsage } = await import('./db/requests.ts');
+    const { cleanupAnalytics, cleanupContext, readAnalyticsSettings } = await import('./db/analytics.ts');
+
+    const settings = await readAnalyticsSettings(env.DB);
     const deletedRows = await cleanupOldUsage(env.DB, config.usageRetentionDays);
-    const deletedLogs = await cleanupRequestLogs(env.DB, config.requestLogRetentionDays);
+    const deletedAnalytics = await cleanupAnalytics(env.DB, config.usageRetentionDays);
+    const deletedLogs = await cleanupRequestLogs(env.DB, settings.requestLogRetentionDays);
     const deletedKeyUsage = await cleanupKeyDailyUsage(env.DB, config.usageRetentionDays);
+    const deletedContext = await cleanupContext(env.DB, settings.contextRetentionHours);
 
     logEvent({
       event: 'cron_cleanup_completed',
       timestamp: new Date().toISOString(),
       deleted_rows: deletedRows,
+      deleted_analytics: deletedAnalytics,
       deleted_logs: deletedLogs,
       deleted_key_usage: deletedKeyUsage,
+      deleted_context: deletedContext,
       retention_days: config.usageRetentionDays,
-      request_log_retention_days: config.requestLogRetentionDays,
+      request_log_retention_days: settings.requestLogRetentionDays,
+      context_retention_hours: settings.contextRetentionHours,
     });
   },
 };

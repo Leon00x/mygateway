@@ -1,4 +1,4 @@
-export type IconName = 'home' | 'channels' | 'models' | 'keys' | 'requests' | 'system' | 'docs' | 'logout' | 'search' | 'menu' | 'close' | 'moon' | 'sun' | 'panel-collapse' | 'panel-expand';
+export type IconName = 'home' | 'channels' | 'models' | 'keys' | 'analytics' | 'requests' | 'system' | 'docs' | 'logout' | 'search' | 'menu' | 'close' | 'moon' | 'sun' | 'panel-collapse' | 'panel-expand';
 
 export default function Icon(props: { name: IconName; size?: number; class?: string }) {
   const size = () => props.size ?? 18;
@@ -7,6 +7,7 @@ export default function Icon(props: { name: IconName; size?: number; class?: str
     channels: <><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="m8 7.5 2.8 7.7M16 7.5l-2.8 7.7M8.5 6h7"/></>,
     models: <><path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5M3 17l9 5 9-5"/></>,
     keys: <><circle cx="8" cy="15" r="5"/><path d="m11.5 11.5 8-8M16 7l3 3M14 9l3 3"/></>,
+    analytics: <><path d="M3 3v18h18"/><path d="m7 16 4-8 4 4 4-6"/></>,
     requests: <><path d="M8 3v4M16 3v4M4 9h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z"/><path d="M8 13h4M8 17h7"/></>,
     system: <><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21h-4v-.09A1.7 1.7 0 0 0 8.6 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3v-4h.09A1.7 1.7 0 0 0 4.6 8.6a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3h4v.09A1.7 1.7 0 0 0 15.4 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.14.37.36.71.66.98.3.27.68.42 1.08.42H21v4h-.09A1.7 1.7 0 0 0 19.4 15Z"/></>,
     docs: <><path d="M5 3h10l4 4v14H5z"/><path d="M14 3v5h5M8 13h8M8 17h6"/></>,

@@ -15,6 +15,7 @@ export class SseDecoder {
   private lastUsage: Usage | null = null;
   private _done = false;
   private _parseError = false;
+  private _firstContentFound = false;
 
   get done(): boolean {
     return this._done;
@@ -26,6 +27,11 @@ export class SseDecoder {
 
   get usage(): Usage | null {
     return this.lastUsage;
+  }
+
+  /** True once the decoder observes at least one content-bearing SSE event. */
+  get firstContentFound(): boolean {
+    return this._firstContentFound;
   }
 
   /**
@@ -85,15 +91,63 @@ export class SseDecoder {
     // Ignore event:, id:, retry: lines for MVP
   }
 
+  /** Check whether a parsed SSE event contains client-visible content. */
+  private eventHasContent(obj: Record<string, unknown>): boolean {
+    // OpenAI Chat: choices[].delta.content or choices[].delta.tool_calls
+    const choices = obj.choices;
+    if (Array.isArray(choices)) {
+      for (const c of choices) {
+        if (c && typeof c === 'object') {
+          const delta = (c as Record<string, unknown>).delta;
+          if (delta && typeof delta === 'object') {
+            const d = delta as Record<string, unknown>;
+            if (typeof d.content === 'string' && d.content.length > 0) return true;
+            if (Array.isArray(d.tool_calls) && d.tool_calls.length > 0) return true;
+          }
+        }
+      }
+    }
+    // OpenAI Responses: type === 'response.output_text.delta' with non-empty delta
+    if (typeof obj.type === 'string' && obj.type === 'response.output_text.delta') {
+      if (typeof obj.delta === 'string' && obj.delta.length > 0) return true;
+    }
+    // Anthropic Messages: content_block_delta with text_delta
+    if (typeof obj.type === 'string' && obj.type === 'content_block_delta') {
+      const delta = obj.delta;
+      if (delta && typeof delta === 'object') {
+        const d = delta as Record<string, unknown>;
+        if (d.type === 'text_delta' && typeof d.text === 'string' && d.text.length > 0) return true;
+        if (d.type === 'input_json_delta' && typeof d.partial_json === 'string' && d.partial_json.length > 0) return true;
+      }
+    }
+    // Anthropic: content_block_start with text
+    if (typeof obj.type === 'string' && obj.type === 'content_block_start') {
+      const block = obj.content_block;
+      if (block && typeof block === 'object') {
+        const b = block as Record<string, unknown>;
+        if (b.type === 'text' && typeof b.text === 'string' && b.text.length > 0) return true;
+        if (b.type === 'tool_use') return true;
+      }
+    }
+    // OpenAI Responses: response.output_item.added for tool calls
+    if (typeof obj.type === 'string' && obj.type === 'response.output_item.added') {
+      return true;
+    }
+    return false;
+  }
+
   private processEvent(data: string): void {
     if (data.trim() === '[DONE]') {
       this._done = true;
       return;
     }
 
-    // Try to parse as JSON and extract usage
+    // Try to parse as JSON, extract usage, and check for first content
     try {
       const obj = JSON.parse(data);
+      if (!this._firstContentFound && this.eventHasContent(obj)) {
+        this._firstContentFound = true;
+      }
       if (obj.usage && typeof obj.usage === 'object') {
         const prompt = obj.usage.prompt_tokens ?? obj.usage.input_tokens;
         const completion = obj.usage.completion_tokens ?? obj.usage.output_tokens;

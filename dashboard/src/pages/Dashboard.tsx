@@ -16,7 +16,7 @@ interface Channel { id: string; name: string; provider_type: string; base_url: s
 interface ModelItem { id: string; unified_model_id: string; display_name: string; status: string; }
 
 const shortcuts: { href: string; label: string; note: string; icon: IconName }[] = [
-  { href: '/channels', label: '添加渠道', note: '连接 Provider', icon: 'channels' },
+  { href: '/channels', label: '添加渠道', note: '连接供应商', icon: 'channels' },
   { href: '/models', label: '配置模型', note: '设置路由顺序', icon: 'models' },
   { href: '/keys', label: '创建密钥', note: '开放 API 调用', icon: 'keys' },
   { href: '/v1/api-docs', label: '接口文档', note: '查看请求规范', icon: 'docs' },
@@ -107,14 +107,14 @@ export default function Dashboard() {
       <section class="metric-grid">
         <Metric title="总请求" value={fmt(overview()?.requests)} note={range() === 'today' ? '今日调用' : `${range()} 调用`} tone="violet" />
         <Metric title="成功率" value={`${successRate()}%`} note={`${fmt(overview()?.successes)} 次成功`} tone="green" />
-        <Metric title="Token 用量" value={fmt((overview()?.input_tokens ?? 0) + (overview()?.output_tokens ?? 0))} note={`Provider 上报 · 覆盖率 ${usageCoverage()}%`} tone="orange" />
+        <Metric title="Token 用量" value={fmt((overview()?.input_tokens ?? 0) + (overview()?.output_tokens ?? 0))} note={`供应商上报 · 覆盖率 ${usageCoverage()}%`} tone="orange" />
         <Metric title="预估费用" value={spendLabel()} note="按渠道模型单价计算" tone="blue" />
       </section>
 
       <section class="dashboard-main-grid">
         <div class="panel endpoint-panel">
           <div class="panel-header">
-            <div><h2>Gateway Endpoint</h2><p>OpenAI Compatible API 入口</p></div>
+            <div><h2>网关接入地址</h2><p>OpenAI 兼容 API 入口</p></div>
             <span class="badge active">可用</span>
           </div>
           <div class="endpoint-body">
@@ -135,7 +135,7 @@ export default function Dashboard() {
 
         <div class="panel usage-panel">
           <div class="panel-header">
-            <div><h2>Usage Overview</h2><p>Provider 上报值，未知用量单独标记</p></div>
+            <div><h2>用量概览</h2><p>供应商上报值，未知用量单独标记</p></div>
             <div class="range-tabs">
               <For each={['today','7d','30d'] as const}>{(item) => <button classList={{ active: range() === item }} onClick={() => changeRange(item)}>{item === 'today' ? '今日' : item}</button>}</For>
             </div>
@@ -152,7 +152,7 @@ export default function Dashboard() {
       <Show when={visibleBalances().length > 0}>
         <section class="panel provider-balance-panel">
           <div class="panel-header">
-            <div><h2>Provider Balance</h2><p>DeepSeek 官方账户余额 · 各渠道独立展示，不跨账户或币种汇总</p></div>
+            <div><h2>供应商余额</h2><p>DeepSeek 官方账户余额 · 各渠道独立展示，不跨账户或币种汇总</p></div>
             <button class="secondary-button" disabled={balanceBusy()} onClick={refreshBalances}>
               {balanceBusy() ? '查询中…' : '刷新余额'}
             </button>

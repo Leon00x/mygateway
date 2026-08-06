@@ -10,6 +10,8 @@ import Channels from './pages/Channels';
 import Models from './pages/Models';
 import ApiKeys from './pages/ApiKeys';
 import Requests from './pages/Requests';
+import AnalyticsUsage from './pages/AnalyticsUsage';
+import AnalyticsLogs from './pages/AnalyticsLogs';
 import System from './pages/System';
 import Icon, { IconName } from './components/Icon';
 
@@ -79,20 +81,42 @@ function RequireReady(props: { children: JSX.Element }) {
   return props.children;
 }
 
-const navigation: { href: string; label: string; icon: IconName; end?: boolean }[] = [
-  { href: '/', label: '概览', icon: 'home', end: true },
-  { href: '/channels', label: '渠道', icon: 'channels' },
-  { href: '/models', label: '模型', icon: 'models' },
-  { href: '/keys', label: 'API 密钥', icon: 'keys' },
-  { href: '/requests', label: '请求日志', icon: 'requests' },
-  { href: '/system', label: '系统设置', icon: 'system' },
+interface NavigationItem {
+  href: string;
+  label: string;
+  icon: IconName;
+  end?: boolean;
+}
+
+const navigationSections: { label?: string; icon?: IconName; nested?: boolean; collapsible?: boolean; items: NavigationItem[] }[] = [
+  {
+    items: [
+      { href: '/', label: '概览', icon: 'home', end: true },
+      { href: '/channels', label: '渠道', icon: 'channels' },
+      { href: '/models', label: '模型', icon: 'models' },
+      { href: '/keys', label: 'API 密钥', icon: 'keys' },
+    ],
+  },
+  {
+    label: '分析',
+    icon: 'analytics',
+    nested: true,
+    collapsible: true,
+    items: [
+      { href: '/analytics/usage', label: '用量分析', icon: 'analytics' },
+      { href: '/analytics/logs', label: '请求日志', icon: 'requests' },
+    ],
+  },
+  { items: [{ href: '/system', label: '系统设置', icon: 'system' }] },
 ];
 
 const titles: Record<string, { title: string; subtitle: string }> = {
   '/': { title: '控制台概览', subtitle: '查看网关状态、资源配置和调用数据' },
-  '/channels': { title: '渠道管理', subtitle: '连接并管理 OpenAI Compatible 模型服务' },
+  '/channels': { title: '渠道管理', subtitle: '连接并管理 OpenAI 兼容模型服务' },
   '/models': { title: '模型路由', subtitle: '配置统一模型、渠道实例和故障回退顺序' },
   '/keys': { title: 'API 密钥', subtitle: '创建和管理调用 MyGateway 的访问凭据' },
+  '/analytics/usage': { title: '用量分析', subtitle: 'Token 用量、费用、延迟与成功率' },
+  '/analytics/logs': { title: '请求日志', subtitle: '查看最近调用的用量、费用与状态' },
   '/requests': { title: '请求日志', subtitle: '查看最近调用的用量、费用与状态' },
   '/system': { title: '系统设置', subtitle: '查看运行状态并维护管理员账号' },
 };
@@ -106,6 +130,7 @@ function AppLayout(props: { children?: JSX.Element }) {
   const page = () => titles[location.pathname] ?? titles['/'];
   const [theme, setTheme] = createSignal<'light' | 'dark'>(startupTheme);
   const [sidebarCollapsed, setSidebarCollapsed] = createSignal(readSidebarPreference());
+  const [analyticsExpanded, setAnalyticsExpanded] = createSignal(true);
 
   const applyTheme = (next: 'light' | 'dark') => {
     setTheme(next);
@@ -128,14 +153,38 @@ function AppLayout(props: { children?: JSX.Element }) {
         <aside class="sidebar">
           <A href="/" class="brand">
             <span class="brand-symbol">M</span>
-            <span><strong>MyGateway</strong><small>AI ROUTER</small></span>
+            <span><strong>MyGateway</strong></span>
           </A>
           <nav class="sidebar-nav">
-            <For each={navigation}>{(item) => (
-              <A href={item.href} end={item.end} class="nav-item" activeClass="active" title={sidebarCollapsed() ? item.label : undefined}>
-                <Icon name={item.icon} size={19} />
-                <span><strong>{item.label}</strong></span>
-              </A>
+            <For each={navigationSections}>{(section) => (
+              <section class="nav-section" classList={{
+                'nav-section-nested': Boolean(section.nested),
+                'nav-section-closed': Boolean(section.collapsible && !analyticsExpanded()),
+              }}>
+                <Show when={section.icon && section.label} fallback={
+                  <Show when={section.label}><div class="nav-section-label">{section.label}</div></Show>
+                }>
+                  <button
+                    type="button"
+                    class="nav-module-heading"
+                    classList={{ 'module-active': section.items.some((item) => location.pathname.startsWith(item.href)) }}
+                    aria-expanded={analyticsExpanded()}
+                    onClick={() => setAnalyticsExpanded(!analyticsExpanded())}
+                  >
+                    <Icon name={section.icon!} size={18} />
+                    <strong>{section.label}</strong>
+                    <span class="nav-module-caret" aria-hidden="true" />
+                  </button>
+                </Show>
+                <div class="nav-section-items">
+                  <For each={section.items}>{(item) => (
+                    <A href={item.href} end={item.end} class="nav-item" activeClass="active" title={sidebarCollapsed() ? item.label : undefined}>
+                      <Icon name={item.icon} size={18} />
+                      <span><strong>{item.label}</strong></span>
+                    </A>
+                  )}</For>
+                </div>
+              </section>
             )}</For>
           </nav>
           <div class="sidebar-bottom">
@@ -227,6 +276,8 @@ render(() => (
       <Route path="/models" component={() => <RequireReady><Models /></RequireReady>} />
       <Route path="/keys" component={() => <RequireReady><ApiKeys /></RequireReady>} />
       <Route path="/requests" component={() => <RequireReady><Requests /></RequireReady>} />
+      <Route path="/analytics/usage" component={() => <RequireReady><AnalyticsUsage /></RequireReady>} />
+      <Route path="/analytics/logs" component={() => <RequireReady><AnalyticsLogs /></RequireReady>} />
       <Route path="/system" component={() => <RequireReady><System /></RequireReady>} />
     </Router>
   </AuthProvider>

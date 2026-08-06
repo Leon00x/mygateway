@@ -44,7 +44,7 @@ test('2. wrong administrator credentials show error', async ({ page }) => {
 
 test('3. correct credentials log in → dashboard shows endpoint', async ({ page }) => {
   await loginViaUi(page);
-  await expect(page.getByText('Gateway Endpoint')).toBeVisible();
+  await expect(page.getByText('网关接入地址')).toBeVisible();
   await expect(page.locator('code').first()).toContainText('/v1');
 
   await page.getByRole('button', { name: '收起侧边栏' }).click();
@@ -145,18 +145,17 @@ test('5. create model card + add instance via UI', async ({ page, request }) => 
 
   // Expand the card and add an instance through the UI
   const cardRow = page.locator('.model-card', { hasText: modelId });
-  await cardRow.getByRole('button', { name: '实例' }).click();
-  await page.getByRole('button', { name: '+ 添加实例' }).click();
+  await cardRow.getByRole('button', { name: '+ 添加实例' }).click();
 
   // Select the channel in the dropdown
   await page.locator('form select').selectOption(ch.id);
   await page.getByPlaceholder('选择已发现模型或直接输入上游模型 ID').fill('deepseek-chat');
-  await page.getByPlaceholder('公开别名 (如 ds-deepseek-chat)').fill(channelAlias);
+  await page.getByPlaceholder('如 ds-deepseek-chat').fill(channelAlias);
   await page.getByRole('button', { name: '添加实例', exact: true }).click();
 
   // Instance row appears with alias + channel
   await expect(page.getByText(channelAlias, { exact: true })).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByText(new RegExp(channelName))).toBeVisible();
+  await expect(cardRow.getByText(channelName, { exact: true }).first()).toBeVisible();
 
   // Verify via API: card has 1 instance
   const models = await request.get('/admin/api/models').then((r) => r.json());
@@ -246,10 +245,10 @@ test('8. no auth → 401 from gateway', async ({ request }) => {
 
 test('9. dashboard shows channel and model', async ({ page }) => {
   await loginViaUi(page);
-  await expect(page.getByText('Gateway Endpoint')).toBeVisible();
+  await expect(page.getByText('网关接入地址')).toBeVisible();
   await expect(page.getByText(channelName, { exact: true }).first()).toBeVisible();
   await expect(page.getByText(modelId, { exact: true })).toBeVisible();
-  await expect(page.getByText('Provider Balance')).toBeVisible();
+  await expect(page.getByText('供应商余额')).toBeVisible();
   await expect(page.getByText('点击刷新后查询')).toBeVisible();
 });
 
@@ -301,7 +300,40 @@ test('10. delete channel reports impact and removes orphan models', async ({ pag
   expect(remainingModels.find((model: any) => model.unified_model_id === modelId)?.instances).toHaveLength(1);
 });
 
-test('11. logout returns to login', async ({ page }) => {
+test('11a. analytics usage page shows metric cards and filters', async ({ page }) => {
+  await loginViaUi(page);
+  const analyticsModule = page.locator('.sidebar').getByRole('button', { name: '分析' });
+  await expect(analyticsModule).toBeVisible();
+  await expect(analyticsModule.locator('svg')).toBeVisible();
+  await expect(analyticsModule).toHaveAttribute('aria-expanded', 'true');
+  await analyticsModule.click();
+  await expect(page.locator('.sidebar').getByRole('link', { name: /用量分析/ })).toBeHidden();
+  await analyticsModule.click();
+  await page.locator('.sidebar').getByRole('link', { name: /用量分析/ }).click();
+  await expect(page).toHaveURL(/\/analytics\/usage/);
+  await expect(page.getByRole('heading', { level: 1, name: '用量分析' })).toBeVisible();
+  await expect(page.locator('.analytics-card-layout')).toBeVisible({ timeout: 10_000 });
+  // Range tabs should be visible
+  await expect(page.getByRole('button', { name: '今日' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '过去 7 天' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '过去 30 天' })).toBeVisible();
+});
+
+test('11b. analytics logs page shows settings and log table', async ({ page }) => {
+  await loginViaUi(page);
+  await page.locator('.sidebar').getByRole('link', { name: /请求日志/ }).click();
+  await expect(page).toHaveURL(/\/analytics\/logs/);
+  await expect(page.getByRole('heading', { level: 1, name: '请求日志' })).toBeVisible();
+  // Settings area should toggle open
+  await page.getByRole('button', { name: '日志设置' }).click();
+  await expect(page.getByText('请求日志总开关')).toBeVisible();
+  await expect(page.getByText('记录上下文')).toBeVisible();
+  // Legacy /requests should redirect
+  await page.goto('/requests');
+  await expect(page).toHaveURL(/\/analytics\/logs/);
+});
+
+test('12. logout returns to login', async ({ page }) => {
   await loginViaUi(page);
   await page.getByRole('button', { name: /管理员菜单/ }).click();
   await expect(page.getByText(ADMIN_USERNAME, { exact: true })).toBeVisible();

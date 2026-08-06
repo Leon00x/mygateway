@@ -15,7 +15,7 @@
 
 ## 2. 单元测试
 
-当前共有 18 个测试文件、96 个用例：
+当前共有 19 个测试文件、123 个用例：
 
 | 文件 | 覆盖重点 |
 |---|---|
@@ -23,7 +23,7 @@
 | `balance-refresh-repro.test.ts` | 强制刷新、五分钟缓存和概览回读 |
 | `deepseek-balance.test.ts` | 官方 host、金额精度、鉴权和错误清理 |
 | `key-quota.test.ts` | 密钥到期、RPM 窗口、每日预算台账与成本计算 |
-| `log-policy.test.ts` | 日志级别开关、错误详情与用量写入不受开关影响 |
+| `log-policy.test.ts` | 日志总开关、级别策略、合并 batch、TTFT 与上下文写入矩阵 |
 | `fallback-policy.test.ts` | HTTP / Provider 错误分类 |
 | `model-discovery.test.ts` | OpenAI / Gemini / Anthropic 模型列表、分页和 ID 规范化 |
 | `passive-circuit-breaker.test.ts` | 阈值、冷却、恢复和容量 |
@@ -37,6 +37,7 @@
 | `sse-decoder.test.ts` | 任意分片、UTF-8、多事件和 usage |
 | `ttl-lru.test.ts` | TTL、LRU 和容量淘汰 |
 | `usage.test.ts` | 时区、统计范围、Token 校验和终态幂等 |
+| `analytics.test.ts` | 5 分钟桶、上下文 AES-GCM 与 4 KiB 截断、三协议 SSE 有效内容检测 |
 
 运行：
 
@@ -88,7 +89,7 @@ E2E 会创建、修改和删除渠道、模型与 Gateway Key。不要指向包�
 
 ## 4. UI 旅程
 
-`e2e/journey.spec.ts` 当前 11 个串行用例：
+`e2e/journey.spec.ts` 当前 13 个串行用例：
 
 1. 未登录访问跳转登录页；
 2. 错误管理员凭据显示错误；
@@ -101,7 +102,9 @@ E2E 会创建、修改和删除渠道、模型与 Gateway Key。不要指向包�
 8. 无 Gateway Key 返回 401；
 9. Dashboard 显示渠道、模型和 Provider Balance；
 10. 删除渠道显示关联影响，清理失去最后实例的统一模型，并保留仍有备用渠道的模型；
-11. 退出登录回到登录页。
+11. Analytics Usage 页面展示指标卡、模型表和筛选切换；
+12. Analytics Logs 页面展示日志表、游标分页、详情抽屉和设置区；
+13. 退出登录回到登录页。
 
 该套件不需要有效 Provider Key，但 Chat 错误透传用例会用 dummy key 请求 DeepSeek 并期待
 401，因此运行环境需要能够访问其 API。

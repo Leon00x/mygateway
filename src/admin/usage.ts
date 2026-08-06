@@ -1,10 +1,10 @@
 /**
- * Admin usage API handlers.
+ * Admin usage API handlers — now reads from analytics_minutes for backward compat.
  */
 
 import { Env } from '../env.ts';
 import { gatewayErrorResponse } from '../http/errors.ts';
-import { getOverview, getUsageRange } from '../db/usage.ts';
+import { getUsageRange } from '../db/usage.ts';
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -33,7 +33,38 @@ export async function handleUsageOverview(
 ): Promise<Response> {
   const range = parseRange(url);
   const { start, end } = usageRange(range, env);
-  const overview = await getOverview(env.DB, start, end);
+  const overview = await env.DB
+    .prepare(
+      `SELECT
+        COALESCE(SUM(request_count), 0) AS requests,
+        COALESCE(SUM(success_count), 0) AS successes,
+        COALESCE(SUM(error_count), 0) AS errors,
+        COALESCE(SUM(cancelled_count), 0) AS cancelled,
+        COALESCE(SUM(fallback_count), 0) AS fallbacks,
+        COALESCE(SUM(input_tokens), 0) AS input_tokens,
+        COALESCE(SUM(output_tokens), 0) AS output_tokens,
+        COALESCE(SUM(usage_unknown_count), 0) AS usage_unknown,
+        COALESCE(SUM(cost_micros), 0) AS cost_micros
+      FROM analytics_minutes
+      WHERE timestamp_minute >= ? AND timestamp_minute < ?`,
+    )
+    .bind(start, end)
+    .first<{
+      requests: number; successes: number; errors: number; cancelled: number;
+      fallbacks: number; input_tokens: number; output_tokens: number;
+      usage_unknown: number; cost_micros: number;
+    }>()
+    .then((r) => ({
+      requests: Number(r?.requests ?? 0),
+      successes: Number(r?.successes ?? 0),
+      errors: Number(r?.errors ?? 0),
+      cancelled: Number(r?.cancelled ?? 0),
+      fallbacks: Number(r?.fallbacks ?? 0),
+      input_tokens: Number(r?.input_tokens ?? 0),
+      output_tokens: Number(r?.output_tokens ?? 0),
+      usage_unknown: Number(r?.usage_unknown ?? 0),
+      cost_micros: Number(r?.cost_micros ?? 0),
+    }));
   return json({ range, ...overview });
 }
 
@@ -59,7 +90,7 @@ export async function handleUsageByModel(
         COALESCE(SUM(input_tokens), 0) AS input_tokens,
         COALESCE(SUM(output_tokens), 0) AS output_tokens,
         COALESCE(SUM(cost_micros), 0) AS cost_micros
-      FROM usage_minutes
+      FROM analytics_minutes
       WHERE timestamp_minute >= ? AND timestamp_minute < ?
       GROUP BY model_card_id, unified_model_id_snapshot`,
     )
@@ -91,7 +122,7 @@ export async function handleUsageByChannel(
         COALESCE(SUM(input_tokens), 0) AS input_tokens,
         COALESCE(SUM(output_tokens), 0) AS output_tokens,
         COALESCE(SUM(cost_micros), 0) AS cost_micros
-      FROM usage_minutes
+      FROM analytics_minutes
       WHERE timestamp_minute >= ? AND timestamp_minute < ?
       GROUP BY channel_id, channel_name_snapshot`,
     )
@@ -102,12 +133,15 @@ export async function handleUsageByChannel(
 }
 
 /**
- * DELETE /admin/api/usage
+ * DELETE /admin/api/usage — clears both analytics_minutes and usage_minutes.
  */
 export async function handleUsageClear(
   env: Env,
   requestId: string,
 ): Promise<Response> {
-  await env.DB.prepare('DELETE FROM usage_minutes').run();
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM usage_minutes'),
+    env.DB.prepare('DELETE FROM analytics_minutes'),
+  ]);
   return json({ ok: true });
 }

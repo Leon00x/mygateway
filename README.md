@@ -183,8 +183,8 @@ curl https://your-gateway.workers.dev/v1/chat/completions \
 | 外部子请求 | 50/请求 | 最多尝试 3 个 Provider，候选串行而非广播 |
 | 并发出站连接 | 6/请求 | 单请求顺序尝试渠道 |
 | D1 读取 | 5,000,000 行/天 | 索引、一次 batch、短 TTL isolate 缓存 |
-| D1 写入 | 100,000 行/天 | 每个完成请求一次 usage + 密钥用量 + 日志写入（同一 waitUntil）；轻量使用建议不超过约 30,000 次调用/天 |
-| D1 存储 | 500MB/数据库、账号总计 5GB | 一个数据库，分钟聚合 30 天、请求日志 7 天、密钥用量 30 天 |
+| D1 写入 | 100,000 行/天 | 每个完成请求一次 Analytics 聚合 + 密钥用量 + 可选日志写入（同一 waitUntil，`batch()` 提交）；轻量使用建议不超过约 30,000 次调用/天 |
+| D1 存储 | 500MB/数据库、账号总计 5GB | 一个数据库，分钟聚合 30 天、请求日志 1–7 天（控制台可调）、密钥用量 30 天 |
 | Workers Logs | 200,000 事件/天、保留 3 天 | 10% head sampling 和脱敏事件 |
 
 ### 我们如何减少额度消耗
@@ -237,7 +237,7 @@ D1 索引写放大、Cloudflare 账号中的其他 Worker，以及异常或恶�
 | `MAX_CHANNEL_ATTEMPTS` | `3` | 每请求最多尝试渠道数 |
 | `UPSTREAM_HEADER_TIMEOUT_MS` | `30000` | 上游响应头超时 |
 | `USAGE_RETENTION_DAYS` | `30` | 分钟用量与密钥用量保留天数 |
-| `REQUEST_LOG_RETENTION_DAYS` | `7` | 请求日志保留天数 |
+| 日志保留天数 / 上下文保留 | 控制台日志设置 | 在 `system_settings` 中配置（1/3/7 天、1–168 小时） |
 | `KEY_QUOTA_REFRESH_MS` | `5000` | 每日预算台账刷新 D1 的间隔（降低每请求 D1 读） |
 
 ## 6. 当前产品边界
@@ -254,8 +254,24 @@ D1 索引写放大、Cloudflare 账号中的其他 Worker，以及异常或恶�
 
 ## 7. Roadmap
 
+### 已确认：Analytics（Usage / Logs）重构
+
+- 左侧导航新增 Analytics 分组，包含 Usage 与 Logs；页面内保留同名分段切换，旧
+  `/requests` 地址兼容跳转到 `/analytics/logs`。
+- Usage 提供时间范围、统一模型、Gateway Key 和聚合粒度筛选；展示 Token、请求量、
+  平均延迟、流式 TTFT、成功率与预估费用，并提供模型维度明细。
+- Logs 提供时间范围、模型、Key、渠道、状态和 Request ID 筛选，使用游标分页与按需刷新；
+  行详情展示路由尝试、Fallback、Token、费用、延迟和脱敏错误，不默认保存请求或响应正文。
+- 请求明细日志提供总开关，并保留异常/正常级别开关。上下文记录是独立的显式选项，默认关闭；
+  开启后只保存有上限、加密且短期保留的请求/响应预览，不记录 Header 或任何密钥。
+- 聚合指标始终保留，以支持用量、费用和预算；明细日志关闭时不写 `request_logs`。指标、Key
+  日用量和可选日志在同一个 `waitUntil()` 中通过一次 D1 `batch()` 提交，不阻塞模型响应。
+- 指标使用五分钟桶和有界保留期；日志列表默认不自动轮询、不做无条件总数查询。该能力不引入
+  KV、R2、Queues、Durable Objects 或外部日志服务，继续以 Cloudflare Free Tier 为约束。
+
 近期：
 
+- 发布 Analytics（Usage / Logs）重构并完成 Free Tier 写入基线验证；
 - 使用 OpenAI SDK 验证 Chat 和原生 Responses 的真实流式/非流式调用；
 - 使用 Anthropic SDK 验证原生 Messages 和 Messages → Chat 转换；
 - 完善自定义渠道的协议端点编辑校验和变更影响提示；

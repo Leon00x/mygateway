@@ -454,11 +454,11 @@ export default function Channels() {
 
   return <div class="resource-page channel-page">
     <div class="page-heading">
-      <div><h2>Provider Channels</h2><p>集中管理供应商协议、余额与可用模型。</p></div>
+      <div><h2>供应商渠道</h2><p>集中管理接入协议、账户余额与可用模型。</p></div>
       <button onClick={openProviderPicker} class="primary-button">+ 添加供应商</button>
     </div>
 
-    <div class="channel-list-toolbar"><div><strong>已连接渠道</strong><span>{channels().length} 个 Provider 配置</span></div><input placeholder="搜索渠道" value={query()} onInput={(event) => setQuery(event.currentTarget.value)} /></div>
+    <div class="channel-list-toolbar"><div><strong>已连接渠道</strong><span>{channels().length} 个供应商配置</span></div><input placeholder="搜索渠道" value={query()} onInput={(event) => setQuery(event.currentTarget.value)} /></div>
     <Show when={loading()}><p class="empty-state">Loading...</p></Show>
     <Show when={!loading() && channels().length === 0}><div class="panel empty-state"><span class="provider-logo">+</span><h3>还没有渠道</h3><p>添加供应商后即可检测并导入模型。</p></div></Show>
 

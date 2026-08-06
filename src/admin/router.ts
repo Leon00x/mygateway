@@ -33,7 +33,6 @@ import { handleChannelBalance, handleChannelBalances } from './provider-balances
 import { handleModelsCollection, handleModelItem, handleModelInstances, handleReorderInstances, handleModelInstanceItem } from './models.ts';
 import { handleKeysCollection, handleKeyItem, handleKeyRegenerate } from './keys.ts';
 import { handleUsageOverview, handleUsageByModel, handleUsageByChannel, handleUsageClear } from './usage.ts';
-import { handleRequests } from './requests.ts';
 import {
   handleChannelModelImport,
   handleChannelModelRefresh,
@@ -204,11 +203,6 @@ export async function handleAdminApi(
     return handleKeyItem(request, id, env, requestId);
   }
 
-  // --- Recent requests ---
-  if (path === '/admin/api/requests') {
-    return handleRequests(request, url, env, requestId);
-  }
-
   // --- Usage ---
   if (path === '/admin/api/usage/overview') {
     return handleUsageOverview(url, env, requestId);
@@ -239,6 +233,29 @@ export async function handleAdminApi(
   if (path === '/admin/api/settings/logging') {
     const { handleLoggingSettings } = await import('./system.ts');
     return handleLoggingSettings(request, env, requestId);
+  }
+
+  // --- Analytics ---
+  if (path === '/admin/api/analytics/usage' && request.method === 'GET') {
+    const { handleAnalyticsUsage } = await import('./analytics.ts');
+    return handleAnalyticsUsage(request, url, env, requestId);
+  }
+  if (path === '/admin/api/analytics/settings' && (request.method === 'GET' || request.method === 'PUT')) {
+    const { handleAnalyticsSettings } = await import('./analytics.ts');
+    return handleAnalyticsSettings(request, env, requestId);
+  }
+  if (path === '/admin/api/analytics/logs' && request.method === 'DELETE') {
+    const { handleAnalyticsLogsClear } = await import('./analytics.ts');
+    return handleAnalyticsLogsClear(request, env, requestId);
+  }
+  if (path === '/admin/api/analytics/logs' && request.method === 'GET') {
+    const { handleAnalyticsLogs } = await import('./analytics.ts');
+    return handleAnalyticsLogs(request, url, env, requestId);
+  }
+  if (path.match(/^\/admin\/api\/analytics\/logs\/[^/]+$/) && request.method === 'GET') {
+    const { handleAnalyticsLogDetail } = await import('./analytics.ts');
+    const id = path.split('/').pop()!;
+    return handleAnalyticsLogDetail(request, id, env, requestId);
   }
 
   if (path === '/admin/api/system/presets') {

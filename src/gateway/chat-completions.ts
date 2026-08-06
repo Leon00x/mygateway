@@ -177,7 +177,7 @@ async function handleProtocolCompletion(
   // 2a. Virtual-key expiry
   if (keyIsExpired(key)) {
     ctx.waitUntil(recordRejectedRequest(env, {
-      ...resolvedModel, keyId: key.id, keyName: key.name, requestId,
+      ...resolvedModel, keyId: key.id, keyName: key.name, requestId, requestedProtocol,
     }, 'expired', elapsedMs(requestStartedAt), logPolicy, 'key_expired'));
     return timed(gatewayErrorResponse('invalid_api_key', 'API key has expired', requestId));
   }
@@ -200,7 +200,7 @@ async function handleProtocolCompletion(
   // 2b. Virtual-key model allowlist
   if (key.modelAllowlist.length > 0 && !key.modelAllowlist.includes(unifiedModelId)) {
     ctx.waitUntil(recordRejectedRequest(env, {
-      model: unifiedModelId, modelCardId, keyId: key.id, keyName: key.name, requestId,
+      model: unifiedModelId, modelCardId, keyId: key.id, keyName: key.name, requestId, requestedProtocol,
     }, 'not_allowed', elapsedMs(requestStartedAt), logPolicy, 'model_not_in_allowlist'));
     return timed(gatewayErrorResponse(
       'model_not_allowed',
@@ -213,7 +213,7 @@ async function handleProtocolCompletion(
   // 2c. Per-minute rate limit (per-isolate best effort)
   if (!checkRpm(key.id, key.rpmLimit)) {
     ctx.waitUntil(recordRejectedRequest(env, {
-      model: unifiedModelId, modelCardId, keyId: key.id, keyName: key.name, requestId,
+      model: unifiedModelId, modelCardId, keyId: key.id, keyName: key.name, requestId, requestedProtocol,
     }, 'rate_limited', elapsedMs(requestStartedAt), logPolicy, 'rpm_limit_exceeded'));
     const respHeaders = gatewayResponseHeaders(requestId);
     respHeaders.set('Retry-After', '60');
@@ -229,7 +229,7 @@ async function handleProtocolCompletion(
   if (!quota.allowed) {
     const isTokens = quota.reason === 'daily_tokens';
     ctx.waitUntil(recordRejectedRequest(env, {
-      model: unifiedModelId, modelCardId, keyId: key.id, keyName: key.name, requestId,
+      model: unifiedModelId, modelCardId, keyId: key.id, keyName: key.name, requestId, requestedProtocol,
     }, 'budget_exceeded', elapsedMs(requestStartedAt), logPolicy, quota.reason));
     return timed(gatewayErrorResponse(
       'budget_exceeded',
@@ -324,6 +324,10 @@ async function handleProtocolCompletion(
       keyName: key.name,
       requestId,
       policy: logPolicy,
+      requestedProtocol,
+      contextRequest: logPolicy.logsEnabled && logPolicy.logContext && bodyText
+        ? bodyText
+        : undefined,
     }, 'error', null, elapsedMs(requestStartedAt), truncate(errorDetail)));
   };
 
@@ -538,6 +542,12 @@ async function handleProtocolCompletion(
       circuitSkippedCount,
     };
 
+    // Collect request context preview when logging + context are both enabled
+    let contextRequest: string | undefined;
+    if (logPolicy.logsEnabled && logPolicy.logContext && bodyText) {
+      contextRequest = bodyText.length > 4096 ? bodyText.slice(0, 4096) : bodyText;
+    }
+
     const usageCtx: UsageRecordContext = {
       modelCardId,
       unifiedModelId,
@@ -553,6 +563,9 @@ async function handleProtocolCompletion(
       keyName: key.name,
       requestId,
       policy: logPolicy,
+      requestedProtocol,
+      ttftMs: undefined,
+      contextRequest,
     };
 
     // 4a. Non-streaming
@@ -632,6 +645,9 @@ async function handleNonStreamResponse(
       return gatewayErrorResponse('unsupported_protocol_feature', message, requestId, feature);
     }
     const usage = extractNonStreamUsage(raw);
+    if (usageCtx.policy.logsEnabled && usageCtx.policy.logContext) {
+      usageCtx.contextResponse = JSON.stringify(converted);
+    }
     ctx.waitUntil(recordRequestCompletion(
       env, usageCtx, 'success', usage, elapsedMs(requestPerformance.requestStartedAt),
     ));
@@ -650,13 +666,19 @@ async function handleNonStreamResponse(
   const usagePromise = (async () => {
     let outcome: 'success' | 'usage_unknown' = 'success';
     let usage: Usage | null = null;
+    let responseText = '';
     try {
-      const text = await new Response(usageBranch).text();
-      const json = JSON.parse(text);
+      responseText = await new Response(usageBranch).text();
+      const json = JSON.parse(responseText);
       usage = extractNonStreamUsage(json);
       if (!usage) outcome = 'usage_unknown';
     } catch {
       outcome = 'usage_unknown';
+    }
+
+    // Capture response context preview when logContext is enabled
+    if (usageCtx.policy.logsEnabled && usageCtx.policy.logContext && responseText) {
+      usageCtx.contextResponse = responseText.length > 4096 ? responseText.slice(0, 4096) : responseText;
     }
 
     try {
@@ -715,12 +737,53 @@ function handleStreamResponse(
     ? null
     : new ProtocolSseTransformer(upstreamProtocol, requestedProtocol, usageCtx.unifiedModelId);
 
+  // TTFT: time to first valid output content, measured when the SSE decoder
+  // confirms a content-bearing event (text delta or tool call).
+  let ttftCaptured = false;
+  // Incremental response context collection (max 4 KiB) — only when logContext is on
+  const collectContext = usageCtx.policy.logsEnabled && usageCtx.policy.logContext;
+  let contextBytes = 0;
+  const CONTEXT_MAX = 4096;
+  let contextChunks: string[] | null = collectContext ? [] : null;
+  const contextDecoder = collectContext ? new TextDecoder() : null;
+
+  const collectClientChunk = (chunk: Uint8Array, flush = false) => {
+    if (contextChunks === null || contextDecoder === null || contextBytes >= CONTEXT_MAX) return;
+    const text = contextDecoder.decode(chunk, { stream: !flush });
+    if (!text) return;
+    const encoded = new TextEncoder().encode(text);
+    if (contextBytes + encoded.byteLength <= CONTEXT_MAX) {
+      contextChunks.push(text);
+      contextBytes += encoded.byteLength;
+      return;
+    }
+    let preview = '';
+    for (const char of text) {
+      const size = new TextEncoder().encode(char).byteLength;
+      if (contextBytes + size > CONTEXT_MAX) break;
+      preview += char;
+      contextBytes += size;
+    }
+    if (preview) contextChunks.push(preview);
+  };
+
   const finalize = onceAsync(async (outcome: 'success' | 'error' | 'cancelled') => {
     decoder.flush();
+    // Check for late content in flushed events
+    if (!ttftCaptured && decoder.firstContentFound) {
+      ttftCaptured = true;
+      usageCtx.ttftMs = elapsedMs(requestPerformance.requestStartedAt);
+    }
     const usage = decoder.parseError ? null : decoder.usage;
     const errorDetail = outcome === 'error'
       ? (decoder.parseError ? 'stream_parse_error: upstream SSE did not parse as valid JSON events' : 'stream_error')
       : undefined;
+    // Inject TTFT into the usage context before recording
+    usageCtx.ttftMs = ttftCaptured ? usageCtx.ttftMs : undefined;
+    // Assemble collected response context
+    if (usageCtx.policy.logsEnabled && usageCtx.policy.logContext && contextChunks && contextChunks.length > 0) {
+      usageCtx.contextResponse = contextChunks.join('');
+    }
     try {
       await recordRequestCompletion(
         env, usageCtx, outcome, usage, elapsedMs(requestPerformance.requestStartedAt), errorDetail,
@@ -760,20 +823,33 @@ function handleStreamResponse(
           const result = await reader.read();
           if (result.done) {
             if (transformer) {
-              for (const chunk of transformer.flush()) controller.enqueue(chunk);
+              for (const chunk of transformer.flush()) {
+                collectClientChunk(chunk);
+                controller.enqueue(chunk);
+              }
             }
+            if (contextDecoder) collectClientChunk(new Uint8Array(), true);
             await finalize('success');
             controller.close();
             return;
           }
           decoder.observe(result.value);
+          // Capture TTFT only when decoder confirms first content-bearing event
+          if (!ttftCaptured && decoder.firstContentFound) {
+            ttftCaptured = true;
+            usageCtx.ttftMs = elapsedMs(requestPerformance.requestStartedAt);
+          }
           if (!transformer) {
+            collectClientChunk(result.value);
             controller.enqueue(result.value);
             return;
           }
           const converted = transformer.push(result.value);
           if (converted.length === 0) continue;
-          for (const chunk of converted) controller.enqueue(chunk);
+          for (const chunk of converted) {
+            collectClientChunk(chunk);
+            controller.enqueue(chunk);
+          }
           return;
         }
       } catch (e) {

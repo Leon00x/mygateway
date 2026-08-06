@@ -35,9 +35,6 @@ export interface Env {
   /** Usage retention in days. Default: 30 */
   USAGE_RETENTION_DAYS?: string;
 
-  /** Recent request log retention in days. Default: 7 */
-  REQUEST_LOG_RETENTION_DAYS?: string;
-
   /**
    * How often a key's daily quota re-reads D1, in ms. Between refreshes the
    * isolate adds its own completed requests locally. Default: 5000
@@ -53,7 +50,6 @@ export interface RuntimeConfig {
   maxChannelAttempts: number;
   upstreamHeaderTimeoutMs: number;
   usageRetentionDays: number;
-  requestLogRetentionDays: number;
   keyQuotaRefreshMs: number;
 }
 
@@ -64,7 +60,6 @@ const DEFAULTS = {
   maxChannelAttempts: 3,
   upstreamHeaderTimeoutMs: 30_000,
   usageRetentionDays: 30,
-  requestLogRetentionDays: 7,
   keyQuotaRefreshMs: 5_000,
 } as const;
 
@@ -94,8 +89,6 @@ export function parseConfig(env: Env): RuntimeConfig {
     upstreamHeaderTimeoutMs:
       parseInt(env.UPSTREAM_HEADER_TIMEOUT_MS ?? '', 10) || DEFAULTS.upstreamHeaderTimeoutMs,
     usageRetentionDays: parseInt(env.USAGE_RETENTION_DAYS ?? '', 10) || DEFAULTS.usageRetentionDays,
-    requestLogRetentionDays:
-      parseInt(env.REQUEST_LOG_RETENTION_DAYS ?? '', 10) || DEFAULTS.requestLogRetentionDays,
     keyQuotaRefreshMs:
       parseInt(env.KEY_QUOTA_REFRESH_MS ?? '', 10) || DEFAULTS.keyQuotaRefreshMs,
   };
