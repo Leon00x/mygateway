@@ -214,18 +214,12 @@ D1 索引写放大、Cloudflare 账号中的其他 Worker，以及异常或恶�
 - 如果代表性负载持续接近额度，应降低统计/日志开销或升级 Workers Paid，不能静默牺牲
   安全校验和流式正确性。
 
-## 5. 安全和数据边界
+## 5. 安全（够用就行）
 
-- Provider Key 使用 `MASTER_KEY` 通过 AES-GCM 加密后写入 D1；
-- Gateway Key 只保存 SHA-256 hash，明文只展示一次；
-- 管理密码使用带随机盐的 PBKDF2-SHA256 摘要；
-- 管理 Session 使用 HttpOnly、Secure、SameSite=Strict Cookie；
-- 管理写操作执行同源检查；
-- Base URL 只允许合法 HTTPS 地址；
-- 日志默认不记录 Prompt/Response 正文；显式开启“记录上下文”后仅加密保存 4 KiB 预览并短期保留；
-- 日志在任何情况下都不记录 Key、Authorization 或 Provider Key；
-- 请求体和上游错误体均有大小限制；
-- D1 是配置的唯一权威数据源，内存缓存可随时丢失。
+面向个人开发者和小团队，安全做到“够用”即可：
+
+- Provider Key 用 `MASTER_KEY` AES-GCM 加密存储；Gateway Key 只存哈希，明文只显示一次；
+- 控制台需要登录；日志不记录任何密钥凭证，默认不存对话内容（排查时可在日志设置里显式开启加密的短期预览）。
 
 ### 可调配置（Worker Secrets / Vars）
 

@@ -1,42 +1,10 @@
-# Security Policy
+# Security
 
-## Supported versions
+面向个人开发者与小团队的轻量网关，安全做到“够用”即可。
 
-MyGateway is a small personal-gateway project. Only the latest commit on
-`main` is supported; releases are cut from `main` when meaningful.
+发现安全问题直接开 issue 说明即可，避免在 issue 里贴出密钥或日志原文。
 
-## Reporting a vulnerability
+部署提醒：
 
-Please **do not open a public issue** for security problems. Report them
-privately instead:
-
-- GitHub: use the "Report a vulnerability" flow on the repository
-  (Security → Advisories), or
-- Email the maintainer via the address listed on the GitHub profile.
-
-We aim to acknowledge reports within 72 hours and to ship a fix in a timely
-manner depending on severity.
-
-## What is in scope
-
-- Gateway authentication bypass (using another gateway key, or provider keys)
-- Injection into D1 queries via admin or gateway inputs
-- Exposure of `MASTER_KEY`, provider keys, gateway key material, or admin
-  session cookies
-- Misconfiguration that breaks the "provider key stays encrypted" guarantee
-
-## Security notes for operators
-
-- `MASTER_KEY` is shown **once** at deploy time. Keep it in Cloudflare Secrets,
-  never in the repository or client code.
-- Provider API keys are encrypted at rest (AES-GCM with `MASTER_KEY`) and only
-  decrypted in-process when a request is routed to that provider.
-- Gateway keys are stored as SHA-256 hashes; the raw key is shown once at
-  creation and cannot be recovered later.
-- Admin API requires a session cookie; mutation requests are protected against
-  cross-origin CSRF. Keep the dashboard behind an allowlist or same-origin
-  network controls if your workload needs them.
-- Request logs record metadata (key, model, channel, tokens, cost, timing) by
-  default. Prompt/response previews are only stored when the admin explicitly
-  enables the encrypted “record context” option (4 KiB per direction, short
-  retention); keys, Authorization and provider credentials are never logged.
+- `MASTER_KEY` 首次部署只显示一次，保存在 Cloudflare Secrets 中，不要提交到代码仓库；
+- Provider Key 由网关加密存储，Gateway Key 只保存哈希，明文都不会再次展示。
