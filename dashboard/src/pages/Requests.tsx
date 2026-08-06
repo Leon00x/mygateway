@@ -17,6 +17,7 @@ interface RequestLog {
   attempt_count: number;
   fallback: number;
   latency_ms: number;
+  error_detail: string | null;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -38,6 +39,30 @@ export default function Requests() {
   const [status, setStatus] = createSignal('all');
   const [limit, setLimit] = createSignal(50);
   const [refreshing, setRefreshing] = createSignal(false);
+  const [logSuccess, setLogSuccess] = createSignal(true);
+  const [logErrors, setLogErrors] = createSignal(true);
+  const [policyBusy, setPolicyBusy] = createSignal(false);
+
+  const fetchPolicy = async () => {
+    const response = await fetch('/admin/api/settings/logging');
+    if (response.ok) {
+      const data = await response.json() as { log_success: boolean; log_errors: boolean };
+      setLogSuccess(data.log_success);
+      setLogErrors(data.log_errors);
+    }
+  };
+
+  const updatePolicy = async (patch: { log_success?: boolean; log_errors?: boolean }) => {
+    setPolicyBusy(true);
+    try {
+      const response = await fetch('/admin/api/settings/logging', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
+      if (response.ok) await fetchPolicy();
+    } finally { setPolicyBusy(false); }
+  };
 
   const fetchLogs = async () => {
     setRefreshing(true);
@@ -52,7 +77,7 @@ export default function Requests() {
     } finally { setRefreshing(false); setLoading(false); }
   };
 
-  onMount(() => { void fetchLogs(); setInterval(() => void fetchLogs(), 15_000); });
+  onMount(() => { void fetchLogs(); void fetchPolicy(); setInterval(() => void fetchLogs(), 15_000); });
 
   return (
     <div class="resource-page">
@@ -64,6 +89,12 @@ export default function Requests() {
       </div>
 
       <div class="requests-toolbar">
+        <div class="log-policy-switches">
+          <span class="log-policy-label">记录级别</span>
+          <label class="checkbox-label"><input type="checkbox" checked={logErrors()} disabled={policyBusy()} onChange={(e) => void updatePolicy({ log_errors: e.currentTarget.checked })} />异常日志</label>
+          <label class="checkbox-label"><input type="checkbox" checked={logSuccess()} disabled={policyBusy()} onChange={(e) => void updatePolicy({ log_success: e.currentTarget.checked })} />正常日志</label>
+          <small class="log-policy-hint">关闭只停止记录明细日志，用量统计与预算扣减不受影响；异常日志会附带错误详情。</small>
+        </div>
         <label>状态
           <select value={status()} onChange={(e) => { setStatus(e.currentTarget.value); void fetchLogs(); }}>
             <option value="all">全部</option>
@@ -106,6 +137,9 @@ export default function Requests() {
                 <span class="req-tokens">{log.input_tokens.toLocaleString()} / {log.output_tokens.toLocaleString()}</span>
                 <span class="req-cost">{formatUsd(log.cost_micros)}</span>
                 <span class="req-latency">{log.latency_ms}ms{log.fallback ? ' · 回退' : ''}{log.attempt_count > 1 ? ` · ${log.attempt_count}次` : ''}</span>
+                <Show when={log.error_detail}>
+                  <span class="req-error-detail" title={log.error_detail}>{log.error_detail}</span>
+                </Show>
               </div>
             )}</For>
           </div>

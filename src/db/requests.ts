@@ -80,6 +80,7 @@ export interface RequestLogInput {
   attemptCount: number;
   fallback: boolean;
   latencyMs: number;
+  errorDetail?: string;
 }
 
 export interface RequestLogRow {
@@ -101,6 +102,7 @@ export interface RequestLogRow {
   attempt_count: number;
   fallback: number;
   latency_ms: number;
+  error_detail: string | null;
 }
 
 export async function insertRequestLog(
@@ -113,8 +115,8 @@ export async function insertRequestLog(
         id, timestamp, request_id, key_id, key_name,
         model_card_id, unified_model_id, channel_id, channel_name,
         status, stream, cached, input_tokens, output_tokens, cost_micros,
-        attempt_count, fallback, latency_ms
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        attempt_count, fallback, latency_ms, error_detail
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       entry.id,
@@ -135,6 +137,7 @@ export async function insertRequestLog(
       entry.attemptCount,
       entry.fallback ? 1 : 0,
       entry.latencyMs,
+      entry.errorDetail ?? null,
     )
     .run();
 }

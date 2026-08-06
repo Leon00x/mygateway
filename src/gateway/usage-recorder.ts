@@ -9,6 +9,7 @@ import { computeCostMicros } from '../shared/cost.ts';
 import { upsertUsageMinute } from '../db/usage.ts';
 import { insertRequestLog, upsertKeyDailyUsage, utcDateString, type RequestLogStatus } from '../db/requests.ts';
 import { bumpKeyQuotaLedger } from './key-quota.ts';
+import type { LogPolicy } from './log-policy.ts';
 import type { Usage } from '../streaming/sse-decoder.ts';
 
 export interface UsageRecordContext {
@@ -25,6 +26,8 @@ export interface UsageRecordContext {
   keyId: string;
   keyName: string;
   requestId: string;
+  /** Request-log level policy (only gates the detail log, never usage/budget). */
+  policy: LogPolicy;
 }
 
 export type RecordOutcome = 'success' | 'error' | 'cancelled';
@@ -41,6 +44,7 @@ export async function recordRequestCompletion(
   outcome: RecordOutcome,
   usage: Usage | null,
   latencyMs: number,
+  errorDetail?: string,
 ): Promise<void> {
   const inputTokens = usage?.inputTokens ?? 0;
   const outputTokens = usage?.outputTokens ?? 0;
@@ -78,6 +82,11 @@ export async function recordRequestCompletion(
   });
   bumpKeyQuotaLedger(ctx.keyId, { requests: 1, inputTokens, outputTokens, costMicros });
 
+  // The detail log is gated by the admin-chosen level; usage/budget above are not.
+  const status = outcomeStatus(outcome);
+  const levelEnabled = status === 'success' ? ctx.policy.logSuccess : ctx.policy.logErrors;
+  if (!levelEnabled) return;
+
   await insertRequestLog(env.DB, {
     id: generateId(),
     timestamp: Math.floor(Date.now() / 1000),
@@ -88,7 +97,7 @@ export async function recordRequestCompletion(
     unifiedModelId: ctx.unifiedModelId,
     channelId: ctx.channelId,
     channelName: ctx.channelName,
-    status: outcomeStatus(outcome),
+    status,
     stream: ctx.stream,
     cached: ctx.cached,
     inputTokens,
@@ -97,6 +106,7 @@ export async function recordRequestCompletion(
     attemptCount: ctx.attemptCount,
     fallback: ctx.fallbackOccurred,
     latencyMs,
+    errorDetail,
   });
 }
 
@@ -112,7 +122,10 @@ export async function recordRejectedRequest(
   },
   status: Exclude<RequestLogStatus, 'success' | 'error' | 'cancelled'>,
   latencyMs: number,
+  policy: LogPolicy,
+  errorDetail?: string,
 ): Promise<void> {
+  if (!policy.logErrors) return;
   await insertRequestLog(env.DB, {
     id: generateId(),
     timestamp: Math.floor(Date.now() / 1000),
@@ -132,5 +145,6 @@ export async function recordRejectedRequest(
     attemptCount: 0,
     fallback: false,
     latencyMs,
+    errorDetail,
   });
 }

@@ -15,7 +15,7 @@
 
 ## 2. 单元测试
 
-当前共有 17 个测试文件、90 个用例：
+当前共有 18 个测试文件、96 个用例：
 
 | 文件 | 覆盖重点 |
 |---|---|
@@ -23,6 +23,7 @@
 | `balance-refresh-repro.test.ts` | 强制刷新、五分钟缓存和概览回读 |
 | `deepseek-balance.test.ts` | 官方 host、金额精度、鉴权和错误清理 |
 | `key-quota.test.ts` | 密钥到期、RPM 窗口、每日预算台账与成本计算 |
+| `log-policy.test.ts` | 日志级别开关、错误详情与用量写入不受开关影响 |
 | `fallback-policy.test.ts` | HTTP / Provider 错误分类 |
 | `model-discovery.test.ts` | OpenAI / Gemini / Anthropic 模型列表、分页和 ID 规范化 |
 | `passive-circuit-breaker.test.ts` | 阈值、冷却、恢复和容量 |

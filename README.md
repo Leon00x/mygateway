@@ -93,7 +93,7 @@ npm run deploy
 | Gateway Key | 创建、一次性展示、启停、删除、重新生成 |
 | 虚拟密钥限额 | 每个密钥可配置 RPM、每日请求/Token 预算、到期时间和模型白名单；超额返回 429/403 |
 | 费用统计 | 渠道实例可配置 $/M Token 单价；按 Provider 上报 Token 计算并汇总到用量、密钥和首页 |
-| 请求日志 | 最近请求的密钥、模型、渠道、状态、Token、费用和耗时；管理页查看，保留 7 天 |
+| 请求日志 | 最近请求的密钥、模型、渠道、状态、Token、费用、耗时与错误详情；管理页可独立开关正常/异常日志，保留 7 天 |
 | 协议 | OpenAI Chat、OpenAI Responses、Anthropic Messages |
 | 协议转换 | Chat ↔ Messages 的文本、工具调用、usage 和 SSE 公共子集 |
 | 路由 | 原生协议优先、固定优先级、完整别名直达 |

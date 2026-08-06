@@ -15,6 +15,7 @@ import { onceAsync } from '../streaming/once-async.ts';
 import { logEvent } from '../shared/log.ts';
 import { checkDailyQuota, checkRpm, configureKeyQuota, keyIsExpired } from './key-quota.ts';
 import { recordRejectedRequest, recordRequestCompletion, type UsageRecordContext } from './usage-recorder.ts';
+import { readLogPolicy, type LogPolicy } from './log-policy.ts';
 import {
   authenticateGatewayKeyHash,
   resolveGatewayAccess,
@@ -89,6 +90,7 @@ async function handleProtocolCompletion(
   const requestStartedAt = performance.now();
   const config = parseConfig(env);
   configureKeyQuota(config.keyQuotaRefreshMs);
+  const logPolicy = await readLogPolicy(env.DB);
 
   const invalidKeyResponse = () => gatewayErrorResponse(
     'invalid_api_key',
@@ -176,7 +178,7 @@ async function handleProtocolCompletion(
   if (keyIsExpired(key)) {
     ctx.waitUntil(recordRejectedRequest(env, {
       ...resolvedModel, keyId: key.id, keyName: key.name, requestId,
-    }, 'expired', elapsedMs(requestStartedAt)));
+    }, 'expired', elapsedMs(requestStartedAt), logPolicy, 'key_expired'));
     return timed(gatewayErrorResponse('invalid_api_key', 'API key has expired', requestId));
   }
 
@@ -199,7 +201,7 @@ async function handleProtocolCompletion(
   if (key.modelAllowlist.length > 0 && !key.modelAllowlist.includes(unifiedModelId)) {
     ctx.waitUntil(recordRejectedRequest(env, {
       model: unifiedModelId, modelCardId, keyId: key.id, keyName: key.name, requestId,
-    }, 'not_allowed', elapsedMs(requestStartedAt)));
+    }, 'not_allowed', elapsedMs(requestStartedAt), logPolicy, 'model_not_in_allowlist'));
     return timed(gatewayErrorResponse(
       'model_not_allowed',
       `Model '${unifiedModelId}' is not allowed for this API key`,
@@ -212,7 +214,7 @@ async function handleProtocolCompletion(
   if (!checkRpm(key.id, key.rpmLimit)) {
     ctx.waitUntil(recordRejectedRequest(env, {
       model: unifiedModelId, modelCardId, keyId: key.id, keyName: key.name, requestId,
-    }, 'rate_limited', elapsedMs(requestStartedAt)));
+    }, 'rate_limited', elapsedMs(requestStartedAt), logPolicy, 'rpm_limit_exceeded'));
     const respHeaders = gatewayResponseHeaders(requestId);
     respHeaders.set('Retry-After', '60');
     return timed(new Response(JSON.stringify(gatewayError(
@@ -228,7 +230,7 @@ async function handleProtocolCompletion(
     const isTokens = quota.reason === 'daily_tokens';
     ctx.waitUntil(recordRejectedRequest(env, {
       model: unifiedModelId, modelCardId, keyId: key.id, keyName: key.name, requestId,
-    }, 'budget_exceeded', elapsedMs(requestStartedAt)));
+    }, 'budget_exceeded', elapsedMs(requestStartedAt), logPolicy, quota.reason));
     return timed(gatewayErrorResponse(
       'budget_exceeded',
       isTokens
@@ -297,6 +299,34 @@ async function handleProtocolCompletion(
     }
   };
 
+  const truncate = (value: string, max = 500): string =>
+    value.length > max ? `${value.slice(0, max)}…` : value;
+
+  /** Record an upstream/gateway error as a request-log row (level-gated). */
+  const recordUpstreamError = (
+    candidate: ProtocolRouteCandidate,
+    attemptCount: number,
+    fallbackOccurred: boolean,
+    errorDetail: string,
+  ) => {
+    ctx.waitUntil(recordRequestCompletion(env, {
+      modelCardId,
+      unifiedModelId,
+      channelId: candidate.channel_id,
+      channelName: candidate.channel_name,
+      inputPriceMicrosPerMillion: candidate.input_price_micros_per_million,
+      outputPriceMicrosPerMillion: candidate.output_price_micros_per_million,
+      attemptCount,
+      fallbackOccurred,
+      stream: isStream,
+      cached: false,
+      keyId: key.id,
+      keyName: key.name,
+      requestId,
+      policy: logPolicy,
+    }, 'error', null, elapsedMs(requestStartedAt), truncate(errorDetail)));
+  };
+
   // 3. Try candidates with fallback
   let lastError: { status: number; body: string } | null = null;
   let lastRetryableError: { status: number; body: string } | null = null;
@@ -328,6 +358,10 @@ async function handleProtocolCompletion(
       }
     } catch (error) {
       if (error instanceof UnsupportedProtocolFeatureError) {
+        recordUpstreamError(
+          candidate, attempt + 1, false,
+          `unsupported_protocol_feature: ${error.message} (${error.feature ?? '?'})`,
+        );
         return timed(gatewayErrorResponse(
           'unsupported_protocol_feature',
           error.message,
@@ -361,6 +395,7 @@ async function handleProtocolCompletion(
         will_fallback: !direct && !isLastAttempt,
       });
       if (direct || isLastAttempt) {
+        recordUpstreamError(candidate, attempt + 1, false, 'key_decryption_failed');
         return timed(gatewayErrorResponse('upstream_error', 'Failed to decrypt provider key', requestId));
       }
       lastRetryableError = { status: 500, body: 'Key decryption failed' };
@@ -416,6 +451,12 @@ async function handleProtocolCompletion(
       });
       // Connection failure or timeout
       if (direct || isLastAttempt) {
+        recordUpstreamError(
+          candidate, attempt + 1, false,
+          isTimeout
+            ? `upstream_timeout (${config.upstreamHeaderTimeoutMs}ms)`
+            : `connection_failed: ${truncate((e as Error).message, 200)}`,
+        );
         return timed(gatewayErrorResponse(
           isTimeout ? 'upstream_timeout' : 'upstream_error',
           isTimeout ? 'Upstream response timeout' : 'Upstream connection failed',
@@ -460,6 +501,10 @@ async function handleProtocolCompletion(
       }
 
       // Not retryable or last attempt — return the error
+      recordUpstreamError(
+        candidate, attempt + 1, false,
+        `upstream_http_${upstreamResponse.status}: ${truncate(errorBody, 400)}`,
+      );
       const respHeaders = gatewayResponseHeaders(requestId);
       return timed(new Response(errorBody, {
         status: upstreamResponse.status,
@@ -507,6 +552,7 @@ async function handleProtocolCompletion(
       keyId: key.id,
       keyName: key.name,
       requestId,
+      policy: logPolicy,
     };
 
     // 4a. Non-streaming
@@ -540,6 +586,13 @@ async function handleProtocolCompletion(
   // All candidates exhausted
   if (lastRetryableError) {
     const isAllTimeout = lastRetryableError.status === 0;
+    const detail = isAllTimeout
+      ? `all_candidates_failed: ${truncate(lastRetryableError.body, 300)}`
+      : `all_candidates_failed: HTTP ${lastRetryableError.status} ${truncate(lastRetryableError.body, 300)}`;
+    if (selectedCandidates.length > 0) {
+      const last = selectedCandidates[selectedCandidates.length - 1].candidate;
+      recordUpstreamError(last, selectedCandidates.length, false, detail);
+    }
     return timed(gatewayErrorResponse(
       isAllTimeout ? 'upstream_timeout' : 'upstream_error',
       isAllTimeout ? 'All upstream candidates timed out' : 'All upstream candidates failed',
@@ -665,9 +718,12 @@ function handleStreamResponse(
   const finalize = onceAsync(async (outcome: 'success' | 'error' | 'cancelled') => {
     decoder.flush();
     const usage = decoder.parseError ? null : decoder.usage;
+    const errorDetail = outcome === 'error'
+      ? (decoder.parseError ? 'stream_parse_error: upstream SSE did not parse as valid JSON events' : 'stream_error')
+      : undefined;
     try {
       await recordRequestCompletion(
-        env, usageCtx, outcome, usage, elapsedMs(requestPerformance.requestStartedAt),
+        env, usageCtx, outcome, usage, elapsedMs(requestPerformance.requestStartedAt), errorDetail,
       );
     } catch {
       logEvent({

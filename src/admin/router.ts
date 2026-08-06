@@ -236,6 +236,11 @@ export async function handleAdminApi(
     return handleSystemSettings(request, env, requestId);
   }
 
+  if (path === '/admin/api/settings/logging') {
+    const { handleLoggingSettings } = await import('./system.ts');
+    return handleLoggingSettings(request, env, requestId);
+  }
+
   if (path === '/admin/api/system/presets') {
     const { handleProviderPresets } = await import('./system.ts');
     return handleProviderPresets(requestId);
