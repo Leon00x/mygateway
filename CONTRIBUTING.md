@@ -10,9 +10,9 @@ prioritizes "simple to run and understand" over enterprise features.
   Objects unless the free allowance keeps working.
 - **Simple and predictable.** Fixed-priority routing, pre-response fallback,
   and no hidden background probing.
-- **Privacy by default.** We never persist prompts or responses. Request logs
-  store metadata (key, model, channel, tokens, cost) only, with bounded
-  retention.
+- **Easy to use.** One key, one console; sensible defaults that work out of the
+  box. Prompt/response previews are off by default and only stored as encrypted,
+  short-lived 4 KiB previews when the admin explicitly opts in.
 - **Honest numbers.** Tokens and spend come from provider-reported usage;
   unknown usage is flagged, never guessed.
 

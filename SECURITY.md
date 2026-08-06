@@ -36,4 +36,7 @@ manner depending on severity.
 - Admin API requires a session cookie; mutation requests are protected against
   cross-origin CSRF. Keep the dashboard behind an allowlist or same-origin
   network controls if your workload needs them.
-- Request logs store metadata only — never prompts or responses.
+- Request logs record metadata (key, model, channel, tokens, cost, timing) by
+  default. Prompt/response previews are only stored when the admin explicitly
+  enables the encrypted “record context” option (4 KiB per direction, short
+  retention); keys, Authorization and provider credentials are never logged.

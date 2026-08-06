@@ -207,7 +207,8 @@ Channels、Models、API Keys 和 System。侧边栏可收缩，主题偏好保�
 ## 12. 可观测性与降级
 
 结构化事件记录协议、模型、最终渠道、状态、耗时、尝试次数、Fallback、缓存和 D1 时间，
-不记录 Key、Prompt 或 Response。
+不记录 Key 或 Provider Key。请求/响应正文预览默认不保存，仅在显式开启“记录上下文”后
+加密存储（4 KiB 上限、短期保留）。
 
 - `X-Gateway-Timing`：稳定的缓存、D1、访问解析、上游首包和网关首包耗时；
 - `Server-Timing`：尽力提供，可能被 Cloudflare 平台覆盖；
