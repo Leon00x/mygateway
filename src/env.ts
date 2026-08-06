@@ -39,15 +39,6 @@ export interface Env {
   REQUEST_LOG_RETENTION_DAYS?: string;
 
   /**
-   * TTL for the non-streaming response cache, in ms. 0 disables caching.
-   * Default: 0 (disabled). The cache is isolate-local.
-   */
-  RESPONSE_CACHE_TTL_MS?: string;
-
-  /** Max entries in the per-isolate response cache. Default: 1000 */
-  RESPONSE_CACHE_MAX_ENTRIES?: string;
-
-  /**
    * How often a key's daily quota re-reads D1, in ms. Between refreshes the
    * isolate adds its own completed requests locally. Default: 5000
    */
@@ -63,8 +54,6 @@ export interface RuntimeConfig {
   upstreamHeaderTimeoutMs: number;
   usageRetentionDays: number;
   requestLogRetentionDays: number;
-  responseCacheTtlMs: number;
-  responseCacheMaxEntries: number;
   keyQuotaRefreshMs: number;
 }
 
@@ -76,8 +65,6 @@ const DEFAULTS = {
   upstreamHeaderTimeoutMs: 30_000,
   usageRetentionDays: 30,
   requestLogRetentionDays: 7,
-  responseCacheTtlMs: 0,
-  responseCacheMaxEntries: 1_000,
   keyQuotaRefreshMs: 5_000,
 } as const;
 
@@ -109,9 +96,6 @@ export function parseConfig(env: Env): RuntimeConfig {
     usageRetentionDays: parseInt(env.USAGE_RETENTION_DAYS ?? '', 10) || DEFAULTS.usageRetentionDays,
     requestLogRetentionDays:
       parseInt(env.REQUEST_LOG_RETENTION_DAYS ?? '', 10) || DEFAULTS.requestLogRetentionDays,
-    responseCacheTtlMs: parseInt(env.RESPONSE_CACHE_TTL_MS ?? '', 10) || DEFAULTS.responseCacheTtlMs,
-    responseCacheMaxEntries:
-      parseInt(env.RESPONSE_CACHE_MAX_ENTRIES ?? '', 10) || DEFAULTS.responseCacheMaxEntries,
     keyQuotaRefreshMs:
       parseInt(env.KEY_QUOTA_REFRESH_MS ?? '', 10) || DEFAULTS.keyQuotaRefreshMs,
   };

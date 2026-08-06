@@ -100,38 +100,6 @@ export async function recordRequestCompletion(
   });
 }
 
-/**
- * A cached response is logged but not billed again (the original upstream
- * call already paid for it), so usage aggregates and budgets are unaffected.
- */
-export async function recordCachedHit(
-  env: Env,
-  ctx: Pick<UsageRecordContext, 'modelCardId' | 'unifiedModelId' | 'keyId' | 'keyName' | 'requestId'>,
-  cached: { inputTokens: number; outputTokens: number },
-  latencyMs: number,
-): Promise<void> {
-  await insertRequestLog(env.DB, {
-    id: generateId(),
-    timestamp: Math.floor(Date.now() / 1000),
-    requestId: ctx.requestId,
-    keyId: ctx.keyId,
-    keyName: ctx.keyName,
-    modelCardId: ctx.modelCardId,
-    unifiedModelId: ctx.unifiedModelId,
-    channelId: null,
-    channelName: null,
-    status: 'success',
-    stream: false,
-    cached: true,
-    inputTokens: cached.inputTokens,
-    outputTokens: cached.outputTokens,
-    costMicros: 0,
-    attemptCount: 0,
-    fallback: false,
-    latencyMs,
-  });
-}
-
 /** Record a request rejected before reaching upstream (quota / access control). */
 export async function recordRejectedRequest(
   env: Env,

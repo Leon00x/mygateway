@@ -14,13 +14,7 @@ import { SseDecoder, extractNonStreamUsage, Usage } from '../streaming/sse-decod
 import { onceAsync } from '../streaming/once-async.ts';
 import { logEvent } from '../shared/log.ts';
 import { checkDailyQuota, checkRpm, configureKeyQuota, keyIsExpired } from './key-quota.ts';
-import {
-  recordCachedHit,
-  recordRejectedRequest,
-  recordRequestCompletion,
-  type UsageRecordContext,
-} from './usage-recorder.ts';
-import { getSharedResponseCache, type ResponseCache } from './response-cache.ts';
+import { recordRejectedRequest, recordRequestCompletion, type UsageRecordContext } from './usage-recorder.ts';
 import {
   authenticateGatewayKeyHash,
   resolveGatewayAccess,
@@ -244,23 +238,7 @@ async function handleProtocolCompletion(
     ));
   }
 
-  // 2e. Response cache (opt-in via RESPONSE_CACHE_TTL_MS, non-streaming only)
-  const responseCache = getSharedResponseCache(config.responseCacheMaxEntries, config.responseCacheTtlMs);
-  const cacheEnabled = responseCache.enabled && !isStream;
-  const cacheKey = cacheEnabled ? responseCache.key(unifiedModelId, bodyText ?? '') : null;
-  if (cacheKey) {
-    const hit = responseCache.get(cacheKey);
-    if (hit) {
-      ctx.waitUntil(recordCachedHit(env, {
-        modelCardId, unifiedModelId, keyId: key.id, keyName: key.name, requestId,
-      }, hit, elapsedMs(requestStartedAt)));
-      const headers = gatewayResponseHeaders(requestId);
-      headers.set('Content-Type', 'application/json');
-      headers.set('X-Gateway-Cache', 'HIT');
-      return timed(new Response(hit.body, { status: hit.status, headers }), undefined);
-    }
-  }
-
+  // 2e. (reserved) — protocol candidates below
   const protocolCandidates = routeCandidatesForProtocol(candidates, requestedProtocol);
   if (protocolCandidates.length === 0) {
     return timed(gatewayErrorResponse(
@@ -542,7 +520,6 @@ async function handleProtocolCompletion(
         requestPerformance,
         requestedProtocol,
         candidate.upstreamProtocol,
-        cacheKey ? { enabled: cacheEnabled, cacheKey, cache: responseCache } : null,
       ), requestPerformance);
     }
 
@@ -574,8 +551,7 @@ async function handleProtocolCompletion(
 }
 
 /**
- * Handle non-streaming response: parse usage async via ctx.waitUntil, and
- * optionally store the full body in the response cache.
+ * Handle non-streaming response: parse usage async via ctx.waitUntil.
  */
 async function handleNonStreamResponse(
   upstream: Response,
@@ -586,7 +562,6 @@ async function handleNonStreamResponse(
   requestPerformance: RequestPerformance,
   requestedProtocol: GatewayProtocol,
   upstreamProtocol: GatewayProtocol,
-  cache: { enabled: boolean; cacheKey: string; cache: ResponseCache } | null,
 ): Promise<Response> {
   if (requestedProtocol !== upstreamProtocol) {
     let raw: Record<string, unknown>;
@@ -609,30 +584,7 @@ async function handleNonStreamResponse(
     ));
     const headers = gatewayResponseHeaders(requestId);
     headers.set('Content-Type', 'application/json');
-    if (cache?.enabled) headers.set('X-Gateway-Cache', 'MISS');
     return new Response(JSON.stringify(converted), { status: upstream.status, headers });
-  }
-
-  // Cache path: read the full body so it can be stored and reused.
-  if (cache?.enabled) {
-    const text = await upstream.text();
-    let usage: Usage | null = null;
-    try {
-      usage = extractNonStreamUsage(JSON.parse(text) as Record<string, unknown>);
-    } catch { /* usage stays unknown */ }
-    cache.cache.set(cache.cacheKey, {
-      body: text,
-      status: upstream.status,
-      inputTokens: usage?.inputTokens ?? 0,
-      outputTokens: usage?.outputTokens ?? 0,
-    });
-    const respHeaders = gatewayResponseHeaders(requestId);
-    respHeaders.set('Content-Type', 'application/json');
-    respHeaders.set('X-Gateway-Cache', 'MISS');
-    ctx.waitUntil(recordRequestCompletion(
-      env, usageCtx, 'success', usage, elapsedMs(requestPerformance.requestStartedAt),
-    ));
-    return new Response(text, { status: upstream.status, headers: respHeaders });
   }
 
   // Clone the body so we can parse usage while forwarding

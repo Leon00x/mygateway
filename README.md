@@ -94,7 +94,6 @@ npm run deploy
 | 虚拟密钥限额 | 每个密钥可配置 RPM、每日请求/Token 预算、到期时间和模型白名单；超额返回 429/403 |
 | 费用统计 | 渠道实例可配置 $/M Token 单价；按 Provider 上报 Token 计算并汇总到用量、密钥和首页 |
 | 请求日志 | 最近请求的密钥、模型、渠道、状态、Token、费用和耗时；管理页查看，保留 7 天 |
-| 响应缓存 | 可选 isolate 内存 TTL 缓存相同非流式请求，命中返回 `X-Gateway-Cache: HIT` 且不重复计费 |
 | 协议 | OpenAI Chat、OpenAI Responses、Anthropic Messages |
 | 协议转换 | Chat ↔ Messages 的文本、工具调用、usage 和 SSE 公共子集 |
 | 路由 | 原生协议优先、固定优先级、完整别名直达 |
@@ -194,9 +193,9 @@ curl https://your-gateway.workers.dev/v1/chat/completions \
 - 冷请求通过一次 `DB.batch()` 完成 Gateway Key 鉴权与模型路由。
 - SSE 按事件增量处理，不把完整生成结果读入内存。
 - 用量、密钥用量和请求日志在同一 `waitUntil()` 内顺序写入；失败不阻断模型响应。
-- 密钥未配置每日预算时，配额检查跳过 D1 读取；响应缓存命中不写用量（不重复计费）。
+- 密钥未配置每日预算时，配额检查跳过 D1 读取。
 - 每日 Cron 只清理过期统计，不执行余额、模型同步或健康探测。
-- 熔断、RPM 窗口和响应缓存保存在 isolate 内存，不使用 KV、DO 或额外数据库写入。
+- 熔断和 RPM 窗口保存在 isolate 内存，不使用 KV、DO 或额外数据库写入。
 - DeepSeek 余额只有用户主动刷新时才访问 Provider，并缓存 5 分钟。
 - 浏览器会话会保留最后一次余额刷新结果，避免其他 Worker isolate 的 `not_queried` 覆盖，
   不增加 D1、KV 或 Durable Objects 写入。
@@ -239,8 +238,6 @@ D1 索引写放大、Cloudflare 账号中的其他 Worker，以及异常或恶�
 | `UPSTREAM_HEADER_TIMEOUT_MS` | `30000` | 上游响应头超时 |
 | `USAGE_RETENTION_DAYS` | `30` | 分钟用量与密钥用量保留天数 |
 | `REQUEST_LOG_RETENTION_DAYS` | `7` | 请求日志保留天数 |
-| `RESPONSE_CACHE_TTL_MS` | `0`（关闭） | 相同非流式请求的响应缓存 TTL |
-| `RESPONSE_CACHE_MAX_ENTRIES` | `1000` | isolate 内缓存条目上限 |
 | `KEY_QUOTA_REFRESH_MS` | `5000` | 每日预算台账刷新 D1 的间隔（降低每请求 D1 读） |
 
 ## 6. 当前产品边界

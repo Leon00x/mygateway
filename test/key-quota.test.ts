@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { computeCostMicros, formatUsdMicros } from '../src/shared/cost.ts';
-import { ResponseCache, resetResponseCache } from '../src/gateway/response-cache.ts';
 import { checkDailyQuota, checkRpm, configureKeyQuota, keyIsExpired, resetKeyQuota } from '../src/gateway/key-quota.ts';
 import type { GatewayKeyIdentity } from '../src/gateway/access-resolver.ts';
 import { parseModelAllowlist, serializeModelAllowlist } from '../src/db/keys.ts';
@@ -35,49 +34,6 @@ describe('cost math', () => {
   test('formats micro-USD', () => {
     expect(formatUsdMicros(10_500)).toBe('$0.010500');
     expect(formatUsdMicros(0)).toBe('$0.000000');
-  });
-});
-
-describe('response cache', () => {
-  afterEach(() => resetResponseCache());
-
-  test('keys are stable and include the model', () => {
-    const cache = new ResponseCache(100, 60_000);
-    const keyA = cache.key('deepseek-chat', '{"messages":[]}');
-    expect(keyA).toBe(cache.key('deepseek-chat', '{"messages":[]}'));
-    expect(keyA).not.toBe(cache.key('gpt-4o', '{"messages":[]}'));
-    expect(keyA).not.toBe(cache.key('deepseek-chat', '{"messages":[1]}'));
-  });
-
-  test('serves a stored value then expires it', () => {
-    let now = 1_000_000;
-    const cache = new ResponseCache(10, 5_000, () => now);
-    const cacheKey = cache.key('m', 'b');
-    cache.set(cacheKey, { body: '{}', status: 200, inputTokens: 1, outputTokens: 2 });
-    expect(cache.get(cacheKey)).toMatchObject({ body: '{}', inputTokens: 1 });
-
-    now += 5_001;
-    expect(cache.get(cacheKey)).toBeUndefined();
-  });
-
-  test('disabled cache (ttl 0) never stores', () => {
-    const cache = new ResponseCache(10, 0);
-    expect(cache.enabled).toBe(false);
-    cache.set(cache.key('m', 'b'), { body: '{}', status: 200, inputTokens: 0, outputTokens: 0 });
-    expect(cache.get(cache.key('m', 'b'))).toBeUndefined();
-  });
-
-  test('evicts the least recently used entry', () => {
-    const cache = new ResponseCache(2, 60_000);
-    const a = cache.key('a', 'b');
-    const c = cache.key('c', 'd');
-    const e = cache.key('e', 'f');
-    cache.set(a, { body: '{}', status: 200, inputTokens: 0, outputTokens: 0 });
-    cache.set(c, { body: '{}', status: 200, inputTokens: 0, outputTokens: 0 });
-    cache.get(a); // touch a → c becomes LRU
-    cache.set(e, { body: '{}', status: 200, inputTokens: 0, outputTokens: 0 });
-    expect(cache.get(c)).toBeUndefined();
-    expect(cache.get(a)).toBeDefined();
   });
 });
 
