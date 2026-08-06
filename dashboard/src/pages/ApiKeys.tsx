@@ -1,4 +1,5 @@
 import { createSignal, onMount, For, Show } from 'solid-js';
+import { t } from '../i18n';
 
 interface ApiKey {
   id: string;
@@ -41,12 +42,12 @@ const intOrNull = (value: string) => (value.trim() === '' ? null : Number(value.
 
 function limitsSummary(key: ApiKey): string {
   const parts: string[] = [];
-  if (key.rpm_limit) parts.push(`≤${key.rpm_limit} 次/分`);
-  if (key.daily_request_limit) parts.push(`≤${key.daily_request_limit} 次/日`);
-  if (key.daily_token_limit) parts.push(`≤${(key.daily_token_limit / 1_000_000).toLocaleString()}M token/日`);
-  if (key.model_allowlist.length) parts.push(`${key.model_allowlist.length} 个模型`);
-  if (key.expires_at) parts.push(`${new Date(key.expires_at * 1000).toLocaleDateString()} 到期`);
-  return parts.length ? parts.join(' · ') : '无限制';
+  if (key.rpm_limit) parts.push(`≤${key.rpm_limit} ${t('keys.perMinute')}`);
+  if (key.daily_request_limit) parts.push(`≤${key.daily_request_limit} ${t('keys.perDay')}`);
+  if (key.daily_token_limit) parts.push(`≤${(key.daily_token_limit / 1_000_000).toLocaleString()}M ${t('keys.tokensPerDay')}`);
+  if (key.model_allowlist.length) parts.push(`${key.model_allowlist.length} ${t('keys.models')}`);
+  if (key.expires_at) parts.push(`${new Date(key.expires_at * 1000).toLocaleDateString()} ${t('keys.expiresLabel')}`);
+  return parts.length ? parts.join(' · ') : t('keys.unlimited');
 }
 
 export default function ApiKeys() {
@@ -92,7 +93,7 @@ export default function ApiKeys() {
       void fetchKeys();
     } else {
       const data = await response.json();
-      setCreateError(data.error?.message ?? '创建失败');
+      setCreateError(data.error?.message ?? t('keys.createFailed'));
     }
     setBusy(false);
   };
@@ -121,7 +122,7 @@ export default function ApiKeys() {
       body: JSON.stringify(body),
     });
     if (response.ok) { setEditKey(null); void fetchKeys(); }
-    else { const data = await response.json(); setEditError(data.error?.message ?? '保存失败'); }
+    else { const data = await response.json(); setEditError(data.error?.message ?? t('keys.saveFailed')); }
     setBusy(false);
   };
 
@@ -134,12 +135,12 @@ export default function ApiKeys() {
     void fetchKeys();
   };
   const regenerate = async (key: ApiKey) => {
-    if (!confirm(`重新生成 ${key.name}？当前密钥将立即失效。`)) return;
+    if (!confirm(`${t('keys.regenerateConfirm')}`)) return;
     const response = await fetch(`/admin/api/keys/${key.id}/regenerate`, { method: 'POST' });
     if (response.ok) { setRevealedKey((await response.json()).key); void fetchKeys(); }
   };
   const deleteKey = async (id: string) => {
-    if (!confirm('删除这个密钥？它将立即失效。')) return;
+    if (!confirm(t('keys.deleteConfirm'))) return;
     await fetch(`/admin/api/keys/${id}`, { method: 'DELETE' });
     void fetchKeys();
   };
@@ -149,70 +150,70 @@ export default function ApiKeys() {
     setForm: (next: KeyForm) => void,
   ) => (
     <div class="model-bind-fields key-limit-fields">
-      <label>每分钟请求上限（RPM）
-        <input type="number" min="0" placeholder="不限" value={form().rpm}
+      <label>{t('keys.rpm')}
+        <input type="number" min="0" placeholder="—" value={form().rpm}
           onInput={(e) => setForm({ ...form(), rpm: e.currentTarget.value })} />
       </label>
-      <label>每日请求上限
-        <input type="number" min="0" placeholder="不限" value={form().dailyRequests}
+      <label>{t('keys.dailyRequests')}
+        <input type="number" min="0" placeholder="—" value={form().dailyRequests}
           onInput={(e) => setForm({ ...form(), dailyRequests: e.currentTarget.value })} />
       </label>
-      <label>每日 Token 上限
-        <input type="number" min="0" placeholder="不限" value={form().dailyTokens}
+      <label>{t('keys.dailyTokens')}
+        <input type="number" min="0" placeholder="—" value={form().dailyTokens}
           onInput={(e) => setForm({ ...form(), dailyTokens: e.currentTarget.value })} />
       </label>
-      <label>有效期（天，0 = 永不过期）
+      <label>{t('keys.expires')}
         <input type="number" min="0" placeholder="0" value={form().expiresDays}
           onInput={(e) => setForm({ ...form(), expiresDays: e.currentTarget.value })} />
       </label>
-      <label class="key-allowlist">可用模型白名单（逗号分隔，留空 = 全部）
+      <label class="key-allowlist">{t('keys.allowlist')}
         <input placeholder="deepseek-chat, gpt-4o" value={form().allowlist}
           onInput={(e) => setForm({ ...form(), allowlist: e.currentTarget.value })} />
-        <small>客户端只能用列表内的统一模型 ID 调用。</small>
+        <small>{t('keys.allowlistHint')}</small>
       </label>
     </div>
   );
 
   return (
     <div class="resource-page">
-      <div class="page-heading"><div><h2>Gateway API Keys</h2><p>创建带限流、预算和模型白名单的访问密钥。</p></div></div>
+      <div class="page-heading"><div><h2>Gateway API Keys</h2><p>{t('keys.subtitle')}</p></div></div>
 
       <Show when={revealedKey()}>
-        <div class="secret-reveal panel"><div><span class="eyebrow">仅显示一次</span><h3>复制并安全保存这个密钥</h3><code>{revealedKey()}</code></div><button class="secondary-button" onClick={() => navigator.clipboard.writeText(revealedKey())}>复制密钥</button><button class="secret-close" onClick={() => setRevealedKey('')}>×</button></div>
+        <div class="secret-reveal panel"><div><span class="eyebrow">{t('keys.revealOnce')}</span><h3>{t('keys.copySave')}</h3><code>{revealedKey()}</code></div><button class="secondary-button" onClick={() => navigator.clipboard.writeText(revealedKey())}>{t('keys.copy')}</button><button class="secret-close" onClick={() => setRevealedKey('')}>×</button></div>
       </Show>
 
       <form onSubmit={createKey} class="panel key-create key-create-form">
-        <div><h3>创建新密钥</h3><p>使用容易识别的名称标记调用方或应用。</p></div>
-        <input placeholder="Key name" value={createForm().name}
+        <div><h3>{t('keys.createTitle')}</h3><p>{t('keys.createSub')}</p></div>
+        <input placeholder={t('keys.name')} value={createForm().name}
           onInput={(e) => setCreateForm({ ...createForm(), name: e.currentTarget.value })} required />
         <div class="key-create-actions">
           <button type="button" class="secondary-button" onClick={() => setShowLimits(!showLimits())}>
-            {showLimits() ? '收起限额设置' : '限额设置'}
+            {showLimits() ? t('keys.hideLimits') : t('keys.limits')}
           </button>
-          <button type="submit" class="primary-button" disabled={busy()}>＋ Create Key</button>
+          <button type="submit" class="primary-button" disabled={busy()}>{t('keys.create')}</button>
         </div>
         <Show when={showLimits()}>{limitFields(createForm, setCreateForm)}</Show>
         <Show when={createError()}><div class="form-error">{createError()}</div></Show>
       </form>
 
       <section class="panel resource-list">
-        <div class="panel-header"><div><h3>密钥列表</h3><p>{keys().filter((key) => key.status === 'active').length} 个有效密钥</p></div></div>
+        <div class="panel-header"><div><h3>{t('keys.list')}</h3><p>{keys().filter((key) => key.status === 'active').length} {t('keys.activeCount')}</p></div></div>
         {loading() && <p class="empty-state">Loading...</p>}
-        <Show when={!loading() && keys().length === 0}><div class="empty-state"><span class="provider-logo">K</span><h3>还没有 API Key</h3><p>创建一个密钥开始调用网关。</p></div></Show>
+        <Show when={!loading() && keys().length === 0}><div class="empty-state"><span class="provider-logo">K</span><h3>{t('keys.emptyTitle')}</h3><p>{t('keys.emptyBody')}</p></div></Show>
         <div class="resource-rows"><For each={keys()}>{(key) => (
           <div class="resource-row key-row">
             <span class="provider-logo key-logo">K</span>
             <div class="resource-main">
               <strong>{key.name}</strong>
-              <span><code>{key.key_prefix}••••••••••••</code> · 创建于 {new Date(key.created_at * 1000).toLocaleDateString()}</span>
+              <span><code>{key.key_prefix}••••••••••••</code> · {t('common.created')} {new Date(key.created_at * 1000).toLocaleDateString()}</span>
               <span class="key-limits-hint">{limitsSummary(key)}</span>
             </div>
             <div class="row-actions">
-              <span class={`badge ${key.status}`}>{key.status === 'active' ? '有效' : '已停用'}</span>
-              <button onClick={() => openEdit(key)}>编辑限额</button>
-              <button onClick={() => toggleKey(key)}>{key.status === 'active' ? '停用' : '启用'}</button>
-              <button onClick={() => regenerate(key)}>重新生成</button>
-              <button class="danger-link" onClick={() => deleteKey(key.id)}>删除</button>
+              <span class={`badge ${key.status}`}>{key.status === 'active' ? t('keys.valid') : t('common.disabled')}</span>
+              <button onClick={() => openEdit(key)}>{t('keys.editLimits')}</button>
+              <button onClick={() => toggleKey(key)}>{key.status === 'active' ? t('keys.disable') : t('keys.enable')}</button>
+              <button onClick={() => regenerate(key)}>{t('keys.regenerate')}</button>
+              <button class="danger-link" onClick={() => deleteKey(key.id)}>{t('common.delete')}</button>
             </div>
           </div>
         )}</For></div>
@@ -221,11 +222,11 @@ export default function ApiKeys() {
       <Show when={editKey()}>{(key) => (
         <div class="modal-backdrop" onClick={() => setEditKey(null)}>
           <form class="modal-card form-stack" onSubmit={saveEdit} onClick={(e) => e.stopPropagation()}>
-            <div class="modal-title"><div><span class="eyebrow">Key</span><h3>编辑密钥</h3><p>{key().key_prefix}••••</p></div><button type="button" onClick={() => setEditKey(null)}>×</button></div>
-            <label>名称<input value={editForm().name} onInput={(e) => setEditForm({ ...editForm(), name: e.currentTarget.value })} required /></label>
+            <div class="modal-title"><div><span class="eyebrow">Key</span><h3>{t('keys.editTitle')}</h3><p>{key().key_prefix}••••</p></div><button type="button" onClick={() => setEditKey(null)}>×</button></div>
+            <label>{t('keys.nameLabel')}<input value={editForm().name} onInput={(e) => setEditForm({ ...editForm(), name: e.currentTarget.value })} required /></label>
             {limitFields(editForm, setEditForm)}
             <Show when={editError()}><div class="form-error">{editError()}</div></Show>
-            <div class="modal-actions"><button type="button" class="secondary-button" onClick={() => setEditKey(null)}>取消</button><button type="submit" disabled={busy()} class="primary-button">{busy() ? '保存中…' : '保存'}</button></div>
+            <div class="modal-actions"><button type="button" class="secondary-button" onClick={() => setEditKey(null)}>{t('common.cancel')}</button><button type="submit" disabled={busy()} class="primary-button">{busy() ? t('common.saving') : t('common.save')}</button></div>
           </form>
         </div>
       )}</Show>

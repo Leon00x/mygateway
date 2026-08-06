@@ -1,5 +1,6 @@
 import { createSignal, onMount, Show, For, onCleanup } from 'solid-js';
 import { A } from '@solidjs/router';
+import { t } from '../i18n';
 
 interface AnalyticsSummary {
   requests: number;
@@ -37,7 +38,7 @@ interface AnalyticsUsageResponse {
   trends: AnalyticsTrendPoint[];
 }
 
-const RANGE_LABELS: Record<string, string> = { today: '今日', '7d': '过去 7 天', '30d': '过去 30 天' };
+const RANGE_LABELS: Record<string, string> = { today: '', '7d': '', '30d': '' };
 
 function formatUsd(costMicros: number): string {
   if (costMicros === 0) return '$0';
@@ -78,10 +79,10 @@ export default function AnalyticsUsage() {
       if (m) query.set('model_id', m);
       if (k) query.set('key_id', k);
       const response = await fetch(`/admin/api/analytics/usage?${query}`);
-      if (!response.ok) throw new Error('用量数据加载失败');
+      if (!response.ok) throw new Error(t('usage.loadFailed'));
       setData(await response.json());
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '用量数据加载失败');
+      setError(cause instanceof Error ? cause.message : t('usage.loadFailed'));
     } finally { setLoading(false); }
   };
 
@@ -152,44 +153,44 @@ export default function AnalyticsUsage() {
     <div class="analytics-page">
       <div class="analytics-page-nav">
         <div class="analytics-segment-tabs">
-          <A href="/analytics/usage" class="analytics-segment-tab active">用量分析</A>
-          <A href="/analytics/logs" class="analytics-segment-tab">请求日志</A>
+          <A href="/analytics/usage" class="analytics-segment-tab active">{t('nav.analyticsUsage')}</A>
+          <A href="/analytics/logs" class="analytics-segment-tab">{t('nav.analyticsLogs')}</A>
         </div>
         <div class="analytics-range-tabs">
           <For each={['today', '7d', '30d'] as const}>{(item) => (
             <button classList={{ active: range() === item }} onClick={() => applyRange(item)}>
-              {RANGE_LABELS[item]}
+              {RANGE_LABELS[item] || (item === 'today' ? t('dash.today') : `${t('usage.past')} ${item === '7d' ? '7' : '30'} ${t('usage.days')}`)}
             </button>
           )}</For>
         </div>
       </div>
 
       <div class="analytics-filters">
-        <label>模型
+        <label>{t('common.model')}
           <select value={modelId()} onChange={(e) => {
             const next = e.currentTarget.value;
             setModelId(next);
             void fetchUsage(range(), granularity(), next, keyId());
           }}>
-            <option value="">全部模型</option>
+            <option value="">{t('usage.allModels')}</option>
             <For each={modelOptions()}>{(m) => <option value={m.id}>{m.name}</option>}</For>
           </select>
         </label>
-        <label>密钥
+        <label>{t('common.key')}
           <select value={keyId()} onChange={(e) => {
             const next = e.currentTarget.value;
             setKeyId(next);
             void fetchUsage(range(), granularity(), modelId(), next);
           }}>
-            <option value="">全部密钥</option>
+            <option value="">{t('usage.allKeys')}</option>
             <For each={keyOptions()}>{(k) => <option value={k.id}>{k.name}</option>}</For>
           </select>
         </label>
-        <label>趋势粒度
+        <label>{t('usage.granularity')}
           <select value={granularity()} onChange={(e) => applyGranularity(e.currentTarget.value as 'hour' | 'day' | '')}>
-            <option value="">5 分钟</option>
-            <option value="hour">按小时</option>
-            <option value="day">按天</option>
+            <option value="">5 {t('usage.minutes')}</option>
+            <option value="hour">{t('usage.hourly')}</option>
+            <option value="day">{t('usage.daily')}</option>
           </select>
         </label>
       </div>
@@ -197,47 +198,47 @@ export default function AnalyticsUsage() {
       <Show when={loading()}><div class="analytics-skeleton"><div class="skeleton-cards"><span /><span /><span /><span /><span /></div><div class="skeleton-table" /></div></Show>
 
       <Show when={!loading() && error()}>
-        <div class="panel analytics-error-state"><strong>无法加载用量分析</strong><span>{error()}</span><button class="secondary-button" onClick={applyFilters}>重试</button></div>
+        <div class="panel analytics-error-state"><strong>{t('usage.loadFailed')}</strong><span>{error()}</span><button class="secondary-button" onClick={applyFilters}>{t('common.retry')}</button></div>
       </Show>
 
       <Show when={!loading() && !error() && data()}>
         {/* Metric cards: left high Token + cost, right 2x2 */}
         <div class="analytics-card-layout">
           <div class="analytics-metric-card analytics-token-highlight">
-            <small>总 Token</small>
+            <small>{t('usage.totalTokens')}</small>
             <strong>{fmtNum((summary()?.input_tokens ?? 0) + (summary()?.output_tokens ?? 0))}</strong>
             <div class="analytics-token-breakdown">
-              <span>入 {fmtNum(summary()?.input_tokens)}</span>
-              <span>出 {fmtNum(summary()?.output_tokens)}</span>
+              <span>{t('usage.input')} {fmtNum(summary()?.input_tokens)}</span>
+              <span>{t('usage.output')} {fmtNum(summary()?.output_tokens)}</span>
             </div>
             <Show when={(summary()?.usage_unknown ?? 0) > 0}>
-              <span class="coverage-warn">覆盖率 {usageCoverage()}%</span>
+              <span class="coverage-warn">{t('usage.coverage')} {usageCoverage()}%</span>
             </Show>
             <div class="analytics-cost-row">
-              <small>预估费用</small>
+              <small>{t('usage.estCost')}</small>
               <strong>{formatUsd(summary()?.cost_micros ?? 0)}</strong>
             </div>
           </div>
           <div class="analytics-right-grid">
             <div class="analytics-metric-card">
-              <small>请求量</small>
+              <small>{t('usage.requests')}</small>
               <strong>{fmtNum(summary()?.requests)}</strong>
-              <span>{successRate() !== null ? `成功率 ${successRate()}%` : '—'}</span>
+              <span>{successRate() !== null ? `${t('usage.successRate')} ${successRate()}%` : '—'}</span>
             </div>
             <div class="analytics-metric-card">
-              <small>平均延迟</small>
+              <small>{t('usage.avgLatency')}</small>
               <strong>{summary()?.avg_latency_ms != null ? `${summary()!.avg_latency_ms}ms` : '—'}</strong>
-              <span>{summary()?.latency_count ?? 0} 次采样</span>
+              <span>{summary()?.latency_count ?? 0} {t('usage.samples')}</span>
             </div>
             <div class="analytics-metric-card">
-              <small>平均 TTFT</small>
+              <small>{t('usage.avgTtft')}</small>
               <strong>{summary()?.avg_ttft_ms != null ? `${summary()!.avg_ttft_ms}ms` : '—'}</strong>
-              <span>仅流式 · {summary()?.ttft_count ?? 0} 次采样</span>
+              <span>{t('usage.streamOnly')} · {summary()?.ttft_count ?? 0} {t('usage.samples')}</span>
             </div>
             <div class="analytics-metric-card">
-              <small>成功率</small>
+              <small>{t('usage.successRate')}</small>
               <strong>{successRate() !== null ? `${successRate()}%` : '—'}</strong>
-              <span>错误 {fmtNum(summary()?.errors)} · 回退 {fmtNum(summary()?.fallbacks)}</span>
+              <span>{t('usage.errors')} {fmtNum(summary()?.errors)} · {t('usage.fallbacks')} {fmtNum(summary()?.fallbacks)}</span>
             </div>
           </div>
         </div>
@@ -245,7 +246,7 @@ export default function AnalyticsUsage() {
         {/* Trend sparkline */}
         <Show when={trends().length > 0}>
           <div class="panel analytics-trend-panel">
-            <div class="panel-header"><h2>请求趋势</h2><span class="analytics-hint">请求量变化</span></div>
+            <div class="panel-header"><h2>{t('usage.trends')}</h2><span class="analytics-hint">{t('usage.requestsChange')}</span></div>
             <div class="analytics-trend-chart">{trendSvg()}</div>
           </div>
         </Show>
@@ -253,10 +254,10 @@ export default function AnalyticsUsage() {
         {/* Model table */}
         <Show when={models().length > 0}>
           <div class="panel analytics-model-panel">
-            <div class="panel-header"><h2>模型明细</h2><span class="analytics-hint">按请求量排序</span></div>
+            <div class="panel-header"><h2>{t('usage.modelsTable')}</h2><span class="analytics-hint">{t('usage.sortedByRequests')}</span></div>
             <div class="analytics-model-table">
               <div class="analytics-model-head">
-                <span>模型</span><span>请求</span><span>成功率</span><span>平均 TPM</span><span>平均延迟</span><span>平均 TTFT</span><span>Token (入/出)</span><span>费用</span>
+                <span>{t('common.model')}</span><span>{t('usage.requests')}</span><span>{t('usage.successRate')}</span><span>{t('usage.avgTpm')}</span><span>{t('usage.avgLatency')}</span><span>{t('usage.avgTtft')}</span><span>Token ({t('usage.inOut')})</span><span>{t('usage.cost')}</span>
               </div>
               <For each={models()}>{(model) => (
                 <div class="analytics-model-row">
@@ -277,8 +278,8 @@ export default function AnalyticsUsage() {
         <Show when={!loading() && models().length === 0 && (summary()?.requests ?? 0) === 0}>
           <div class="panel empty-state">
             <span class="provider-logo">A</span>
-            <h3>暂无用量数据</h3>
-            <p>发起网关调用后，这里会显示聚合用量统计。</p>
+            <h3>{t('usage.noData')}</h3>
+            <p>{t('usage.noDataBody')}</p>
           </div>
         </Show>
       </Show>

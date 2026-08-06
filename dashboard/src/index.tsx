@@ -14,6 +14,7 @@ import AnalyticsUsage from './pages/AnalyticsUsage';
 import AnalyticsLogs from './pages/AnalyticsLogs';
 import System from './pages/System';
 import Icon, { IconName } from './components/Icon';
+import { t, locale, toggleLocale } from './i18n';
 
 interface AuthState {
   authenticated: () => boolean;
@@ -91,34 +92,34 @@ interface NavigationItem {
 const navigationSections: { label?: string; icon?: IconName; nested?: boolean; collapsible?: boolean; items: NavigationItem[] }[] = [
   {
     items: [
-      { href: '/', label: '概览', icon: 'home', end: true },
-      { href: '/channels', label: '渠道', icon: 'channels' },
-      { href: '/models', label: '模型', icon: 'models' },
-      { href: '/keys', label: 'API 密钥', icon: 'keys' },
+      { href: '/', label: 'nav.overview', icon: 'home', end: true },
+      { href: '/channels', label: 'nav.channels', icon: 'channels' },
+      { href: '/models', label: 'nav.models', icon: 'models' },
+      { href: '/keys', label: 'nav.keys', icon: 'keys' },
     ],
   },
   {
-    label: '分析',
-    icon: 'analytics',
+    label: 'nav.analytics',
+    icon: 'analytics-folder',
     nested: true,
     collapsible: true,
     items: [
-      { href: '/analytics/usage', label: '用量分析', icon: 'analytics' },
-      { href: '/analytics/logs', label: '请求日志', icon: 'requests' },
+      { href: '/analytics/usage', label: 'nav.analyticsUsage', icon: 'analytics' },
+      { href: '/analytics/logs', label: 'nav.analyticsLogs', icon: 'requests' },
     ],
   },
-  { items: [{ href: '/system', label: '系统设置', icon: 'system' }] },
+  { items: [{ href: '/system', label: 'nav.system', icon: 'system' }] },
 ];
 
 const titles: Record<string, { title: string; subtitle: string }> = {
-  '/': { title: '控制台概览', subtitle: '查看网关状态、资源配置和调用数据' },
-  '/channels': { title: '渠道管理', subtitle: '连接并管理 OpenAI 兼容模型服务' },
-  '/models': { title: '模型路由', subtitle: '配置统一模型、渠道实例和故障回退顺序' },
-  '/keys': { title: 'API 密钥', subtitle: '创建和管理调用 MyGateway 的访问凭据' },
-  '/analytics/usage': { title: '用量分析', subtitle: 'Token 用量、费用、延迟与成功率' },
-  '/analytics/logs': { title: '请求日志', subtitle: '查看最近调用的用量、费用与状态' },
-  '/requests': { title: '请求日志', subtitle: '查看最近调用的用量、费用与状态' },
-  '/system': { title: '系统设置', subtitle: '查看运行状态并维护管理员账号' },
+  '/': { title: 'title.overview', subtitle: 'subtitle.overview' },
+  '/channels': { title: 'title.channels', subtitle: 'subtitle.channels' },
+  '/models': { title: 'title.models', subtitle: 'subtitle.models' },
+  '/keys': { title: 'title.keys', subtitle: 'subtitle.keys' },
+  '/analytics/usage': { title: 'title.usage', subtitle: 'subtitle.usage' },
+  '/analytics/logs': { title: 'title.logs', subtitle: 'subtitle.logs' },
+  '/requests': { title: 'title.logs', subtitle: 'subtitle.logs' },
+  '/system': { title: 'title.system', subtitle: 'subtitle.system' },
 };
 
 const startupTheme = readThemePreference();
@@ -127,7 +128,10 @@ document.documentElement.dataset.theme = startupTheme;
 function AppLayout(props: { children?: JSX.Element }) {
   const auth = useAuth();
   const location = useLocation();
-  const page = () => titles[location.pathname] ?? titles['/'];
+  const page = () => {
+    const meta = titles[location.pathname] ?? titles['/'];
+    return { title: t(meta.title), subtitle: t(meta.subtitle) };
+  };
   const [theme, setTheme] = createSignal<'light' | 'dark'>(startupTheme);
   const [sidebarCollapsed, setSidebarCollapsed] = createSignal(readSidebarPreference());
   const [analyticsExpanded, setAnalyticsExpanded] = createSignal(true);
@@ -162,7 +166,7 @@ function AppLayout(props: { children?: JSX.Element }) {
                 'nav-section-closed': Boolean(section.collapsible && !analyticsExpanded()),
               }}>
                 <Show when={section.icon && section.label} fallback={
-                  <Show when={section.label}><div class="nav-section-label">{section.label}</div></Show>
+                  <Show when={section.label}><div class="nav-section-label">{t(section.label!)}</div></Show>
                 }>
                   <button
                     type="button"
@@ -172,15 +176,15 @@ function AppLayout(props: { children?: JSX.Element }) {
                     onClick={() => setAnalyticsExpanded(!analyticsExpanded())}
                   >
                     <Icon name={section.icon!} size={18} />
-                    <strong>{section.label}</strong>
+                    <strong>{t(section.label!)}</strong>
                     <span class="nav-module-caret" aria-hidden="true" />
                   </button>
                 </Show>
                 <div class="nav-section-items">
                   <For each={section.items}>{(item) => (
-                    <A href={item.href} end={item.end} class="nav-item" activeClass="active" title={sidebarCollapsed() ? item.label : undefined}>
+                    <A href={item.href} end={item.end} class="nav-item" activeClass="active" title={sidebarCollapsed() ? t(item.label) : undefined}>
                       <Icon name={item.icon} size={18} />
-                      <span><strong>{item.label}</strong></span>
+                      <span><strong>{t(item.label)}</strong></span>
                     </A>
                   )}</For>
                 </div>
@@ -188,8 +192,8 @@ function AppLayout(props: { children?: JSX.Element }) {
             )}</For>
           </nav>
           <div class="sidebar-bottom">
-            <a href="/v1/api-docs" target="_blank" class="nav-item compact" title={sidebarCollapsed() ? '接口文档' : undefined}><Icon name="docs" size={18} /><span><strong>接口文档</strong></span></a>
-            <button class="sidebar-toggle" aria-label={sidebarCollapsed() ? '展开侧边栏' : '收起侧边栏'} title={sidebarCollapsed() ? '展开侧边栏' : '收起侧边栏'} onClick={toggleSidebar}>
+            <a href="/v1/api-docs" target="_blank" class="nav-item compact" title={sidebarCollapsed() ? t('nav.docs') : undefined}><Icon name="docs" size={18} /><span><strong>{t('nav.docs')}</strong></span></a>
+            <button class="sidebar-toggle" aria-label={sidebarCollapsed() ? 'common.expand' : 'common.collapse'} title={sidebarCollapsed() ? 'common.expand' : 'common.collapse'} onClick={toggleSidebar}>
               <Icon name={sidebarCollapsed() ? 'panel-expand' : 'panel-collapse'} size={18} />
             </button>
           </div>
@@ -200,6 +204,9 @@ function AppLayout(props: { children?: JSX.Element }) {
             <div class="topbar-actions">
               <a class="ghost-button" href="/v1/api-docs" target="_blank"><Icon name="docs" size={16} /> API Docs</a>
               <span class="status-pill"><i /> Gateway Online</span>
+              <button class="theme-toggle lang-toggle" aria-label="Switch language" title="中 / EN" onClick={() => toggleLocale()}>
+                {locale() === 'zh' ? 'EN' : '中文'}
+              </button>
               <ThemeToggle theme={theme()} onToggle={toggleTheme} />
               <UserMenu username={auth.username()} onLogout={auth.logout} />
             </div>

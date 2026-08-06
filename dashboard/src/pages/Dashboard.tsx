@@ -1,6 +1,7 @@
 import { createSignal, onMount, Show, For } from 'solid-js';
 import { A } from '@solidjs/router';
 import Icon, { IconName } from '../components/Icon';
+import { t } from '../i18n';
 import { ProviderLogo } from '../components/ProviderLogo';
 import {
   balanceCurrencySymbol,
@@ -16,10 +17,10 @@ interface Channel { id: string; name: string; provider_type: string; base_url: s
 interface ModelItem { id: string; unified_model_id: string; display_name: string; status: string; }
 
 const shortcuts: { href: string; label: string; note: string; icon: IconName }[] = [
-  { href: '/channels', label: '添加渠道', note: '连接供应商', icon: 'channels' },
-  { href: '/models', label: '配置模型', note: '设置路由顺序', icon: 'models' },
-  { href: '/keys', label: '创建密钥', note: '开放 API 调用', icon: 'keys' },
-  { href: '/v1/api-docs', label: '接口文档', note: '查看请求规范', icon: 'docs' },
+  { href: '/channels', label: t('dash.addChannel'), note: t('dash.connectProvider'), icon: 'channels' },
+  { href: '/models', label: t('dash.configureModels'), note: t('dash.setRouting'), icon: 'models' },
+  { href: '/keys', label: t('dash.createKey'), note: t('dash.openApi'), icon: 'keys' },
+  { href: '/v1/api-docs', label: t('dash.apiDocs'), note: t('dash.viewSpec'), icon: 'docs' },
 ];
 
 export default function Dashboard() {
@@ -105,24 +106,24 @@ export default function Dashboard() {
       </section>
 
       <section class="metric-grid">
-        <Metric title="总请求" value={fmt(overview()?.requests)} note={range() === 'today' ? '今日调用' : `${range()} 调用`} tone="violet" />
-        <Metric title="成功率" value={`${successRate()}%`} note={`${fmt(overview()?.successes)} 次成功`} tone="green" />
-        <Metric title="Token 用量" value={fmt((overview()?.input_tokens ?? 0) + (overview()?.output_tokens ?? 0))} note={`供应商上报 · 覆盖率 ${usageCoverage()}%`} tone="orange" />
-        <Metric title="预估费用" value={spendLabel()} note="按渠道模型单价计算" tone="blue" />
+        <Metric title={t('dash.requests')} value={fmt(overview()?.requests)} note={range() === 'today' ? t('dash.today') : `${range()}`} tone="violet" />
+        <Metric title={t('dash.successRate')} value={`${successRate()}%`} note={`${fmt(overview()?.successes)} ${t('dash.successes')}`} tone="green" />
+        <Metric title={t('dash.tokens')} value={fmt((overview()?.input_tokens ?? 0) + (overview()?.output_tokens ?? 0))} note={`${t('dash.providerReported')} ${usageCoverage()}%`} tone="orange" />
+        <Metric title={t('dash.spend')} value={spendLabel()} note={t('dash.byPrice')} tone="blue" />
       </section>
 
       <section class="dashboard-main-grid">
         <div class="panel endpoint-panel">
           <div class="panel-header">
-            <div><h2>网关接入地址</h2><p>OpenAI 兼容 API 入口</p></div>
-            <span class="badge active">可用</span>
+            <div><h2>{t('dash.endpoint')}</h2><p>{t('dash.endpointSub')}</p></div>
+            <span class="badge active">{t('dash.available')}</span>
           </div>
           <div class="endpoint-body">
-            <div class="code-line"><code>{baseUrl()}</code><button onClick={() => copy(baseUrl(), 'url')}>{copied() === 'url' ? '已复制' : '复制'}</button></div>
+            <div class="code-line"><code>{baseUrl()}</code><button onClick={() => copy(baseUrl(), 'url')}>{copied() === 'url' ? t('dash.copied') : t('dash.copy')}</button></div>
             <div class="resource-summary">
-              <div><small>渠道</small><strong>{activeChannels().length}</strong></div>
-              <div><small>模型</small><strong>{activeModels().length}</strong></div>
-              <div><small>有效密钥</small><strong>{activeKeys().length}</strong></div>
+              <div><small>{t('dash.channels')}</small><strong>{activeChannels().length}</strong></div>
+              <div><small>{t('dash.models')}</small><strong>{activeModels().length}</strong></div>
+              <div><small>{t('dash.keys')}</small><strong>{activeKeys().length}</strong></div>
             </div>
             <Show when={activeChannels().length || activeModels().length}>
               <div class="tag-section">
@@ -135,16 +136,16 @@ export default function Dashboard() {
 
         <div class="panel usage-panel">
           <div class="panel-header">
-            <div><h2>用量概览</h2><p>供应商上报值，未知用量单独标记</p></div>
+            <div><h2>{t('dash.usageTitle')}</h2><p>{t('dash.usageSub')}</p></div>
             <div class="range-tabs">
-              <For each={['today','7d','30d'] as const}>{(item) => <button classList={{ active: range() === item }} onClick={() => changeRange(item)}>{item === 'today' ? '今日' : item}</button>}</For>
+              <For each={['today','7d','30d'] as const}>{(item) => <button classList={{ active: range() === item }} onClick={() => changeRange(item)}>{item === 'today' ? t('dash.today') : item}</button>}</For>
             </div>
           </div>
           <div class="usage-bars">
-            <UsageBar label="输入 Token" value={overview()?.input_tokens ?? 0} max={(overview()?.input_tokens ?? 0) + (overview()?.output_tokens ?? 0)} />
-            <UsageBar label="输出 Token" value={overview()?.output_tokens ?? 0} max={(overview()?.input_tokens ?? 0) + (overview()?.output_tokens ?? 0)} accent />
-            <UsageBar label="未知用量" value={overview()?.usage_unknown ?? 0} max={overview()?.requests ?? 0} subtle />
-            <Show when={loading()}><span class="loading-line">正在刷新数据…</span></Show>
+            <UsageBar label={t('dash.input')} value={overview()?.input_tokens ?? 0} max={(overview()?.input_tokens ?? 0) + (overview()?.output_tokens ?? 0)} />
+            <UsageBar label={t('dash.output')} value={overview()?.output_tokens ?? 0} max={(overview()?.input_tokens ?? 0) + (overview()?.output_tokens ?? 0)} accent />
+            <UsageBar label={t('dash.unknownUsage')} value={overview()?.usage_unknown ?? 0} max={overview()?.requests ?? 0} subtle />
+            <Show when={loading()}><span class="loading-line">{t('dash.refreshing')}</span></Show>
           </div>
         </div>
       </section>
@@ -152,29 +153,29 @@ export default function Dashboard() {
       <Show when={visibleBalances().length > 0}>
         <section class="panel provider-balance-panel">
           <div class="panel-header">
-            <div><h2>供应商余额</h2><p>DeepSeek 官方账户余额 · 各渠道独立展示，不跨账户或币种汇总</p></div>
+            <div><h2>{t('dash.providerBalance')}</h2><p>{t('dash.providerBalanceSub')}</p></div>
             <button class="secondary-button" disabled={balanceBusy()} onClick={refreshBalances}>
-              {balanceBusy() ? '查询中…' : '刷新余额'}
+              {balanceBusy() ? t('dash.querying') : t('dash.refreshBalance')}
             </button>
           </div>
           <div class="provider-balance-list">
             <For each={visibleBalances()}>{(balance) => (
               <div class="provider-balance-row">
-                <div class="provider-balance-name"><ProviderLogo presetId="deepseek" name="DeepSeek" /><div><strong>{balance.channel_name}</strong><small>DeepSeek 官方 API</small></div></div>
-                <Show when={balance.status === 'not_queried'}><span class="balance-state muted">点击刷新后查询</span></Show>
+                <div class="provider-balance-name"><ProviderLogo presetId="deepseek" name="DeepSeek" /><div><strong>{balance.channel_name}</strong><small>{t('dash.officialApi')}</small></div></div>
+                <Show when={balance.status === 'not_queried'}><span class="balance-state muted">{t('dash.clickToQuery')}</span></Show>
                 <Show when={balance.status === 'error'}><span class="balance-state error">{balance.status === 'error' ? balance.error : ''}</span></Show>
                 <Show when={balance.status === 'ok'}>{() => {
                   if (balance.status !== 'ok') return null;
                   return <div class="provider-balance-values">
-                    <span class={`balance-state ${balance.is_available ? 'available' : 'unavailable'}`}>{balance.is_available ? '账户可用' : '账户不可用'}</span>
+                    <span class={`balance-state ${balance.is_available ? 'available' : 'unavailable'}`}>{balance.is_available ? t('dash.accountAvailable') : t('dash.accountUnavailable')}</span>
                     <For each={balance.balance_infos}>{(item) => (
                       <div class="provider-balance-value">
-                        <small>{item.currency} 总余额</small>
+                        <small>{item.currency} {t('dash.balanceTotal')}</small>
                         <strong>{balanceCurrencySymbol(item.currency)}{item.total_balance}</strong>
-                        <span>赠金 {balanceCurrencySymbol(item.currency)}{item.granted_balance} · 充值 {balanceCurrencySymbol(item.currency)}{item.topped_up_balance}</span>
+                        <span>{t('dash.balanceGranted')} {balanceCurrencySymbol(item.currency)}{item.granted_balance} · {t('dash.balanceToppedUp')} {balanceCurrencySymbol(item.currency)}{item.topped_up_balance}</span>
                       </div>
                     )}</For>
-                    <small class="balance-updated">{balanceUpdatedAt(balance.fetched_at)}{balance.cached ? ' · 缓存' : ''}</small>
+                    <small class="balance-updated">{balanceUpdatedAt(balance.fetched_at)}{balance.cached ? ` · ${t('dash.cached')}` : ''}</small>
                   </div>;
                 }}</Show>
               </div>
@@ -184,7 +185,7 @@ export default function Dashboard() {
       </Show>
 
       <section class="panel quickstart-panel">
-        <div class="panel-header"><div><h2>快速开始</h2><p>复制下面的示例，替换为完整 Gateway Key 即可调用</p></div><button class="secondary-button" onClick={() => copy(curlExample(baseUrl(), activeModels()[0]?.unified_model_id), 'curl')}>{copied() === 'curl' ? '已复制' : '复制命令'}</button></div>
+        <div class="panel-header"><div><h2>{t('dash.quickstart')}</h2><p>{t('dash.quickstartSub')}</p></div><button class="secondary-button" onClick={() => copy(curlExample(baseUrl(), activeModels()[0]?.unified_model_id), 'curl')}>{copied() === 'curl' ? t('dash.copied') : t('dash.copyCmd')}</button></div>
         <pre>{curlExample(baseUrl(), activeModels()[0]?.unified_model_id)}</pre>
       </section>
     </div>

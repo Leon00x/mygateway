@@ -1,6 +1,7 @@
 import { createSignal } from 'solid-js';
 import { useAuth } from '../index';
 import { Navigate, useNavigate } from '@solidjs/router';
+import { t } from '../i18n';
 
 export default function Login() {
   const auth = useAuth();
@@ -25,7 +26,7 @@ export default function Login() {
         body: JSON.stringify({ username: username(), password: password() }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error?.message ?? '登录失败');
+      if (!response.ok) throw new Error(data.error?.message ?? t('auth.loginFailed'));
       await auth.check();
       navigate(data.must_change_password ? '/change-password' : '/', { replace: true });
     } catch (cause) {
@@ -42,23 +43,23 @@ export default function Login() {
         <div class="login-visual-copy">
           <div class="login-brand"><span class="brand-symbol">M</span><strong>MyGateway</strong></div>
           <span class="eyebrow light">AI AGGREGATION GATEWAY</span>
-          <h1>一个入口，连接你的所有模型。</h1>
-          <p>统一管理渠道、路由与密钥，在 Cloudflare 边缘安全转发每一次模型调用。</p>
-          <div class="login-features"><span>固定优先级路由</span><span>响应前自动回退</span><span>流式 SSE 透传</span></div>
+          <h1>{t('auth.tagline1')}</h1>
+          <p>{t('auth.tagline2')}</p>
+          <div class="login-features"><span>{t('auth.featureRouting')}</span><span>{t('auth.featureProtocols')}</span><span>{t('auth.featureQuota')}</span></div>
         </div>
       </section>
       <section class="login-panel">
         <form onSubmit={handleLogin} class="login-card">
-          <span class="eyebrow">管理员控制台</span>
-          <h2>欢迎回来</h2>
-          <p>使用部署时生成的初始账号登录。</p>
+          <span class="eyebrow">Admin</span>
+          <h2>{t('auth.loginTitle')}</h2>
+          <p>{t('auth.loginSub')}</p>
           <div class="auth-form">
-            <label>用户名<input value={username()} onInput={(e) => setUsername(e.currentTarget.value)} placeholder="用户名" autocomplete="username" required /></label>
-            <label>密码<input type="password" value={password()} onInput={(e) => setPassword(e.currentTarget.value)} placeholder="密码" autocomplete="current-password" required /></label>
+            <label>{t('auth.username')}<input value={username()} onInput={(e) => setUsername(e.currentTarget.value)} placeholder={t('auth.username')} autocomplete="username" required /></label>
+            <label>{t('auth.password')}<input type="password" value={password()} onInput={(e) => setPassword(e.currentTarget.value)} placeholder={t('auth.password')} autocomplete="current-password" required /></label>
             {error() && <div class="form-error">{error()}</div>}
-            <button type="submit" class="primary-button auth-submit" disabled={loading()}>{loading() ? '正在登录…' : '登录控制台'}</button>
+            <button type="submit" class="primary-button auth-submit" disabled={loading()}>{loading() ? t('auth.loading') : t('auth.login')}</button>
           </div>
-          <small class="login-hint">首次登录后系统会要求立即修改初始凭据。</small>
+          <small class="login-hint">{t('auth.mustChange')}</small>
         </form>
       </section>
     </div>

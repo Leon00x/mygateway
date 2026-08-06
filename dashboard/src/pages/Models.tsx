@@ -1,6 +1,7 @@
 import { createSignal, onMount, For, Show } from 'solid-js';
 import { COMMON_MODEL_TEMPLATES } from '../presets';
 import { ProviderLogo } from '../components/ProviderLogo';
+import { t } from '../i18n';
 
 const dollarsToMicros = (value: string): number | null => {
   if (!value.trim()) return null;
@@ -235,7 +236,7 @@ export default function Models() {
       });
       if (!resp.ok) {
         const data = await resp.json();
-        throw new Error(data.error?.message ?? '保存失败');
+        throw new Error(data.error?.message ?? t('keys.saveFailed'));
       }
       setEditCard(null);
       await fetchAll();
@@ -262,9 +263,9 @@ export default function Models() {
 
   // --- Delete card ---
   const deleteCard = async (id: string) => {
-    if (!confirm('删除该模型及其全部渠道实例？历史用量会保留。')) return;
+    if (!confirm(t('models.deleteConfirm'))) return;
     const resp = await fetch(`/admin/api/models/${id}`, { method: 'DELETE' });
-    if (!resp.ok) alert('删除失败');
+    if (!resp.ok) alert(t('models.deleteFailed'));
     fetchAll();
   };
 
@@ -298,23 +299,23 @@ export default function Models() {
   const priceLabel = (inst: Instance): string => {
     const input = inst.input_price_micros_per_million;
     const output = inst.output_price_micros_per_million;
-    if (input === null && output === null) return '未定价';
+    if (input === null && output === null) return t('models.unpriced');
     return `$${((input ?? 0) / 1_000_000).toFixed(2)} / $${((output ?? 0) / 1_000_000).toFixed(2)} M`;
   };
 
   return (
     <div class="resource-page model-page">
       <div class="page-heading">
-        <div><h2>Unified Models</h2><p>一个模型 ID 可以绑定多个渠道，并按顺序自动回退。</p></div>
-        <button onClick={() => setShowCreate(!showCreate())} class="primary-button">+ 创建模型</button>
+        <div><h2>Unified Models</h2><p>{t('models.subtitle')}</p></div>
+        <button onClick={() => setShowCreate(!showCreate())} class="primary-button">{t('models.create')}</button>
       </div>
 
       {/* Create card form */}
       <Show when={showCreate()}>
         <form onSubmit={submitCreate} class="panel inline-form form-stack">
-          <div class="inline-form-title"><div><h3>创建统一模型</h3><p>客户端将使用统一模型 ID 发起调用。</p></div><button type="button" onClick={() => setShowCreate(false)}>×</button></div>
+          <div class="inline-form-title"><div><h3>{t('models.createTitle')}</h3><p>{t('models.createSub')}</p></div><button type="button" onClick={() => setShowCreate(false)}>×</button></div>
           <input
-            placeholder="统一模型 ID (如 deepseek-chat)"
+            placeholder={t('models.unifiedId')}
             list="common-model-templates"
             value={newModelId()}
             onInput={(e) => {
@@ -325,39 +326,39 @@ export default function Models() {
           />
           <datalist id="common-model-templates"><For each={COMMON_MODEL_TEMPLATES}>{(model) => <option value={model} />}</For></datalist>
           <input
-            placeholder="显示名称 (如 DeepSeek Chat)"
+            placeholder={t('models.displayName')}
             value={newDisplayName()}
             onInput={(e) => setNewDisplayName(e.currentTarget.value)}
             required
           />
           <div class="model-bind-fields">
-            <label>同时绑定渠道（可选）
+            <label>{t('models.bindChannel')}
               <select value={newChannelId()} onChange={(e) => chooseCreateChannel(e.currentTarget.value)}>
-                <option value="">稍后绑定</option>
+                <option value="">{t('models.bindLater')}</option>
                 <For each={activeChannels()}>{(channel) => <option value={channel.id}>{channel.name}</option>}</For>
               </select>
             </label>
-            <Show when={newChannelId()}><label>渠道模型
+            <Show when={newChannelId()}><label>{t('models.channelModel')}
               <input
                 list="create-channel-models"
-                placeholder={inventoryLoading() ? '加载模型中…' : '选择已发现模型或直接输入'}
+                placeholder={inventoryLoading() ? t('models.loadingModels') : t('models.selectOrEnter')}
                 value={newUpstreamModel()}
                 onInput={(e) => setNewUpstreamModel(e.currentTarget.value)}
                 required
               />
               <datalist id="create-channel-models"><For each={availableInventory(newChannelId())}>{(model) => <option value={model.provider_model_id}>{model.display_name}</option>}</For></datalist>
-              <small>公开 Alias 自动生成；统一模型 ID 仍可自由修改。</small>
+              <small>{t('models.aliasAuto')}</small>
             </label></Show>
           </div>
           <Show when={createError()}><div class="form-error">{createError()}</div></Show>
           <div class="inline-form-actions"><button type="submit" disabled={creating()} class="primary-button">
-            {creating() ? '创建中...' : '创建'}
+            {creating() ? t('common.loading') : t('models.createButton')}
           </button></div>
         </form>
       </Show>
 
       {loading() && <p class="empty-state">Loading...</p>}
-      <Show when={!loading() && cards().length === 0}><div class="panel empty-state"><span class="provider-logo">M</span><h3>还没有统一模型</h3><p>创建模型后，再绑定一个或多个渠道实例。</p></div></Show>
+      <Show when={!loading() && cards().length === 0}><div class="panel empty-state"><span class="provider-logo">M</span><h3>{t('models.emptyTitle')}</h3><p>{t('models.emptyBody')}</p></div></Show>
 
       <div class="channel-card-grid model-card-grid">
         <For each={cards()}>
@@ -366,16 +367,16 @@ export default function Models() {
               <header class="channel-card-head">
                 <span class="provider-logo">M</span>
                 <div><strong>{card.display_name}</strong><span><code>{card.unified_model_id}</code></span></div>
-                <span class={`badge ${card.status}`}>{card.status === 'active' ? '运行中' : '已停用'}</span>
+                <span class={`badge ${card.status}`}>{card.status === 'active' ? t('common.active') : t('common.disabled')}</span>
               </header>
 
               <div class="channel-card-metrics">
-                <div><span>渠道实例</span><strong>{card.instances.length} 个</strong></div>
-                <div><span>可用渠道</span><strong class="muted-value">{card.instances.filter((i) => i.status === 'active').length} 个</strong></div>
+                <div><span>{t('models.instances')}</span><strong>{card.instances.length}</strong></div>
+                <div><span>{t('channels.available')}</span><strong class="muted-value">{card.instances.filter((i) => i.status === 'active').length}</strong></div>
               </div>
 
               <div class="channel-card-section model-instance-section">
-                <div class="channel-card-label"><span>回退顺序</span><strong>{sortedInstances(card).length} 个实例</strong></div>
+                <div class="channel-card-label"><span>{t('models.fallbackOrder')}</span><strong>{sortedInstances(card).length}</strong></div>
                 <div class="model-instance-list">
                   <Show when={sortedInstances(card).length === 0} fallback={<For each={sortedInstances(card)}>{(inst, idx) => (
                     <div class="model-instance-row">
@@ -387,21 +388,21 @@ export default function Models() {
                       </div>
                       <div class="instance-order">
                         <span class={`badge ${inst.status}`}>#{idx() + 1}</span>
-                        <button title="定价" onClick={() => openEditPricing(card, inst)}>$</button>
-                        <button title="上移" disabled={idx() === 0} onClick={() => move(card, inst, -1)}>↑</button>
-                        <button title="下移" disabled={idx() === sortedInstances(card).length - 1} onClick={() => move(card, inst, 1)}>↓</button>
+                        <button title={t('models.pricing')} onClick={() => openEditPricing(card, inst)}>$</button>
+                        <button title={t('models.moveUp')} disabled={idx() === 0} onClick={() => move(card, inst, -1)}>↑</button>
+                        <button title={t('models.moveDown')} disabled={idx() === sortedInstances(card).length - 1} onClick={() => move(card, inst, 1)}>↓</button>
                       </div>
                     </div>
                   )}</For>}>
-                    <span class="empty-preview">尚未绑定渠道，点下方"添加实例"。</span>
+                    <span class="empty-preview">{t('models.notBound')}</span>
                   </Show>
                 </div>
               </div>
 
               <footer class="channel-card-actions model-card-actions">
-                <button class="primary-button" onClick={() => openAdd(card)}>+ 添加实例</button>
-                <button class="secondary-button" onClick={() => openEdit(card)}>编辑</button>
-                <button class="secondary-button danger-link" onClick={() => deleteCard(card.id)}>删除</button>
+                <button class="primary-button" onClick={() => openAdd(card)}>{t('models.addInstance')}</button>
+                <button class="secondary-button" onClick={() => openEdit(card)}>{t('models.edit')}</button>
+                <button class="secondary-button danger-link" onClick={() => deleteCard(card.id)}>{t('common.delete')}</button>
               </footer>
             </article>
           )}
@@ -414,39 +415,39 @@ export default function Models() {
         return (
           <div class="modal-backdrop" onClick={() => setAddForCard(null)}>
             <form class="modal-card form-stack" onSubmit={submitInstance} onClick={(e) => e.stopPropagation()}>
-              <div class="modal-title"><div><span class="eyebrow">Instance</span><h3>绑定渠道实例</h3><p>{card()?.display_name} · {card()?.unified_model_id}</p></div><button type="button" onClick={() => setAddForCard(null)}>×</button></div>
+              <div class="modal-title"><div><span class="eyebrow">Instance</span><h3>{t('models.bindInstanceTitle')}</h3><p>{card()?.display_name} · {card()?.unified_model_id}</p></div><button type="button" onClick={() => setAddForCard(null)}>×</button></div>
               <Show when={activeChannels().length === 0}>
-                <div class="form-error">暂无可用渠道，请先在 Channels 页添加并启用渠道。</div>
+                <div class="form-error">{t('models.noChannels')}</div>
               </Show>
-              <label>渠道
+              <label>{t('common.channel')}
                 <select value={instChannelId()} onChange={(e) => chooseInstanceChannel(e.currentTarget.value)}>
-                  <Show when={activeChannels().length === 0}><option value="">（无可用渠道）</option></Show>
+                  <Show when={activeChannels().length === 0}><option value="">（{t('channels.available')} —）</option></Show>
                   <For each={activeChannels()}>
                     {(ch) => <option value={ch.id}>{ch.name} — {ch.base_url}</option>}
                   </For>
                 </select>
               </label>
-              <label>上游模型 ID
-                <input list="instance-channel-models" placeholder="选择已发现模型或直接输入上游模型 ID" value={instUpstreamModel()} onInput={(e) => { const value = e.currentTarget.value; setInstUpstreamModel(value); setInstAlias(suggestedAlias(instChannelId(), value)); }} required />
+              <label>{t('models.upstreamModelId')}
+                <input list="instance-channel-models" placeholder={t('models.selectOrEnter')} value={instUpstreamModel()} onInput={(e) => { const value = e.currentTarget.value; setInstUpstreamModel(value); setInstAlias(suggestedAlias(instChannelId(), value)); }} required />
                 <datalist id="instance-channel-models"><For each={availableInventory(instChannelId())}>{(model) => <option value={model.provider_model_id}>{model.display_name}</option>}</For></datalist>
               </label>
-              <label>公开别名（客户端可直接用此 ID 调用）
-                <input placeholder="如 ds-deepseek-chat" value={instAlias()} onInput={(e) => setInstAlias(e.currentTarget.value)} required />
+              <label>{t('models.publicAlias')}
+                <input placeholder="ds-deepseek-chat" value={instAlias()} onInput={(e) => setInstAlias(e.currentTarget.value)} required />
               </label>
               <label class="checkbox-label">
                 <input type="checkbox" checked={instStreamUsage()} onChange={(e) => setInstStreamUsage(e.currentTarget.checked)} />
-                支持流式 usage
+                {t('models.streamUsage')}
               </label>
               <div class="model-bind-fields">
-                <label>输入价格 ($/M token，用于费用统计)
-                  <input type="number" min="0" step="0.01" placeholder="留空不统计" value={instInputPrice()} onInput={(e) => setInstInputPrice(e.currentTarget.value)} />
+                <label>{t('models.inputPrice')}
+                  <input type="number" min="0" step="0.01" placeholder="—" value={instInputPrice()} onInput={(e) => setInstInputPrice(e.currentTarget.value)} />
                 </label>
-                <label>输出价格 ($/M token)
-                  <input type="number" min="0" step="0.01" placeholder="留空不统计" value={instOutputPrice()} onInput={(e) => setInstOutputPrice(e.currentTarget.value)} />
+                <label>{t('models.outputPrice')}
+                  <input type="number" min="0" step="0.01" placeholder="—" value={instOutputPrice()} onInput={(e) => setInstOutputPrice(e.currentTarget.value)} />
                 </label>
               </div>
               <Show when={instError()}><div class="form-error">{instError()}</div></Show>
-              <div class="modal-actions"><button type="button" class="secondary-button" onClick={() => setAddForCard(null)}>取消</button><button type="submit" disabled={instBusy()} class="primary-button">{instBusy() ? '添加中...' : '添加实例'}</button></div>
+              <div class="modal-actions"><button type="button" class="secondary-button" onClick={() => setAddForCard(null)}>{t('common.cancel')}</button><button type="submit" disabled={instBusy()} class="primary-button">{instBusy() ? t('common.loading') : t('models.addInstance')}</button></div>
             </form>
           </div>
         );
@@ -456,17 +457,17 @@ export default function Models() {
       <Show when={editInst()}>{(target) => (
         <div class="modal-backdrop" onClick={() => setEditInst(null)}>
           <form class="modal-card form-stack" onSubmit={savePricing} onClick={(e) => e.stopPropagation()}>
-            <div class="modal-title"><div><span class="eyebrow">Pricing</span><h3>实例定价</h3><p>{target().instance.public_model_alias} · {target().card.unified_model_id}</p></div><button type="button" onClick={() => setEditInst(null)}>×</button></div>
+            <div class="modal-title"><div><span class="eyebrow">Pricing</span><h3>{t('models.pricing')}</h3><p>{target().instance.public_model_alias} · {target().card.unified_model_id}</p></div><button type="button" onClick={() => setEditInst(null)}>×</button></div>
             <div class="model-bind-fields">
-              <label>输入价格 ($/M token)
-                <input type="number" min="0" step="0.01" placeholder="留空不统计" value={editInstInput()} onInput={(e) => setEditInstInput(e.currentTarget.value)} />
+              <label>{t('models.inputPrice')}
+                <input type="number" min="0" step="0.01" placeholder="—" value={editInstInput()} onInput={(e) => setEditInstInput(e.currentTarget.value)} />
               </label>
-              <label>输出价格 ($/M token)
-                <input type="number" min="0" step="0.01" placeholder="留空不统计" value={editInstOutput()} onInput={(e) => setEditInstOutput(e.currentTarget.value)} />
+              <label>{t('models.outputPrice')}
+                <input type="number" min="0" step="0.01" placeholder="—" value={editInstOutput()} onInput={(e) => setEditInstOutput(e.currentTarget.value)} />
               </label>
             </div>
-            <small class="pricing-note">费用 = (输入 tokens × 输入价 + 输出 tokens × 输出价) / 1,000,000，按美元统计。</small>
-            <div class="modal-actions"><button type="button" class="secondary-button" onClick={() => setEditInst(null)}>取消</button><button type="submit" disabled={editInstBusy()} class="primary-button">保存定价</button></div>
+            <small class="pricing-note">{t('models.pricingNote')}</small>
+            <div class="modal-actions"><button type="button" class="secondary-button" onClick={() => setEditInst(null)}>{t('common.cancel')}</button><button type="submit" disabled={editInstBusy()} class="primary-button">{t('models.savePricing')}</button></div>
           </form>
         </div>
       )}</Show>
@@ -475,16 +476,16 @@ export default function Models() {
       <Show when={editCard()}>{(card) => (
         <div class="modal-backdrop" onClick={() => setEditCard(null)}>
           <form class="modal-card form-stack" onSubmit={saveEdit} onClick={(e) => e.stopPropagation()}>
-            <div class="modal-title"><div><span class="eyebrow">Model</span><h3>编辑模型</h3><p>{card().unified_model_id}</p></div><button type="button" onClick={() => setEditCard(null)}>×</button></div>
-            <label>显示名称<input value={editName()} onInput={(e) => setEditName(e.currentTarget.value)} required /></label>
-            <label>状态
+            <div class="modal-title"><div><span class="eyebrow">Model</span><h3>{t('models.editModel')}</h3><p>{card().unified_model_id}</p></div><button type="button" onClick={() => setEditCard(null)}>×</button></div>
+            <label>{t('models.displayName')}<input value={editName()} onInput={(e) => setEditName(e.currentTarget.value)} required /></label>
+            <label>{t('common.status')}
               <select value={editStatus()} onChange={(e) => setEditStatus(e.currentTarget.value as 'active' | 'disabled')}>
-                <option value="active">运行中</option>
-                <option value="disabled">已停用</option>
+                <option value="active">{t('common.active')}</option>
+                <option value="disabled">{t('common.disabled')}</option>
               </select>
             </label>
             <Show when={editError()}><div class="form-error">{editError()}</div></Show>
-            <div class="modal-actions"><button type="button" class="secondary-button" onClick={() => setEditCard(null)}>取消</button><button type="submit" disabled={editBusy()} class="primary-button">{editBusy() ? '保存中…' : '保存'}</button></div>
+            <div class="modal-actions"><button type="button" class="secondary-button" onClick={() => setEditCard(null)}>{t('common.cancel')}</button><button type="submit" disabled={editBusy()} class="primary-button">{editBusy() ? t('common.saving') : t('common.save')}</button></div>
           </form>
         </div>
       )}</Show>
