@@ -8,6 +8,7 @@ import { generateId, nowMinute } from '../shared/ids.ts';
 import { computeCostMicros } from '../shared/cost.ts';
 import { upsertUsageMinute } from '../db/usage.ts';
 import { insertRequestLog, upsertKeyDailyUsage, utcDateString, type RequestLogStatus } from '../db/requests.ts';
+import { bumpKeyQuotaLedger } from './key-quota.ts';
 import type { Usage } from '../streaming/sse-decoder.ts';
 
 export interface UsageRecordContext {
@@ -75,6 +76,7 @@ export async function recordRequestCompletion(
     outputTokens,
     costMicros,
   });
+  bumpKeyQuotaLedger(ctx.keyId, { requests: 1, inputTokens, outputTokens, costMicros });
 
   await insertRequestLog(env.DB, {
     id: generateId(),

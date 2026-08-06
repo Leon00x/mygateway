@@ -13,7 +13,7 @@ import { decryptProviderKey } from '../crypto/provider-key.ts';
 import { SseDecoder, extractNonStreamUsage, Usage } from '../streaming/sse-decoder.ts';
 import { onceAsync } from '../streaming/once-async.ts';
 import { logEvent } from '../shared/log.ts';
-import { checkDailyQuota, checkRpm, keyIsExpired } from './key-quota.ts';
+import { checkDailyQuota, checkRpm, configureKeyQuota, keyIsExpired } from './key-quota.ts';
 import {
   recordCachedHit,
   recordRejectedRequest,
@@ -94,6 +94,7 @@ async function handleProtocolCompletion(
 ): Promise<Response> {
   const requestStartedAt = performance.now();
   const config = parseConfig(env);
+  configureKeyQuota(config.keyQuotaRefreshMs);
 
   const invalidKeyResponse = () => gatewayErrorResponse(
     'invalid_api_key',

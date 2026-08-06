@@ -46,6 +46,12 @@ export interface Env {
 
   /** Max entries in the per-isolate response cache. Default: 1000 */
   RESPONSE_CACHE_MAX_ENTRIES?: string;
+
+  /**
+   * How often a key's daily quota re-reads D1, in ms. Between refreshes the
+   * isolate adds its own completed requests locally. Default: 5000
+   */
+  KEY_QUOTA_REFRESH_MS?: string;
 }
 
 /** Parsed numeric config with validated defaults. */
@@ -59,6 +65,7 @@ export interface RuntimeConfig {
   requestLogRetentionDays: number;
   responseCacheTtlMs: number;
   responseCacheMaxEntries: number;
+  keyQuotaRefreshMs: number;
 }
 
 const DEFAULTS = {
@@ -71,6 +78,7 @@ const DEFAULTS = {
   requestLogRetentionDays: 7,
   responseCacheTtlMs: 0,
   responseCacheMaxEntries: 1_000,
+  keyQuotaRefreshMs: 5_000,
 } as const;
 
 /**
@@ -104,6 +112,8 @@ export function parseConfig(env: Env): RuntimeConfig {
     responseCacheTtlMs: parseInt(env.RESPONSE_CACHE_TTL_MS ?? '', 10) || DEFAULTS.responseCacheTtlMs,
     responseCacheMaxEntries:
       parseInt(env.RESPONSE_CACHE_MAX_ENTRIES ?? '', 10) || DEFAULTS.responseCacheMaxEntries,
+    keyQuotaRefreshMs:
+      parseInt(env.KEY_QUOTA_REFRESH_MS ?? '', 10) || DEFAULTS.keyQuotaRefreshMs,
   };
 }
 

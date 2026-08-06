@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { computeCostMicros, formatUsdMicros } from '../src/shared/cost.ts';
 import { ResponseCache, resetResponseCache } from '../src/gateway/response-cache.ts';
-import { checkDailyQuota, checkRpm, keyIsExpired, resetRpmWindow } from '../src/gateway/key-quota.ts';
+import { checkDailyQuota, checkRpm, configureKeyQuota, keyIsExpired, resetKeyQuota } from '../src/gateway/key-quota.ts';
 import type { GatewayKeyIdentity } from '../src/gateway/access-resolver.ts';
 import { parseModelAllowlist, serializeModelAllowlist } from '../src/db/keys.ts';
 
@@ -82,7 +82,10 @@ describe('response cache', () => {
 });
 
 describe('key quota', () => {
-  beforeEach(() => resetRpmWindow());
+  beforeEach(() => {
+    resetKeyQuota();
+    configureKeyQuota(5_000);
+  });
 
   test('expiry compares against unix seconds', () => {
     const nowSeconds = Math.floor(Date.now() / 1000);
@@ -108,7 +111,6 @@ describe('key quota', () => {
       prepare: (sql: string) => ({
         bind: (...params: unknown[]) => ({
           first: async () => {
-            const row = params[1] as string; // key_id, date
             return usage[`${params[0]}:${params[1]}`] ?? null;
           },
           all: async () => ({ results: [] }),
@@ -123,16 +125,48 @@ describe('key quota', () => {
     expect(blocked).toEqual({ allowed: true });
 
     usage['limited:2026-08-05'] = { requests: 1, input_tokens: 0, output_tokens: 0, cost_micros: 0 };
+    resetKeyQuota(); // simulate the refresh window elapsing → re-read D1
     const blocked2 = await checkDailyQuota(db, key({
       id: 'limited', dailyRequestLimit: 1,
     }), '2026-08-05');
     expect(blocked2).toEqual({ allowed: false, reason: 'daily_requests' });
 
     usage['tokens:2026-08-05'] = { requests: 0, input_tokens: 1_000, output_tokens: 500, cost_micros: 0 };
+    resetKeyQuota();
     const tokenBlocked = await checkDailyQuota(db, key({
       id: 'tokens', dailyTokenLimit: 1_000,
     }), '2026-08-05');
     expect(tokenBlocked).toEqual({ allowed: false, reason: 'daily_tokens' });
+  });
+
+  test('ledger reuses the D1 snapshot and counts local bumps between refreshes', async () => {
+    let reads = 0;
+    const usage: Record<string, unknown> = {};
+    const db = {
+      prepare: (sql: string) => ({
+        bind: (...params: unknown[]) => ({
+          first: async () => {
+            reads++;
+            return usage[`${params[0]}:${params[1]}`] ?? null;
+          },
+          all: async () => ({ results: [] }),
+          run: async () => ({ meta: { changes: 1 } }),
+        }),
+      }),
+    } as unknown as D1Database;
+    const { bumpKeyQuotaLedger } = await import('../src/gateway/key-quota.ts');
+
+    const identity = key({ id: 'busy', dailyRequestLimit: 3 });
+    expect(await checkDailyQuota(db, identity, '2026-08-05')).toEqual({ allowed: true });
+    expect(reads).toBe(1);
+
+    // Completed requests bump the local ledger — no extra D1 reads.
+    bumpKeyQuotaLedger('busy', { requests: 1, inputTokens: 0, outputTokens: 0, costMicros: 0 });
+    bumpKeyQuotaLedger('busy', { requests: 1, inputTokens: 0, outputTokens: 0, costMicros: 0 });
+    expect(await checkDailyQuota(db, identity, '2026-08-05')).toEqual({ allowed: true }); // 2 < 3
+    bumpKeyQuotaLedger('busy', { requests: 1, inputTokens: 0, outputTokens: 0, costMicros: 0 });
+    expect(await checkDailyQuota(db, identity, '2026-08-05')).toEqual({ allowed: false, reason: 'daily_requests' }); // 3 >= 3
+    expect(reads).toBe(1); // still the single D1 read
   });
 
   test('daily quota skips the D1 read when no limits are set', async () => {

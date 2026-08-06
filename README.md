@@ -241,6 +241,7 @@ D1 索引写放大、Cloudflare 账号中的其他 Worker，以及异常或恶�
 | `REQUEST_LOG_RETENTION_DAYS` | `7` | 请求日志保留天数 |
 | `RESPONSE_CACHE_TTL_MS` | `0`（关闭） | 相同非流式请求的响应缓存 TTL |
 | `RESPONSE_CACHE_MAX_ENTRIES` | `1000` | isolate 内缓存条目上限 |
+| `KEY_QUOTA_REFRESH_MS` | `5000` | 每日预算台账刷新 D1 的间隔（降低每请求 D1 读） |
 
 ## 6. 当前产品边界
 
