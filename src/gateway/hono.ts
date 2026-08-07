@@ -255,6 +255,21 @@ gatewayApp.openapi(messagesRoute, async (c) => {
   return new Response(response.body, { status: response.status, headers: response.headers });
 });
 
+// Unknown /v1/* route → 400 (not a business 404 like model_not_found).
+gatewayApp.notFound((c) => {
+  return c.json(
+    {
+      error: {
+        message: 'Gateway route not found',
+        type: 'gateway_error',
+        param: null,
+        code: 'invalid_request',
+      },
+    },
+    400,
+  );
+});
+
 /**
  * Handle /v1/* with Hono. Returns undefined if the path is not a gateway route
  * (caller can fall through to static assets).
@@ -273,10 +288,7 @@ export async function handleGatewayHono(
   const envAdapter = env as Bindings;
 
   const response = await gatewayApp.fetch(request, envAdapter, ctx);
-  // Hono returns 404 for unknown /v1/* routes — we return undefined so the
-  // caller can produce a proper gateway error instead.
-  if (response.status === 404) {
-    return undefined;
-  }
+  // Hono's notFound() above answers unknown /v1/* routes; business 404s
+  // (model_not_found etc.) pass through untouched.
   return response;
 }

@@ -349,12 +349,7 @@ const dict: Record<string, Entry> = {
   'usage.last30d': { zh: '最近 30 天', en: 'Last 30 days' },
   'usage.custom': { zh: '自定义', en: 'Custom' },
   'common.apply': { zh: '应用', en: 'Apply' },
-  'usage.requestsDesc': { zh: '对模型发出的请求数量', en: 'Number of requests to models' },
-  'usage.avgLatencyDesc': { zh: '对模型发出的请求的平均延迟', en: 'Average latency of requests' },
-  'usage.avgTtftDesc': { zh: '从接收请求到返回首个字节的平均耗时', en: 'Time to first byte from request' },
-  'usage.successRateDesc': { zh: '对模型发出的请求的成功率百分比', en: 'Percentage of successful requests' },
   'usage.tokenConsumption': { zh: 'Token 消耗', en: 'Token consumption' },
-  'usage.tokenConsumptionDesc': { zh: '查看工作空间的 Token 消耗用量', en: 'Token usage for this workspace' },
 
   // --- Analytics: Logs ---
   'logs.title': { zh: '请求日志', en: 'Request Logs' },
@@ -428,10 +423,29 @@ const dict: Record<string, Entry> = {
 
   'logs.export': { zh: '导出', en: 'Export' },
   'logs.exportFailed': { zh: '导出失败，请稍后重试', en: 'Export failed, try again' },
-  'logs.retentionNotice': { zh: '调用日志保留 {n} 天，仅记录通过网关的请求。', en: 'Call logs are retained for {n} days and cover gateway requests only.' },
+  'logs.timestamp': { zh: '时间', en: 'Timestamp' },
+  'logs.apiKey': { zh: '密钥', en: 'API Key' },
+  'logs.usage': { zh: '用量', en: 'Usage' },
+  'logs.actions': { zh: '操作', en: 'Actions' },
   'logs.source': { zh: '来源', en: 'Source' },
   'logs.noLogs': { zh: '暂无日志', en: 'No logs yet' },
   'logs.noLogsBody': { zh: '当前筛选条件下没有请求记录。', en: 'There are no requests in the selected range.' },
+
+  'tr.quickSelect': { zh: '快速选择', en: 'Quick select' },
+  'tr.calendarSelect': { zh: '日历选择', en: 'Calendar' },
+  'tr.1h': { zh: '1 小时', en: '1 hour' },
+  'tr.3h': { zh: '3 小时', en: '3 hours' },
+  'tr.6h': { zh: '6 小时', en: '6 hours' },
+  'tr.24h': { zh: '24 小时', en: '24 hours' },
+  'tr.today': { zh: '今天', en: 'Today' },
+  'tr.yesterday': { zh: '昨天', en: 'Yesterday' },
+  'tr.1w': { zh: '1 周', en: '1 week' },
+  'tr.custom': { zh: '自定义', en: 'Custom' },
+  'tr.startDate': { zh: '开始日期', en: 'Start Date' },
+  'tr.startTime': { zh: '开始时间', en: 'Start Time' },
+  'tr.endDate': { zh: '结束日期', en: 'End Date' },
+  'tr.endTime': { zh: '结束时间', en: 'End Time' },
+  'common.confirm': { zh: '确定', en: 'Confirm' },
 
   // --- System ---
   'system.title': { zh: '系统设置', en: 'Settings' },

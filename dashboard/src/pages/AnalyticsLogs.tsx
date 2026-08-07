@@ -1,6 +1,7 @@
 import { createSignal, onMount, Show, For } from 'solid-js';
 import { A } from '@solidjs/router';
 import { t } from '../i18n';
+import TimeRangePicker, { resolvePreset, type TimeRange } from '../components/TimeRangePicker';
 
 interface LogRow {
   id: string;
@@ -88,8 +89,7 @@ export default function AnalyticsLogs() {
   const [keyId, setKeyId] = createSignal('');
   const [channelId, setChannelId] = createSignal('');
   const [requestIdFilter, setRequestIdFilter] = createSignal('');
-  const [startTime, setStartTime] = createSignal('');
-  const [endTime, setEndTime] = createSignal('');
+  const [timeRange, setTimeRange] = createSignal<TimeRange>({ preset: '1w', ...resolvePreset('1w') });
   const [limit, setLimit] = createSignal(50);
   const [clearBusy, setClearBusy] = createSignal(false);
 
@@ -168,11 +168,11 @@ export default function AnalyticsLogs() {
   const applyFilters = () => {
     setNextCursor(null);
     setHasMore(false);
-    void fetchLogsDirect(true, status(), modelId(), keyId(), channelId(), requestIdFilter(), startTime(), endTime(), null);
+    void fetchLogsDirect(true, status(), modelId(), keyId(), channelId(), requestIdFilter(), String(timeRange().start), String(timeRange().end), null);
   };
 
   const loadMore = () => {
-    void fetchLogsDirect(false, status(), modelId(), keyId(), channelId(), requestIdFilter(), startTime(), endTime(), nextCursor());
+    void fetchLogsDirect(false, status(), modelId(), keyId(), channelId(), requestIdFilter(), String(timeRange().start), String(timeRange().end), nextCursor());
   };
 
   const openDetail = async (id: string) => {
@@ -194,8 +194,8 @@ export default function AnalyticsLogs() {
       if (keyId()) query.set('key_id', keyId());
       if (channelId()) query.set('channel_id', channelId());
       if (requestIdFilter()) query.set('request_id', requestIdFilter());
-      if (startTime()) query.set('start', startTime());
-      if (endTime()) query.set('end', endTime());
+      query.set('start', String(timeRange().start));
+      query.set('end', String(timeRange().end));
       const response = await fetch(`/admin/api/analytics/logs?${query}`);
       if (!response.ok) throw new Error(t('logs.exportFailed'));
       const blob = await response.blob();
@@ -278,9 +278,6 @@ export default function AnalyticsLogs() {
         </div>
       </div>
 
-      {/* QwenCloud-style notice: log retention */}
-      <div class="analytics-notice">{t('logs.retentionNotice').replace('{n}', String(settings().requestLogRetentionDays))}</div>
-
       {/* Settings area */}
       <Show when={showSettings()}>
         <div class="panel analytics-settings">
@@ -350,7 +347,7 @@ export default function AnalyticsLogs() {
           <select value={status()} onChange={(e) => {
             const next = e.currentTarget.value;
             setStatus(next);
-            void fetchLogsDirect(true, next, modelId(), keyId(), channelId(), requestIdFilter(), startTime(), endTime(), null);
+            void fetchLogsDirect(true, next, modelId(), keyId(), channelId(), requestIdFilter(), String(timeRange().start), String(timeRange().end), null);
           }}>
             <option value="all">{t('common.all')}</option>
             <option value="success">{t('status.success')}</option>
@@ -362,17 +359,20 @@ export default function AnalyticsLogs() {
             <option value="expired">{t('status.expired')}</option>
           </select>
         </label>
-        <label class="filter-time"><span>{t('logs.timeRange')}</span>
-          <div>
-            <input type="text" placeholder={t('logs.startUnix')} value={startTime()} onInput={(e) => setStartTime(e.currentTarget.value)} />
-            <input type="text" placeholder={t('logs.endUnix')} value={endTime()} onInput={(e) => setEndTime(e.currentTarget.value)} />
-          </div>
-        </label>
+        <div class="logs-range-picker">
+          <TimeRangePicker
+            value={timeRange()}
+            onChange={(next) => {
+              setTimeRange(next);
+              void fetchLogsDirect(true, status(), modelId(), keyId(), channelId(), requestIdFilter(), String(next.start), String(next.end), null);
+            }}
+          />
+        </div>
         <label>{t('common.model')}
           <select value={modelId()} onChange={(e) => {
             const next = e.currentTarget.value;
             setModelId(next);
-            void fetchLogsDirect(true, status(), next, keyId(), channelId(), requestIdFilter(), startTime(), endTime(), null);
+            void fetchLogsDirect(true, status(), next, keyId(), channelId(), requestIdFilter(), String(timeRange().start), String(timeRange().end), null);
           }}>
             <option value="">{t('common.all')}</option>
             <For each={modelOptions()}>{(m) => <option value={m.id}>{m.name}</option>}</For>
@@ -382,7 +382,7 @@ export default function AnalyticsLogs() {
           <select value={keyId()} onChange={(e) => {
             const next = e.currentTarget.value;
             setKeyId(next);
-            void fetchLogsDirect(true, status(), modelId(), next, channelId(), requestIdFilter(), startTime(), endTime(), null);
+            void fetchLogsDirect(true, status(), modelId(), next, channelId(), requestIdFilter(), String(timeRange().start), String(timeRange().end), null);
           }}>
             <option value="">{t('common.all')}</option>
             <For each={keyOptions()}>{(k) => <option value={k.id}>{k.name}</option>}</For>
@@ -392,7 +392,7 @@ export default function AnalyticsLogs() {
           <select value={channelId()} onChange={(e) => {
             const next = e.currentTarget.value;
             setChannelId(next);
-            void fetchLogsDirect(true, status(), modelId(), keyId(), next, requestIdFilter(), startTime(), endTime(), null);
+            void fetchLogsDirect(true, status(), modelId(), keyId(), next, requestIdFilter(), String(timeRange().start), String(timeRange().end), null);
           }}>
             <option value="">{t('common.all')}</option>
             <For each={channelOptions()}>{(c) => <option value={c.id}>{c.name}</option>}</For>
@@ -407,7 +407,7 @@ export default function AnalyticsLogs() {
           <select value={String(limit())} onChange={(e) => {
             const next = Number(e.currentTarget.value);
             setLimit(next);
-            void fetchLogsDirect(true, status(), modelId(), keyId(), channelId(), requestIdFilter(), startTime(), endTime(), null, next);
+            void fetchLogsDirect(true, status(), modelId(), keyId(), channelId(), requestIdFilter(), String(timeRange().start), String(timeRange().end), null, next);
           }}>
             <option value="25">25</option>
             <option value="50">50</option>
@@ -423,21 +423,13 @@ export default function AnalyticsLogs() {
         <div class="panel analytics-error-state"><strong>{t('logs.loadFailed')}</strong><span>{logsError()}</span><button class="secondary-button" onClick={applyFilters}>{t('common.retry')}</button></div>
       </Show>
 
-      <Show when={!loading() && !logsError() && logs().length === 0}>
-        <div class="panel empty-state">
-          <span class="provider-logo">L</span>
-          <h3>{t('logs.noLogs')}</h3>
-          <p>{t('logs.noLogsBody')}</p>
-        </div>
-      </Show>
-
-      <Show when={!loading() && !logsError() && logs().length > 0}>
+      <Show when={!loading() && !logsError()}>
         <div class="panel analytics-log-panel">
           <div class="analytics-log-table">
             <div class="analytics-log-head">
-              <span>{t('logs.requestId')}</span><span>{t('common.time')}</span><span>{t('common.model')}</span><span>{t('logs.source')}</span><span>{t('common.key')}</span><span>Usage</span><span>TTFT</span><span>{t('logs.latency')}</span><span>{t('common.status')}</span><span>···</span>
+              <span>{t('logs.requestId')}</span><span>{t('logs.timestamp')}</span><span>{t('common.model')}</span><span>{t('logs.source')}</span><span>{t('logs.apiKey')}</span><span>{t('logs.usage')}</span><span>TTFT</span><span>{t('logs.latency')}</span><span>{t('common.status')}</span><span>{t('logs.actions')}</span>
             </div>
-            <For each={logs()}>{(log) => (
+            <Show when={logs().length === 0} fallback={<For each={logs()}>{(log) => (
               <div class="analytics-log-row">
                 <span class="alog-rid"><code title={log.request_id ?? ''}>{(log.request_id ?? '').slice(0, 12)}</code></span>
                 <span class="alog-time">{new Date(log.timestamp * 1000).toLocaleString()}</span>
@@ -450,7 +442,14 @@ export default function AnalyticsLogs() {
                 <span><span class={statusBadgeClass(log.status)}>{statusLabel(log.status)}</span></span>
                 <span><button class="ghost-button" onClick={() => void openDetail(log.id)}>{t('logs.detail')}</button></span>
               </div>
-            )}</For>
+            )}</For>}>
+              <div class="analytics-log-row analytics-log-empty">
+                <span class="alog-empty-span" style="grid-column: 1 / -1">
+                  <strong>{t('logs.noLogs')}</strong>
+                  <span>{t('logs.noLogsBody')}</span>
+                </span>
+              </div>
+            </Show>
           </div>
           <Show when={hasMore()}>
             <div class="analytics-log-more">

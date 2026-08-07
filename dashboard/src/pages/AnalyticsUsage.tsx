@@ -1,6 +1,7 @@
 import { createSignal, onMount, Show, For, onCleanup } from 'solid-js';
 import { A } from '@solidjs/router';
 import { t } from '../i18n';
+import TimeRangePicker, { resolvePreset, type TimeRange } from '../components/TimeRangePicker';
 
 interface AnalyticsSummary {
   requests: number;
@@ -57,44 +58,23 @@ function pct(part: number, total: number): string {
   return `${Math.round((part / total) * 100)}%`;
 }
 
-/** Local-midnight unix seconds for a YYYY-MM-DD value. */
-function dateToUnix(value: string): number {
-  if (!value) return 0;
-  return Math.floor(new Date(`${value}T00:00:00`).getTime() / 1000);
-}
-
-function todayInputValue(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-type RangeKey = 'today' | 'yesterday' | '7d' | '30d' | 'custom';
 
 export default function AnalyticsUsage() {
   const [data, setData] = createSignal<AnalyticsUsageResponse | null>(null);
   const [loading, setLoading] = createSignal(true);
   const [error, setError] = createSignal('');
-  const [range, setRange] = createSignal<RangeKey>('today');
-  const [customStart, setCustomStart] = createSignal(todayInputValue());
-  const [customEnd, setCustomEnd] = createSignal(todayInputValue());
+  const [timeRange, setTimeRange] = createSignal<TimeRange>({ preset: '1w', ...resolvePreset('1w') });
   const [granularity, setGranularity] = createSignal<'hour' | 'day' | ''>('');
   const [modelId, setModelId] = createSignal('');
   const [keyId, setKeyId] = createSignal('');
   const [modelOptions, setModelOptions] = createSignal<{ id: string; name: string }[]>([]);
   const [keyOptions, setKeyOptions] = createSignal<{ id: string; name: string }[]>([]);
 
-  const fetchUsage = async (r: RangeKey, g: string, m: string, k: string, start?: string, end?: string) => {
+  const fetchUsage = async (start: number, end: number, g: string, m: string, k: string) => {
     setLoading(true);
     setError('');
     try {
-      const query = new URLSearchParams();
-      if (r === 'custom' && start && end) {
-        query.set('range', 'custom');
-        query.set('start', String(dateToUnix(start)));
-        // End date inclusive → next local midnight
-        query.set('end', String(dateToUnix(end) + 86_400));
-      } else {
-        query.set('range', r);
-      }
+      const query = new URLSearchParams({ range: 'custom', start: String(start), end: String(end) });
       if (g) query.set('granularity', g);
       if (m) query.set('model_id', m);
       if (k) query.set('key_id', k);
@@ -106,27 +86,18 @@ export default function AnalyticsUsage() {
     } finally { setLoading(false); }
   };
 
-  const applyRange = (r: RangeKey) => {
-    setRange(r);
-    if (r === 'custom') {
-      void fetchUsage(r, granularity(), modelId(), keyId(), customStart(), customEnd());
-    } else {
-      void fetchUsage(r, granularity(), modelId(), keyId());
-    }
-  };
-
-  const applyCustom = () => {
-    setRange('custom');
-    void fetchUsage('custom', granularity(), modelId(), keyId(), customStart(), customEnd());
+  const onRangeChange = (next: TimeRange) => {
+    setTimeRange(next);
+    void fetchUsage(next.start, next.end, granularity(), modelId(), keyId());
   };
 
   const applyGranularity = (g: 'hour' | 'day' | '') => {
     setGranularity(g);
-    void fetchUsage(range(), g, modelId(), keyId(), customStart(), customEnd());
+    void fetchUsage(timeRange().start, timeRange().end, g, modelId(), keyId());
   };
 
   const applyFilters = () => {
-    void fetchUsage(range(), granularity(), modelId(), keyId(), customStart(), customEnd());
+    void fetchUsage(timeRange().start, timeRange().end, granularity(), modelId(), keyId());
   };
 
   const fetchOptions = async () => {
@@ -146,7 +117,7 @@ export default function AnalyticsUsage() {
     } catch { /* filters not critical */ }
   };
 
-  onMount(() => { void fetchUsage('today', '', '', ''); void fetchOptions(); });
+  onMount(() => { const r = resolvePreset('1w'); void fetchUsage(r.start, r.end, '', '', ''); void fetchOptions(); });
 
   const summary = () => data()?.summary;
   const models = () => data()?.models ?? [];
@@ -182,14 +153,6 @@ export default function AnalyticsUsage() {
     );
   };
 
-  const rangeButtons: { key: RangeKey; label: string }[] = [
-    { key: 'today', label: t('dash.today') },
-    { key: 'yesterday', label: t('usage.yesterday') },
-    { key: '7d', label: t('usage.last7d') },
-    { key: '30d', label: t('usage.last30d') },
-    { key: 'custom', label: t('usage.custom') },
-  ];
-
   return (
     <div class="analytics-page">
       <div class="analytics-page-nav">
@@ -199,30 +162,16 @@ export default function AnalyticsUsage() {
         </div>
       </div>
 
-      {/* QwenCloud-style range picker: quick buttons + custom date range */}
-      <div class="analytics-range-bar">
-        <div class="analytics-range-buttons">
-          <For each={rangeButtons}>{(btn) => (
-            <button classList={{ active: range() === btn.key }} onClick={() => applyRange(btn.key)}>
-              {btn.label}
-            </button>
-          )}</For>
-        </div>
-        <div class="analytics-custom-range">
-          <input type="date" value={customStart()} max={customEnd()} onInput={(e) => setCustomStart(e.currentTarget.value)} />
-          <span>→</span>
-          <input type="date" value={customEnd()} min={customStart()} onInput={(e) => setCustomEnd(e.currentTarget.value)} />
-          <button class="secondary-button" onClick={applyCustom}>{t('common.apply')}</button>
-        </div>
-      </div>
-
-      {/* Filters */}
+      {/* Filters — time range picker sits in the same row as the other filters */}
       <div class="analytics-filters">
+        <div class="analytics-filters-range">
+          <TimeRangePicker value={timeRange()} onChange={onRangeChange} />
+        </div>
         <label>{t('common.model')}
           <select value={modelId()} onChange={(e) => {
             const next = e.currentTarget.value;
             setModelId(next);
-            void fetchUsage(range(), granularity(), next, keyId(), customStart(), customEnd());
+            void fetchUsage(timeRange().start, timeRange().end, granularity(), next, keyId());
           }}>
             <option value="">{t('usage.allModels')}</option>
             <For each={modelOptions()}>{(m) => <option value={m.id}>{m.name}</option>}</For>
@@ -232,7 +181,7 @@ export default function AnalyticsUsage() {
           <select value={keyId()} onChange={(e) => {
             const next = e.currentTarget.value;
             setKeyId(next);
-            void fetchUsage(range(), granularity(), modelId(), next, customStart(), customEnd());
+            void fetchUsage(timeRange().start, timeRange().end, granularity(), modelId(), next);
           }}>
             <option value="">{t('usage.allKeys')}</option>
             <For each={keyOptions()}>{(k) => <option value={k.id}>{k.name}</option>}</For>
@@ -259,29 +208,25 @@ export default function AnalyticsUsage() {
           <div class="analytics-metric-card">
             <div class="analytics-metric-top"><small>{t('usage.requests')}</small><span class="analytics-metric-spark">{trends().length > 1 ? trendSvg() : null}</span></div>
             <strong>{fmtNum(summary()?.requests)}</strong>
-            <p>{t('usage.requestsDesc')}</p>
           </div>
           <div class="analytics-metric-card">
             <small>{t('usage.avgLatency')}</small>
             <strong>{summary()?.avg_latency_ms != null ? `${summary()!.avg_latency_ms}ms` : '—'}</strong>
-            <p>{t('usage.avgLatencyDesc')}</p>
           </div>
           <div class="analytics-metric-card">
             <small>{t('usage.avgTtft')}</small>
             <strong>{summary()?.avg_ttft_ms != null ? `${summary()!.avg_ttft_ms}ms` : '—'}</strong>
-            <p>{t('usage.avgTtftDesc')}</p>
           </div>
           <div class="analytics-metric-card">
             <small>{t('usage.successRate')}</small>
             <strong>{successRate() !== null ? `${successRate()}%` : '—'}</strong>
-            <p>{t('usage.successRateDesc')}</p>
           </div>
         </div>
 
         {/* Token consumption card */}
         <div class="panel analytics-token-card">
           <div class="analytics-token-head">
-            <div><h3>{t('usage.tokenConsumption')}</h3><p>{t('usage.tokenConsumptionDesc')}</p></div>
+            <div><h3>{t('usage.tokenConsumption')}</h3></div>
             <span class="analytics-token-total">{t('usage.totalTokens')} <strong>{fmtNum((summary()?.input_tokens ?? 0) + (summary()?.output_tokens ?? 0))}</strong></span>
           </div>
           <div class="analytics-token-row">
