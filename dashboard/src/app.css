@@ -484,3 +484,35 @@ input:focus, select:focus { border-color: #9e82fa; box-shadow: 0 0 0 3px rgba(10
 
 /* Language toggle (topbar, next to theme toggle). */
 .lang-toggle { font-size: 11px; font-weight: 700; letter-spacing: .3px; }
+
+/* QwenCloud-style analytics layout. */
+.analytics-range-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.analytics-range-buttons{display:flex;gap:6px;padding:4px;border:1px solid var(--color-border);border-radius:11px;background:var(--color-surface-soft)}
+.analytics-range-buttons button{border:0;background:transparent;color:var(--color-muted);font-size:11px;font-weight:650;padding:7px 13px;border-radius:8px;cursor:pointer}
+.analytics-range-buttons button.active{background:var(--color-surface);color:var(--color-primary);box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.analytics-custom-range{display:flex;align-items:center;gap:8px}
+.analytics-custom-range input[type="date"]{width:auto;min-height:34px;padding:0 10px;font-size:11px}
+.analytics-custom-range .secondary-button{min-height:34px}
+.analytics-metrics-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:14px}
+.analytics-metric-card{position:relative;padding:16px 18px;border:1px solid var(--color-border);border-radius:16px;background:var(--color-surface);overflow:hidden}
+.analytics-metric-card small{color:var(--color-muted);font-size:10px;font-weight:700}
+.analytics-metric-card strong{display:block;margin-top:8px;font-size:26px;letter-spacing:-1px;line-height:1}
+.analytics-metric-card p{margin:8px 0 0;color:var(--color-muted);font-size:9px;line-height:1.5}
+.analytics-metric-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.analytics-metric-spark{width:64px;height:22px;color:var(--color-primary);opacity:.85}
+.analytics-metric-spark svg{width:100%;height:100%;display:block}
+.analytics-token-card{margin-bottom:14px;padding:18px 22px}
+.analytics-token-head{display:flex;align-items:center;justify-content:space-between;gap:14px}
+.analytics-token-head h3{margin:0;font-size:14px}
+.analytics-token-head p{margin:4px 0 0;color:var(--color-muted);font-size:10px}
+.analytics-token-total{color:var(--color-muted);font-size:10px}
+.analytics-token-total strong{color:var(--color-text);font-size:20px;margin-left:6px}
+.analytics-token-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:16px;border-top:1px solid var(--color-divider);padding-top:14px}
+.analytics-token-row>div{padding:4px 2px}
+.analytics-token-row small,.analytics-token-row strong{display:block}
+.analytics-token-row small{color:var(--color-muted);font-size:9px}
+.analytics-token-row strong{margin-top:5px;font-size:15px}
+@media (max-width:900px){.analytics-metrics-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.analytics-token-row{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* QwenCloud-style notice bar for logs. */
+.analytics-notice{padding:10px 14px;border:1px solid var(--color-border);border-left:3px solid var(--color-primary);border-radius:10px;background:var(--color-surface-soft);color:var(--color-muted);font-size:11px;margin-bottom:14px}

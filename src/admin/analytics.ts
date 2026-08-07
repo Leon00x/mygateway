@@ -30,6 +30,10 @@ function parseRange(url: URL, env: Env): { start: number; end: number } {
   if (range === 'today' || range === '7d' || range === '30d') {
     return getUsageRange(range, env.DEFAULT_TIMEZONE ?? 'Asia/Shanghai');
   }
+  if (range === 'yesterday') {
+    const today = getUsageRange('today', env.DEFAULT_TIMEZONE ?? 'Asia/Shanghai');
+    return { start: today.start - 86_400, end: today.start };
+  }
 
   // Custom: try start/end params (Unix seconds)
   const now = Date.now();
@@ -91,7 +95,8 @@ export async function handleAnalyticsLogs(
   requestId: string,
 ): Promise<Response> {
   try {
-    const limit = parseLimit(url.searchParams.get('limit'));
+    const isExport = url.searchParams.get('export') === '1';
+    const limit = isExport ? 10_000 : parseLimit(url.searchParams.get('limit'));
     const cursorTs = url.searchParams.get('cursor_ts');
     const cursorId = url.searchParams.get('cursor_id');
     const cursor = cursorTs && cursorId
@@ -117,6 +122,10 @@ export async function handleAnalyticsLogs(
       requestId: exactRequestId,
     });
 
+    if (isExport) {
+      return exportLogsCsv(result.rows, requestId);
+    }
+
     // Sanitize: never return context columns in list responses
     const rows = result.rows.map((row) => {
       const { context_request_iv, context_request_tag, context_request_ciphertext, context_response_iv, context_response_tag, context_response_ciphertext, ...safe } = row as Record<string, unknown>;
@@ -130,6 +139,28 @@ export async function handleAnalyticsLogs(
   } catch (e) {
     return gatewayErrorResponse('upstream_error', 'Failed to query logs', requestId);
   }
+}
+
+/** Build a CSV export from raw log rows (metadata only, no context columns). */
+function exportLogsCsv(rows: Array<Record<string, unknown>>, requestId: string): Response {
+  const header = ['timestamp', 'request_id', 'key_name', 'unified_model_id', 'channel_name', 'status', 'stream', 'input_tokens', 'output_tokens', 'cost_micros', 'attempt_count', 'fallback', 'latency_ms', 'ttft_ms', 'error_detail'];
+  const esc = (v: unknown): string => {
+    const s = v === null || v === undefined ? '' : String(v);
+    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const lines = [header.join(',')];
+  for (const row of rows) {
+    lines.push(header.map((h) => esc(row[h])).join(','));
+  }
+  const fileName = `mygateway-logs-${new Date().toISOString().slice(0, 10)}.csv`;
+  return new Response(`\uFEFF${lines.join('\n')}`, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${fileName}"`,
+      'x-gateway-request-id': requestId,
+    },
+  });
 }
 
 // ---- GET /admin/api/analytics/logs/:id ----

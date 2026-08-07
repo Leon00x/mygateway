@@ -186,6 +186,30 @@ export default function AnalyticsLogs() {
 
   const closeDetail = () => setDetail(null);
 
+  const exportCsv = async () => {
+    try {
+      const query = new URLSearchParams({ export: '1', limit: '10000' });
+      if (status() !== 'all') query.set('status', status());
+      if (modelId()) query.set('model_id', modelId());
+      if (keyId()) query.set('key_id', keyId());
+      if (channelId()) query.set('channel_id', channelId());
+      if (requestIdFilter()) query.set('request_id', requestIdFilter());
+      if (startTime()) query.set('start', startTime());
+      if (endTime()) query.set('end', endTime());
+      const response = await fetch(`/admin/api/analytics/logs?${query}`);
+      if (!response.ok) throw new Error(t('logs.exportFailed'));
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `mygateway-logs-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (cause) {
+      setLogsError(cause instanceof Error ? cause.message : t('logs.exportFailed'));
+    }
+  };
+
   const clearAllLogs = async () => {
     if (!confirm(t('logs.clearConfirm'))) return;
     setClearBusy(true);
@@ -242,6 +266,9 @@ export default function AnalyticsLogs() {
           <button class="ghost-button" onClick={() => setShowSettings(!showSettings())}>
             {showSettings() ? t('logs.hideSettings') : t('logs.settings')}
           </button>
+          <button class="ghost-button" onClick={exportCsv}>
+            {t('logs.export')}
+          </button>
           <button class="ghost-button danger-link" disabled={clearBusy()} onClick={clearAllLogs}>
             {clearBusy() ? t('logs.clearing') : t('logs.clear')}
           </button>
@@ -250,6 +277,9 @@ export default function AnalyticsLogs() {
           </button>
         </div>
       </div>
+
+      {/* QwenCloud-style notice: log retention */}
+      <div class="analytics-notice">{t('logs.retentionNotice').replace('{n}', String(settings().requestLogRetentionDays))}</div>
 
       {/* Settings area */}
       <Show when={showSettings()}>
@@ -396,8 +426,8 @@ export default function AnalyticsLogs() {
       <Show when={!loading() && !logsError() && logs().length === 0}>
         <div class="panel empty-state">
           <span class="provider-logo">L</span>
-          <h3>{t('logs.emptyTitle')}</h3>
-          <p>{t('logs.emptyBody')}</p>
+          <h3>{t('logs.noLogs')}</h3>
+          <p>{t('logs.noLogsBody')}</p>
         </div>
       </Show>
 
@@ -405,7 +435,7 @@ export default function AnalyticsLogs() {
         <div class="panel analytics-log-panel">
           <div class="analytics-log-table">
             <div class="analytics-log-head">
-              <span>{t('logs.requestId')}</span><span>{t('common.time')}</span><span>{t('common.model')}</span><span>{t('common.channel')}</span><span>{t('common.key')}</span><span>Token</span><span>TTFT</span><span>{t('logs.latency')}</span><span>{t('common.status')}</span><span>···</span>
+              <span>{t('logs.requestId')}</span><span>{t('common.time')}</span><span>{t('common.model')}</span><span>{t('logs.source')}</span><span>{t('common.key')}</span><span>Usage</span><span>TTFT</span><span>{t('logs.latency')}</span><span>{t('common.status')}</span><span>···</span>
             </div>
             <For each={logs()}>{(log) => (
               <div class="analytics-log-row">

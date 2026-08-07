@@ -38,8 +38,6 @@ interface AnalyticsUsageResponse {
   trends: AnalyticsTrendPoint[];
 }
 
-const RANGE_LABELS: Record<string, string> = { today: '', '7d': '', '30d': '' };
-
 function formatUsd(costMicros: number): string {
   if (costMicros === 0) return '$0';
   const usd = costMicros / 1_000_000;
@@ -59,22 +57,44 @@ function pct(part: number, total: number): string {
   return `${Math.round((part / total) * 100)}%`;
 }
 
+/** Local-midnight unix seconds for a YYYY-MM-DD value. */
+function dateToUnix(value: string): number {
+  if (!value) return 0;
+  return Math.floor(new Date(`${value}T00:00:00`).getTime() / 1000);
+}
+
+function todayInputValue(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+type RangeKey = 'today' | 'yesterday' | '7d' | '30d' | 'custom';
+
 export default function AnalyticsUsage() {
   const [data, setData] = createSignal<AnalyticsUsageResponse | null>(null);
   const [loading, setLoading] = createSignal(true);
   const [error, setError] = createSignal('');
-  const [range, setRange] = createSignal('today');
+  const [range, setRange] = createSignal<RangeKey>('today');
+  const [customStart, setCustomStart] = createSignal(todayInputValue());
+  const [customEnd, setCustomEnd] = createSignal(todayInputValue());
   const [granularity, setGranularity] = createSignal<'hour' | 'day' | ''>('');
   const [modelId, setModelId] = createSignal('');
   const [keyId, setKeyId] = createSignal('');
   const [modelOptions, setModelOptions] = createSignal<{ id: string; name: string }[]>([]);
   const [keyOptions, setKeyOptions] = createSignal<{ id: string; name: string }[]>([]);
 
-  const fetchUsage = async (r: string, g: string, m: string, k: string) => {
+  const fetchUsage = async (r: RangeKey, g: string, m: string, k: string, start?: string, end?: string) => {
     setLoading(true);
     setError('');
     try {
-      const query = new URLSearchParams({ range: r });
+      const query = new URLSearchParams();
+      if (r === 'custom' && start && end) {
+        query.set('range', 'custom');
+        query.set('start', String(dateToUnix(start)));
+        // End date inclusive → next local midnight
+        query.set('end', String(dateToUnix(end) + 86_400));
+      } else {
+        query.set('range', r);
+      }
       if (g) query.set('granularity', g);
       if (m) query.set('model_id', m);
       if (k) query.set('key_id', k);
@@ -86,18 +106,27 @@ export default function AnalyticsUsage() {
     } finally { setLoading(false); }
   };
 
-  const applyRange = (r: string) => {
+  const applyRange = (r: RangeKey) => {
     setRange(r);
-    void fetchUsage(r, granularity(), modelId(), keyId());
+    if (r === 'custom') {
+      void fetchUsage(r, granularity(), modelId(), keyId(), customStart(), customEnd());
+    } else {
+      void fetchUsage(r, granularity(), modelId(), keyId());
+    }
+  };
+
+  const applyCustom = () => {
+    setRange('custom');
+    void fetchUsage('custom', granularity(), modelId(), keyId(), customStart(), customEnd());
   };
 
   const applyGranularity = (g: 'hour' | 'day' | '') => {
     setGranularity(g);
-    void fetchUsage(range(), g, modelId(), keyId());
+    void fetchUsage(range(), g, modelId(), keyId(), customStart(), customEnd());
   };
 
   const applyFilters = () => {
-    void fetchUsage(range(), granularity(), modelId(), keyId());
+    void fetchUsage(range(), granularity(), modelId(), keyId(), customStart(), customEnd());
   };
 
   const fetchOptions = async () => {
@@ -134,7 +163,7 @@ export default function AnalyticsUsage() {
     return Math.round(((s.requests - s.usage_unknown) / s.requests) * 100);
   };
 
-  // SVG trend sparkline
+  // SVG trend sparkline with grid
   const trendSvg = () => {
     const pts = trends();
     if (pts.length === 0) return null;
@@ -142,12 +171,24 @@ export default function AnalyticsUsage() {
     const max = Math.max(...values, 1);
     const w = pts.length > 1 ? 100 / (pts.length - 1) : 100;
     const points = values.map((v, i) => `${(i * w).toFixed(1)},${(100 - (v / max) * 100).toFixed(1)}`).join(' ');
+    const grid = [25, 50, 75].map((y) => (
+      <line x1="0" y1={y} x2="100" y2={y} stroke="currentColor" stroke-opacity="0.12" stroke-width="0.5" />
+    ));
     return (
       <svg class="analytics-trend-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
+        {grid}
         <polyline points={points} fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
       </svg>
     );
   };
+
+  const rangeButtons: { key: RangeKey; label: string }[] = [
+    { key: 'today', label: t('dash.today') },
+    { key: 'yesterday', label: t('usage.yesterday') },
+    { key: '7d', label: t('usage.last7d') },
+    { key: '30d', label: t('usage.last30d') },
+    { key: 'custom', label: t('usage.custom') },
+  ];
 
   return (
     <div class="analytics-page">
@@ -156,21 +197,32 @@ export default function AnalyticsUsage() {
           <A href="/analytics/usage" class="analytics-segment-tab active">{t('nav.analyticsUsage')}</A>
           <A href="/analytics/logs" class="analytics-segment-tab">{t('nav.analyticsLogs')}</A>
         </div>
-        <div class="analytics-range-tabs">
-          <For each={['today', '7d', '30d'] as const}>{(item) => (
-            <button classList={{ active: range() === item }} onClick={() => applyRange(item)}>
-              {RANGE_LABELS[item] || (item === 'today' ? t('dash.today') : `${t('usage.past')} ${item === '7d' ? '7' : '30'} ${t('usage.days')}`)}
+      </div>
+
+      {/* QwenCloud-style range picker: quick buttons + custom date range */}
+      <div class="analytics-range-bar">
+        <div class="analytics-range-buttons">
+          <For each={rangeButtons}>{(btn) => (
+            <button classList={{ active: range() === btn.key }} onClick={() => applyRange(btn.key)}>
+              {btn.label}
             </button>
           )}</For>
         </div>
+        <div class="analytics-custom-range">
+          <input type="date" value={customStart()} max={customEnd()} onInput={(e) => setCustomStart(e.currentTarget.value)} />
+          <span>→</span>
+          <input type="date" value={customEnd()} min={customStart()} onInput={(e) => setCustomEnd(e.currentTarget.value)} />
+          <button class="secondary-button" onClick={applyCustom}>{t('common.apply')}</button>
+        </div>
       </div>
 
+      {/* Filters */}
       <div class="analytics-filters">
         <label>{t('common.model')}
           <select value={modelId()} onChange={(e) => {
             const next = e.currentTarget.value;
             setModelId(next);
-            void fetchUsage(range(), granularity(), next, keyId());
+            void fetchUsage(range(), granularity(), next, keyId(), customStart(), customEnd());
           }}>
             <option value="">{t('usage.allModels')}</option>
             <For each={modelOptions()}>{(m) => <option value={m.id}>{m.name}</option>}</For>
@@ -180,7 +232,7 @@ export default function AnalyticsUsage() {
           <select value={keyId()} onChange={(e) => {
             const next = e.currentTarget.value;
             setKeyId(next);
-            void fetchUsage(range(), granularity(), modelId(), next);
+            void fetchUsage(range(), granularity(), modelId(), next, customStart(), customEnd());
           }}>
             <option value="">{t('usage.allKeys')}</option>
             <For each={keyOptions()}>{(k) => <option value={k.id}>{k.name}</option>}</For>
@@ -202,48 +254,45 @@ export default function AnalyticsUsage() {
       </Show>
 
       <Show when={!loading() && !error() && data()}>
-        {/* Metric cards: left high Token + cost, right 2x2 */}
-        <div class="analytics-card-layout">
-          <div class="analytics-metric-card analytics-token-highlight">
-            <small>{t('usage.totalTokens')}</small>
-            <strong>{fmtNum((summary()?.input_tokens ?? 0) + (summary()?.output_tokens ?? 0))}</strong>
-            <div class="analytics-token-breakdown">
-              <span>{t('usage.input')} {fmtNum(summary()?.input_tokens)}</span>
-              <span>{t('usage.output')} {fmtNum(summary()?.output_tokens)}</span>
-            </div>
-            <Show when={(summary()?.usage_unknown ?? 0) > 0}>
-              <span class="coverage-warn">{t('usage.coverage')} {usageCoverage()}%</span>
-            </Show>
-            <div class="analytics-cost-row">
-              <small>{t('usage.estCost')}</small>
-              <strong>{formatUsd(summary()?.cost_micros ?? 0)}</strong>
-            </div>
+        {/* QwenCloud-style metric cards: requests / avg latency / avg TTFT / success rate */}
+        <div class="analytics-metrics-grid">
+          <div class="analytics-metric-card">
+            <div class="analytics-metric-top"><small>{t('usage.requests')}</small><span class="analytics-metric-spark">{trends().length > 1 ? trendSvg() : null}</span></div>
+            <strong>{fmtNum(summary()?.requests)}</strong>
+            <p>{t('usage.requestsDesc')}</p>
           </div>
-          <div class="analytics-right-grid">
-            <div class="analytics-metric-card">
-              <small>{t('usage.requests')}</small>
-              <strong>{fmtNum(summary()?.requests)}</strong>
-              <span>{successRate() !== null ? `${t('usage.successRate')} ${successRate()}%` : '—'}</span>
-            </div>
-            <div class="analytics-metric-card">
-              <small>{t('usage.avgLatency')}</small>
-              <strong>{summary()?.avg_latency_ms != null ? `${summary()!.avg_latency_ms}ms` : '—'}</strong>
-              <span>{summary()?.latency_count ?? 0} {t('usage.samples')}</span>
-            </div>
-            <div class="analytics-metric-card">
-              <small>{t('usage.avgTtft')}</small>
-              <strong>{summary()?.avg_ttft_ms != null ? `${summary()!.avg_ttft_ms}ms` : '—'}</strong>
-              <span>{t('usage.streamOnly')} · {summary()?.ttft_count ?? 0} {t('usage.samples')}</span>
-            </div>
-            <div class="analytics-metric-card">
-              <small>{t('usage.successRate')}</small>
-              <strong>{successRate() !== null ? `${successRate()}%` : '—'}</strong>
-              <span>{t('usage.errors')} {fmtNum(summary()?.errors)} · {t('usage.fallbacks')} {fmtNum(summary()?.fallbacks)}</span>
-            </div>
+          <div class="analytics-metric-card">
+            <small>{t('usage.avgLatency')}</small>
+            <strong>{summary()?.avg_latency_ms != null ? `${summary()!.avg_latency_ms}ms` : '—'}</strong>
+            <p>{t('usage.avgLatencyDesc')}</p>
+          </div>
+          <div class="analytics-metric-card">
+            <small>{t('usage.avgTtft')}</small>
+            <strong>{summary()?.avg_ttft_ms != null ? `${summary()!.avg_ttft_ms}ms` : '—'}</strong>
+            <p>{t('usage.avgTtftDesc')}</p>
+          </div>
+          <div class="analytics-metric-card">
+            <small>{t('usage.successRate')}</small>
+            <strong>{successRate() !== null ? `${successRate()}%` : '—'}</strong>
+            <p>{t('usage.successRateDesc')}</p>
           </div>
         </div>
 
-        {/* Trend sparkline */}
+        {/* Token consumption card */}
+        <div class="panel analytics-token-card">
+          <div class="analytics-token-head">
+            <div><h3>{t('usage.tokenConsumption')}</h3><p>{t('usage.tokenConsumptionDesc')}</p></div>
+            <span class="analytics-token-total">{t('usage.totalTokens')} <strong>{fmtNum((summary()?.input_tokens ?? 0) + (summary()?.output_tokens ?? 0))}</strong></span>
+          </div>
+          <div class="analytics-token-row">
+            <div><small>{t('usage.input')}</small><strong>{fmtNum(summary()?.input_tokens)}</strong></div>
+            <div><small>{t('usage.output')}</small><strong>{fmtNum(summary()?.output_tokens)}</strong></div>
+            <div><small>{t('usage.coverage')}</small><strong>{usageCoverage()}%</strong></div>
+            <div><small>{t('usage.estCost')}</small><strong>{formatUsd(summary()?.cost_micros ?? 0)}</strong></div>
+          </div>
+        </div>
+
+        {/* Trend chart */}
         <Show when={trends().length > 0}>
           <div class="panel analytics-trend-panel">
             <div class="panel-header"><h2>{t('usage.trends')}</h2><span class="analytics-hint">{t('usage.requestsChange')}</span></div>

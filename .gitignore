@@ -5,3 +5,4 @@ dist/
 *.tmp
 test-results/
 .env.local
+ref/

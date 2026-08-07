@@ -344,6 +344,18 @@ const dict: Record<string, Entry> = {
   'usage.noDataBody': { zh: '发起网关调用后，这里会显示聚合用量统计。', en: 'Aggregated stats will appear after gateway calls.' },
   'usage.loadFailed': { zh: '无法加载用量分析', en: 'Failed to load usage' },
 
+  'usage.yesterday': { zh: '昨天', en: 'Yesterday' },
+  'usage.last7d': { zh: '最近 7 天', en: 'Last 7 days' },
+  'usage.last30d': { zh: '最近 30 天', en: 'Last 30 days' },
+  'usage.custom': { zh: '自定义', en: 'Custom' },
+  'common.apply': { zh: '应用', en: 'Apply' },
+  'usage.requestsDesc': { zh: '对模型发出的请求数量', en: 'Number of requests to models' },
+  'usage.avgLatencyDesc': { zh: '对模型发出的请求的平均延迟', en: 'Average latency of requests' },
+  'usage.avgTtftDesc': { zh: '从接收请求到返回首个字节的平均耗时', en: 'Time to first byte from request' },
+  'usage.successRateDesc': { zh: '对模型发出的请求的成功率百分比', en: 'Percentage of successful requests' },
+  'usage.tokenConsumption': { zh: 'Token 消耗', en: 'Token consumption' },
+  'usage.tokenConsumptionDesc': { zh: '查看工作空间的 Token 消耗用量', en: 'Token usage for this workspace' },
+
   // --- Analytics: Logs ---
   'logs.title': { zh: '请求日志', en: 'Request Logs' },
   'logs.settings': { zh: '日志设置', en: 'Settings' },
@@ -413,6 +425,13 @@ const dict: Record<string, Entry> = {
   'keys.expiresLabel': { zh: '到期', en: 'expires' },
   'logs.clearFailed': { zh: '清空日志失败', en: 'Failed to clear logs' },
   'auth.changeFailed': { zh: '修改失败', en: 'Update failed' },
+
+  'logs.export': { zh: '导出', en: 'Export' },
+  'logs.exportFailed': { zh: '导出失败，请稍后重试', en: 'Export failed, try again' },
+  'logs.retentionNotice': { zh: '调用日志保留 {n} 天，仅记录通过网关的请求。', en: 'Call logs are retained for {n} days and cover gateway requests only.' },
+  'logs.source': { zh: '来源', en: 'Source' },
+  'logs.noLogs': { zh: '暂无日志', en: 'No logs yet' },
+  'logs.noLogsBody': { zh: '当前筛选条件下没有请求记录。', en: 'There are no requests in the selected range.' },
 
   // --- System ---
   'system.title': { zh: '系统设置', en: 'Settings' },
