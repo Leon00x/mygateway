@@ -504,9 +504,9 @@ const dict: Record<string, Entry> = {
   'auth.eyebrowAdmin': { zh: '管理员', en: 'Admin' },
   'auth.tagline1': { zh: '统一管理 AI 供应商渠道', en: 'Unified AI provider gateway' },
   'auth.tagline2': { zh: '一个地址，一个密钥，全部模型', en: 'One endpoint, one key, every model' },
-  'auth.featureRouting': { zh: '固定优先级路由与自动回退', en: 'Fixed-priority routing with fallback' },
-  'auth.featureProtocols': { zh: 'OpenAI Chat / Responses / Messages', en: 'OpenAI Chat / Responses / Messages' },
-  'auth.featureQuota': { zh: '密钥限额、预算与用量统计', en: 'Key limits, budgets and analytics' },
+  'auth.featureSimple': { zh: '简单易用', en: 'Simple to use' },
+  'auth.featureFree': { zh: '免费额度运行', en: 'Runs on free tier' },
+  'auth.featureCost': { zh: '性价比优先路由', en: 'Cost-first routing' },
 };
 
 export function t(key: string): string {

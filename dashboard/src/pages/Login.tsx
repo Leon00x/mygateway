@@ -45,7 +45,7 @@ export default function Login() {
           <span class="eyebrow light">AI AGGREGATION GATEWAY</span>
           <h1>{t('auth.tagline1')}</h1>
           <p>{t('auth.tagline2')}</p>
-          <div class="login-features"><span>{t('auth.featureRouting')}</span><span>{t('auth.featureProtocols')}</span><span>{t('auth.featureQuota')}</span></div>
+          <div class="login-features"><span>{t('auth.featureSimple')}</span><span>{t('auth.featureFree')}</span><span>{t('auth.featureCost')}</span></div>
         </div>
       </section>
       <section class="login-panel">
