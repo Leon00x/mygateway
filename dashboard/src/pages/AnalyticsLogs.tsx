@@ -48,15 +48,6 @@ interface LogDetail {
   context_response: string | null;
 }
 
-interface AnalyticsSettings {
-  requestLogsEnabled: boolean;
-  logSuccess: boolean;
-  logErrors: boolean;
-  logContext: boolean;
-  contextRetentionHours: number;
-  requestLogRetentionDays: number;
-}
-
 const statusLabel = (status: string): string => ({
   success: t('status.success'), error: t('status.error'), cancelled: t('status.cancelled'),
   rate_limited: t('status.rateLimited'), budget_exceeded: t('status.budgetExceeded'),
@@ -75,13 +66,6 @@ export default function AnalyticsLogs() {
   const [loading, setLoading] = createSignal(true);
   const [refreshing, setRefreshing] = createSignal(false);
   const [logsError, setLogsError] = createSignal('');
-  const [settings, setSettings] = createSignal<AnalyticsSettings>({
-    requestLogsEnabled: true, logSuccess: true, logErrors: true, logContext: false,
-    contextRetentionHours: 24, requestLogRetentionDays: 7,
-  });
-  const [settingsBusy, setSettingsBusy] = createSignal(false);
-  const [settingsError, setSettingsError] = createSignal('');
-  const [showSettings, setShowSettings] = createSignal(false);
 
   // Filters
   const [status, setStatus] = createSignal('all');
@@ -105,33 +89,6 @@ export default function AnalyticsLogs() {
   const [modelOptions, setModelOptions] = createSignal<{ id: string; name: string }[]>([]);
   const [keyOptions, setKeyOptions] = createSignal<{ id: string; name: string }[]>([]);
   const [channelOptions, setChannelOptions] = createSignal<{ id: string; name: string }[]>([]);
-
-  const fetchSettings = async () => {
-    try {
-      const response = await fetch('/admin/api/analytics/settings');
-      if (response.ok) setSettings(await response.json());
-    } catch { /* non-critical */ }
-  };
-
-  const updateSettings = async (patch: Record<string, unknown>) => {
-    setSettingsBusy(true);
-    setSettingsError('');
-    try {
-      const response = await fetch('/admin/api/analytics/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(patch),
-      });
-      if (response.ok) {
-        setSettings(await response.json());
-      } else {
-        const err = await response.json() as { error?: { message?: string } };
-        setSettingsError(err?.error?.message ?? t('keys.saveFailed'));
-      }
-    } catch {
-      setSettingsError(t('common.networkError'));
-    } finally { setSettingsBusy(false); }
-  };
 
   const fetchLogsDirect = async (reset: boolean, st: string, mId: string, kId: string, chId: string, rid: string, sTime: string, eTime: string, cursor: { timestamp: number; id: string } | null, pageSize = limit()) => {
     setRefreshing(true);
@@ -248,12 +205,8 @@ export default function AnalyticsLogs() {
 
   onMount(() => {
     void fetchLogsDirect(true, 'all', '', '', '', '', '', '', null);
-    void fetchSettings();
     void fetchFilterOptions();
   });
-
-  const settingsOn = () => settings().requestLogsEnabled;
-  const contextOn = () => settings().logContext;
 
   return (
     <div class="analytics-page">
@@ -263,9 +216,6 @@ export default function AnalyticsLogs() {
           <A href="/analytics/logs" class="analytics-segment-tab active">{t('nav.analyticsLogs')}</A>
         </div>
         <div class="analytics-log-actions">
-          <button class="ghost-button" onClick={() => setShowSettings(!showSettings())}>
-            {showSettings() ? t('logs.hideSettings') : t('logs.settings')}
-          </button>
           <button class="ghost-button" onClick={exportCsv}>
             {t('logs.export')}
           </button>
@@ -277,69 +227,6 @@ export default function AnalyticsLogs() {
           </button>
         </div>
       </div>
-
-      {/* Settings area */}
-      <Show when={showSettings()}>
-        <div class="panel analytics-settings">
-          <div class="analytics-settings-grid">
-            <label class="checkbox-label">
-              <input type="checkbox" checked={settingsOn()} disabled={settingsBusy()}
-                onChange={(e) => void updateSettings({ request_logs_enabled: e.currentTarget.checked })} />
-              <span><strong>{t('logs.master')}</strong><small>{t('logs.masterHint')}</small></span>
-            </label>
-            <label class="checkbox-label">
-              <input type="checkbox" checked={settings().logErrors} disabled={settingsBusy() || !settingsOn()}
-                onChange={(e) => void updateSettings({ log_errors: e.currentTarget.checked })} />
-              <span><strong>{t('logs.errors')}</strong><small>{t('logs.errorsHint')}</small></span>
-            </label>
-            <label class="checkbox-label">
-              <input type="checkbox" checked={settings().logSuccess} disabled={settingsBusy() || !settingsOn()}
-                onChange={(e) => void updateSettings({ log_success: e.currentTarget.checked })} />
-              <span><strong>{t('logs.success')}</strong><small>{t('logs.successHint')}</small></span>
-            </label>
-            <label class="checkbox-label context-warn">
-              <input type="checkbox" checked={contextOn()} disabled={settingsBusy() || !settingsOn()}
-                onChange={(e) => {
-                  if (e.currentTarget.checked && !contextOn()) {
-                    if (!confirm(t('logs.contextConfirm'))) return;
-                  }
-                  void updateSettings({ log_context: e.currentTarget.checked });
-                }} />
-              <span><strong>{t('logs.recordContext')}</strong><small>{t('logs.contextHint')}</small></span>
-            </label>
-          </div>
-
-          {/* Retention settings */}
-          <div class="analytics-retention-row">
-            <label>
-              <span>{t('logs.logRetention')}</span>
-              <select value={settings().requestLogRetentionDays} disabled={settingsBusy()}
-                onChange={(e) => void updateSettings({ request_log_retention_days: Number(e.currentTarget.value) })}>
-                <option value={1}>1 {t('usage.days')}</option>
-                <option value={3}>3 {t('usage.days')}</option>
-                <option value={7}>7 {t('usage.days')}</option>
-              </select>
-            </label>
-            <label>
-              <span>{t('logs.contextRetention')}</span>
-              <input type="number" min={1} max={168} value={settings().contextRetentionHours} disabled={settingsBusy()}
-                onChange={(e) => {
-                  const v = Number(e.currentTarget.value);
-                  if (v >= 1 && v <= 168) void updateSettings({ context_retention_hours: v });
-                }} />
-            </label>
-          </div>
-
-          <Show when={settingsError()}>
-            <div class="form-error">{settingsError()}</div>
-          </Show>
-
-          <div class="analytics-settings-footer">
-            <small>{t('logs.settingsFooter1')}</small>
-            <small>{t('logs.settingsFooter2')}</small>
-          </div>
-        </div>
-      </Show>
 
       {/* Filters */}
       <div class="analytics-log-filters">

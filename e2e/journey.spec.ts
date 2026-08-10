@@ -388,13 +388,14 @@ test('11a. analytics usage page shows metric cards and filters', async ({ page }
   expect(await page.locator('.tr-trigger-label').evaluate((label) => getComputedStyle(label).textOverflow)).toBe('ellipsis');
 });
 
-test('11b. analytics logs page shows settings and log table', async ({ page }) => {
+test('11b. analytics logs page shows log table, settings live in system page', async ({ page }) => {
   await loginViaUi(page);
   await page.locator('.sidebar').getByRole('link', { name: /请求日志/ }).click();
   await expect(page).toHaveURL(/\/analytics\/logs/);
   await expect(page.getByRole('heading', { level: 1, name: '请求日志' })).toBeVisible();
-  // Settings area should toggle open
-  await page.getByRole('button', { name: '日志设置' }).click();
+  // Settings moved to the system page
+  await page.locator('.sidebar').getByRole('link', { name: /系统设置/ }).click();
+  await expect(page.getByRole('heading', { level: 1, name: '系统设置' })).toBeVisible();
   await expect(page.getByText('请求日志总开关')).toBeVisible();
   await expect(page.getByText('记录上下文')).toBeVisible();
   // Legacy /requests should redirect

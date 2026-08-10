@@ -54,6 +54,7 @@ const dict: Record<string, Entry> = {
   // --- Shared / common ---
   'common.cancel': { zh: '取消', en: 'Cancel' },
   'common.save': { zh: '保存', en: 'Save' },
+  'common.saved': { zh: '已保存 ✓', en: 'Saved ✓' },
   'common.saving': { zh: '保存中…', en: 'Saving…' },
   'common.delete': { zh: '删除', en: 'Delete' },
   'common.edit': { zh: '编辑', en: 'Edit' },
@@ -349,6 +350,9 @@ const dict: Record<string, Entry> = {
   'prices.cacheShort': { zh: '缓存价', en: 'Cache' },
   'prices.currencyShort': { zh: '币种', en: 'Cur' },
   'prices.saved': { zh: '已保存 ✓', en: 'Saved ✓' },
+  'prices.configure': { zh: '配置价格', en: 'Configure' },
+  'prices.collapse': { zh: '收起', en: 'Collapse' },
+  'prices.models': { zh: '个模型', en: 'models' },
 
   // --- Analytics: Logs ---
   'logs.title': { zh: '请求日志', en: 'Request Logs' },
@@ -410,7 +414,6 @@ const dict: Record<string, Entry> = {
   'status.budgetExceeded': { zh: '预算超限', en: 'Budget exceeded' },
   'status.notAllowed': { zh: '模型无权限', en: 'Not allowed' },
   'status.expired': { zh: '密钥过期', en: 'Key expired' },
-  'status.online': { zh: '网关在线', en: 'Gateway Online' },
   'common.networkError': { zh: '网络错误', en: 'Network error' },
   'dash.copy': { zh: '复制', en: 'Copy' },
   'keys.perMinute': { zh: '次/分', en: '/min' },
@@ -450,21 +453,17 @@ const dict: Record<string, Entry> = {
   'common.confirm': { zh: '确定', en: 'Confirm' },
 
   // --- System ---
-  'system.title': { zh: '系统设置', en: 'Settings' },
-  'system.subtitle': { zh: '查看运行状态并维护管理员账号', en: 'Runtime status and admin account' },
   'system.account': { zh: '管理员账号', en: 'Admin Account' },
   'system.accountBody': { zh: '当前登录用户', en: 'Signed in as' },
   'system.changeCredentials': { zh: '修改用户名与密码', en: 'Change credentials' },
-  'system.runtime': { zh: 'Worker 状态', en: 'Worker Status' },
-  'system.runtimeBody': { zh: 'Cloudflare Worker、静态资源和管理 API 当前运行正常。', en: 'Worker, static assets and admin API are healthy.' },
-  'system.security': { zh: '密钥保护', en: 'Key Protection' },
   'system.securityBody': { zh: 'Provider Key 使用 MASTER_KEY 进行 AES-256-GCM 加密。MASTER_KEY 在首次部署时生成并保存为 Cloudflare Secret，不能随意轮换。', en: 'Provider keys are AES-256-GCM encrypted with MASTER_KEY (generated at first deploy).' },
   'system.cloudflare': { zh: 'Cloudflare Dashboard ↗', en: 'Cloudflare Dashboard ↗' },
   'system.version': { zh: '版本', en: 'Version' },
   'system.eyebrowAccount': { zh: '账号', en: 'Account' },
-  'system.eyebrowRuntime': { zh: '运行', en: 'Runtime' },
-  'system.eyebrowSecurity': { zh: '安全', en: 'Security' },
+  'system.eyebrowAbout': { zh: '关于', en: 'About' },
+  'system.about': { zh: '安全与版本', en: 'Security & Version' },
   'system.eyebrowPricing': { zh: '定价', en: 'Pricing' },
+  'system.eyebrowLogging': { zh: '日志', en: 'Logging' },
 
   // --- Modal eyebrows ---
   'channels.eyebrowConfigure': { zh: '配置', en: 'Configure' },

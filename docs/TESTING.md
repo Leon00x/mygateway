@@ -103,7 +103,7 @@ E2E 会创建、修改和删除渠道、模型与 Gateway Key。不要指向包�
 9. Dashboard 显示渠道、模型和 Provider Balance；
 10. 删除渠道显示关联影响，清理失去最后实例的统一模型，并保留仍有备用渠道的模型；
 11. Analytics Usage 页面展示指标卡、模型表和筛选切换；
-12. Analytics Logs 页面展示日志表、游标分页、详情抽屉和设置区；
+12. Analytics Logs 页面展示日志表、游标分页和详情抽屉，日志设置区在系统设置页；
 13. 退出登录回到登录页。
 
 该套件不需要有效 Provider Key，但 Chat 错误透传用例会用 dummy key 请求 DeepSeek 并期待

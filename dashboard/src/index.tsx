@@ -183,7 +183,7 @@ function AppLayout(props: { children?: JSX.Element }) {
                 </Show>
                 <div class="nav-section-items">
                   <For each={section.items}>{(item) => (
-                    <A href={item.href} end={item.end} class="nav-item" activeClass="active" title={sidebarCollapsed() ? t(item.label) : undefined}>
+                    <A href={item.href} end={item.end} class="nav-item" activeClass="active" data-label={t(item.label)}>
                       <Icon name={item.icon} size={18} />
                       <span><strong>{t(item.label)}</strong></span>
                     </A>
@@ -193,7 +193,6 @@ function AppLayout(props: { children?: JSX.Element }) {
             )}</For>
           </nav>
           <div class="sidebar-bottom">
-            <a href="/v1/api-docs" target="_blank" class="nav-item compact" title={sidebarCollapsed() ? t('nav.docs') : undefined}><Icon name="docs" size={18} /><span><strong>{t('nav.docs')}</strong></span></a>
             <button class="sidebar-toggle" aria-label={sidebarCollapsed() ? t('common.expand') : t('common.collapse')} title={sidebarCollapsed() ? t('common.expand') : t('common.collapse')} onClick={toggleSidebar}>
               <Icon name={sidebarCollapsed() ? 'panel-expand' : 'panel-collapse'} size={18} />
             </button>
@@ -204,7 +203,6 @@ function AppLayout(props: { children?: JSX.Element }) {
             <h1>{pageTitle()}</h1>
             <div class="topbar-actions">
               <a class="ghost-button" href="/v1/api-docs" target="_blank"><Icon name="docs" size={16} /> {t('nav.docs')}</a>
-              <span class="status-pill"><i /> {t('status.online')}</span>
               <button class="theme-toggle lang-toggle" aria-label="Switch language" title="中 / EN" onClick={() => toggleLocale()}>
                 {locale() === 'zh' ? 'EN' : '中文'}
               </button>
@@ -268,7 +266,6 @@ function UserMenu(props: { username: string; onLogout: () => Promise<void> }) {
         <span><strong>{props.username}</strong><small>管理员</small></span>
       </div>
       <A href="/system" class="user-menu-item" role="menuitem" onClick={close}><Icon name="system" size={17} />系统设置</A>
-      <A href="/change-password" class="user-menu-item" role="menuitem" onClick={close}><Icon name="keys" size={17} />修改登录凭据</A>
       <button class="user-menu-item danger" role="menuitem" onClick={() => { close(); void props.onLogout(); }}><Icon name="logout" size={17} />退出登录</button>
     </div>
   </details>;
