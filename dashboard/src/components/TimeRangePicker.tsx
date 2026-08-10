@@ -1,7 +1,7 @@
 /**
- * TimeRangePicker — modern SaaS-dashboard style range picker (QwenCloud-like).
+ * Compact dashboard time-range picker.
  *
- * Trigger (440×56 pill) → Popover (760px, 28px radius):
+ * Trigger → responsive popover:
  *   ModeTabs (segmented: Quick / Calendar)
  *   SelectedRange (grey bar showing resolved range)
  *   QuickRangeGrid (2×4 presets) | CalendarRangePicker (start/end date+time)

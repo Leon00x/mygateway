@@ -230,6 +230,15 @@ export default function AnalyticsLogs() {
 
       {/* Filters */}
       <div class="analytics-log-filters">
+        <div class="logs-range-picker">
+          <TimeRangePicker
+            value={timeRange()}
+            onChange={(next) => {
+              setTimeRange(next);
+              void fetchLogsDirect(true, status(), modelId(), keyId(), channelId(), requestIdFilter(), String(next.start), String(next.end), null);
+            }}
+          />
+        </div>
         <label>{t('common.status')}
           <select value={status()} onChange={(e) => {
             const next = e.currentTarget.value;
@@ -246,15 +255,6 @@ export default function AnalyticsLogs() {
             <option value="expired">{t('status.expired')}</option>
           </select>
         </label>
-        <div class="logs-range-picker">
-          <TimeRangePicker
-            value={timeRange()}
-            onChange={(next) => {
-              setTimeRange(next);
-              void fetchLogsDirect(true, status(), modelId(), keyId(), channelId(), requestIdFilter(), String(next.start), String(next.end), null);
-            }}
-          />
-        </div>
         <label>{t('common.model')}
           <select value={modelId()} onChange={(e) => {
             const next = e.currentTarget.value;

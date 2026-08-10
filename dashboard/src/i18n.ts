@@ -300,11 +300,13 @@ const dict: Record<string, Entry> = {
 
   // --- Analytics: Usage ---
   'usage.title': { zh: '用量分析', en: 'Usage Analytics' },
+  'usage.subtitle': { zh: '查看网关用量、性能趋势与模型明细', en: 'View gateway usage, performance trends, and model details' },
   'usage.modelsTable': { zh: '模型明细', en: 'By model' },
   'usage.totalTokens': { zh: '总 Token', en: 'Total Tokens' },
   'usage.requests': { zh: '请求量', en: 'Requests' },
   'usage.avgLatency': { zh: '平均延迟', en: 'Avg latency' },
-  'usage.avgTtft': { zh: '平均流式 TTFT', en: 'Avg TTFT' },
+  'usage.avgTtft': { zh: '平均首 Token 延迟', en: 'Avg time to first token' },
+  'usage.ttftStreamingOnly': { zh: '仅统计流式请求', en: 'Streaming requests only' },
   'usage.successRate': { zh: '成功率', en: 'Success rate' },
   'usage.model': { zh: '模型', en: 'Model' },
   'usage.tpm': { zh: '平均 TPM', en: 'Avg TPM' },
@@ -370,6 +372,7 @@ const dict: Record<string, Entry> = {
 
   // --- Analytics: Logs ---
   'logs.title': { zh: '请求日志', en: 'Request Logs' },
+  'logs.subtitle': { zh: '检查网关请求、路由结果与错误详情', en: 'Inspect gateway requests, routing results, and errors' },
   'logs.settings': { zh: '日志设置', en: 'Settings' },
   'logs.hideSettings': { zh: '收起设置', en: 'Hide settings' },
   'logs.clear': { zh: '清空日志', en: 'Clear logs' },

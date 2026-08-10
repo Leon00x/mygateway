@@ -345,11 +345,28 @@ test('11a. analytics usage page shows metric cards and filters', async ({ page }
   await page.locator('.sidebar').getByRole('link', { name: /用量分析/ }).click();
   await expect(page).toHaveURL(/\/analytics\/usage/);
   await expect(page.getByRole('heading', { level: 1, name: '用量分析' })).toBeVisible();
+  await expect(page.getByText('查看网关用量、性能趋势与模型明细', { exact: true })).toBeVisible();
+  const segmentTabs = page.locator('.analytics-segment-tabs');
+  await expect(segmentTabs.getByRole('link', { name: '用量分析' })).toHaveClass(/active/);
+  await expect(segmentTabs.getByRole('link', { name: '请求日志' })).toBeVisible();
   await expect(page.locator('.analytics-metrics-grid')).toBeVisible({ timeout: 10_000 });
+  const ttftMetric = page.locator('.analytics-metric-card', { hasText: '平均首 Token 延迟' });
+  await expect(ttftMetric.getByText('仅统计流式请求', { exact: true })).toBeVisible();
   await expect(page.locator('.analytics-axis-y').first()).toBeVisible();
   await expect(page.locator('.analytics-axis-x').first()).toBeVisible();
   const requestChart = page.locator('.analytics-trend-panel');
   const tokenChart = page.locator('.analytics-token-card');
+  const [rangeBox, modelFilterBox, granularityBox] = await Promise.all([
+    page.locator('.analytics-filters .tr-trigger').boundingBox(),
+    page.getByLabel('模型').boundingBox(),
+    page.getByLabel('趋势粒度').boundingBox(),
+  ]);
+  expect(rangeBox).not.toBeNull();
+  expect(modelFilterBox).not.toBeNull();
+  expect(granularityBox).not.toBeNull();
+  expect(rangeBox!.height).toBeGreaterThanOrEqual(45);
+  expect(Math.abs((rangeBox!.y + rangeBox!.height) - (modelFilterBox!.y + modelFilterBox!.height))).toBeLessThan(2);
+  expect(rangeBox!.width).toBeGreaterThan(granularityBox!.width);
   const [requestBox, tokenBox] = await Promise.all([requestChart.boundingBox(), tokenChart.boundingBox()]);
   expect(requestBox).not.toBeNull();
   expect(tokenBox).not.toBeNull();
@@ -425,6 +442,9 @@ test('11b. analytics logs page shows log table, settings live in system page', a
   await loginViaUi(page);
   await page.locator('.sidebar').getByRole('link', { name: /请求日志/ }).click();
   await expect(page).toHaveURL(/\/analytics\/logs/);
+  await expect(page.getByText('检查网关请求、路由结果与错误详情', { exact: true })).toBeVisible();
+  await expect(page.locator('.analytics-segment-tabs').getByRole('link', { name: '请求日志' })).toHaveClass(/active/);
+  await expect(page.locator('.analytics-log-filters .tr-trigger')).toHaveCSS('min-height', '46px');
   await expect(page.getByRole('heading', { level: 1, name: '请求日志' })).toBeVisible();
   // Settings moved to the system page
   await page.locator('.sidebar').getByRole('link', { name: /系统设置/ }).click();

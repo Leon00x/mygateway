@@ -121,6 +121,12 @@ const titles: Record<string, string> = {
   '/system': 'title.system',
 };
 
+const subtitles: Record<string, string> = {
+  '/analytics/usage': 'usage.subtitle',
+  '/analytics/logs': 'logs.subtitle',
+  '/requests': 'logs.subtitle',
+};
+
 const startupTheme = readThemePreference();
 document.documentElement.dataset.theme = startupTheme;
 
@@ -128,6 +134,7 @@ function AppLayout(props: { children?: JSX.Element }) {
   const auth = useAuth();
   const location = useLocation();
   const pageTitle = () => t(titles[location.pathname] ?? titles['/']);
+  const pageSubtitle = () => subtitles[location.pathname] ? t(subtitles[location.pathname]) : '';
   const [theme, setTheme] = createSignal<'light' | 'dark'>(startupTheme);
   const [sidebarCollapsed, setSidebarCollapsed] = createSignal(readSidebarPreference());
   const [analyticsExpanded, setAnalyticsExpanded] = createSignal(true);
@@ -199,8 +206,11 @@ function AppLayout(props: { children?: JSX.Element }) {
           </div>
         </aside>
         <section class="workspace">
-          <header class="topbar">
-            <h1>{pageTitle()}</h1>
+          <header class="topbar" classList={{ 'topbar-with-subtitle': Boolean(pageSubtitle()) }}>
+            <div class="topbar-heading">
+              <h1>{pageTitle()}</h1>
+              <Show when={pageSubtitle()}>{(subtitle) => <p>{subtitle()}</p>}</Show>
+            </div>
             <div class="topbar-actions">
               <a class="ghost-button" href="/v1/api-docs" target="_blank"><Icon name="docs" size={16} /> {t('nav.docs')}</a>
               <button class="theme-toggle lang-toggle" aria-label="Switch language" title="中 / EN" onClick={() => toggleLocale()}>
