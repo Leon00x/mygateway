@@ -62,13 +62,14 @@ export async function recordRequestCompletion(
   errorDetail?: string,
 ): Promise<void> {
   const inputTokens = usage?.inputTokens ?? 0;
+  const cacheInputTokens = Math.max(0, Math.min(inputTokens, usage?.cacheTokens ?? 0));
   const outputTokens = usage?.outputTokens ?? 0;
   const costMicros = computeCostMicros(
     inputTokens,
     outputTokens,
     ctx.inputPriceMicrosPerMillion,
     ctx.outputPriceMicrosPerMillion,
-    usage?.cacheTokens ?? 0,
+    cacheInputTokens,
     ctx.cacheInputPriceMicrosPerMillion,
   );
   const date = utcDateString();
@@ -85,6 +86,7 @@ export async function recordRequestCompletion(
     fallback_count: ctx.fallbackOccurred ? 1 : 0,
     attempt_count_total: ctx.attemptCount,
     input_tokens: inputTokens,
+    cache_input_tokens: cacheInputTokens,
     output_tokens: outputTokens,
     usage_unknown_count: usage === null ? 1 : 0,
     cost_micros: costMicros,
@@ -101,10 +103,10 @@ export async function recordRequestCompletion(
         unified_model_id_snapshot, channel_name_snapshot, key_id,
         request_count, success_count, error_count, cancelled_count,
         fallback_count, attempt_count_total,
-        input_tokens, output_tokens, usage_unknown_count, cost_micros,
+        input_tokens, cache_input_tokens, output_tokens, usage_unknown_count, cost_micros,
         latency_ms_sum, latency_ms_count,
         ttft_ms_sum, ttft_ms_count
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(timestamp_minute, model_card_id, channel_id, key_id) DO UPDATE SET
         request_count = request_count + excluded.request_count,
         success_count = success_count + excluded.success_count,
@@ -113,6 +115,7 @@ export async function recordRequestCompletion(
         fallback_count = fallback_count + excluded.fallback_count,
         attempt_count_total = attempt_count_total + excluded.attempt_count_total,
         input_tokens = input_tokens + excluded.input_tokens,
+        cache_input_tokens = cache_input_tokens + excluded.cache_input_tokens,
         output_tokens = output_tokens + excluded.output_tokens,
         usage_unknown_count = usage_unknown_count + excluded.usage_unknown_count,
         cost_micros = cost_micros + excluded.cost_micros,
@@ -134,6 +137,7 @@ export async function recordRequestCompletion(
       analyticsDelta.fallback_count,
       analyticsDelta.attempt_count_total,
       analyticsDelta.input_tokens,
+      analyticsDelta.cache_input_tokens,
       analyticsDelta.output_tokens,
       analyticsDelta.usage_unknown_count,
       analyticsDelta.cost_micros,

@@ -20,6 +20,7 @@ export interface AnalyticsDelta {
   fallback_count: number;
   attempt_count_total: number;
   input_tokens: number;
+  cache_input_tokens: number;
   output_tokens: number;
   usage_unknown_count: number;
   cost_micros: number;
@@ -48,10 +49,10 @@ export async function upsertAnalyticsMinute(
         unified_model_id_snapshot, channel_name_snapshot, key_id,
         request_count, success_count, error_count, cancelled_count,
         fallback_count, attempt_count_total,
-        input_tokens, output_tokens, usage_unknown_count, cost_micros,
+        input_tokens, cache_input_tokens, output_tokens, usage_unknown_count, cost_micros,
         latency_ms_sum, latency_ms_count,
         ttft_ms_sum, ttft_ms_count
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(timestamp_minute, model_card_id, channel_id, key_id) DO UPDATE SET
         request_count = request_count + excluded.request_count,
         success_count = success_count + excluded.success_count,
@@ -60,6 +61,7 @@ export async function upsertAnalyticsMinute(
         fallback_count = fallback_count + excluded.fallback_count,
         attempt_count_total = attempt_count_total + excluded.attempt_count_total,
         input_tokens = input_tokens + excluded.input_tokens,
+        cache_input_tokens = cache_input_tokens + excluded.cache_input_tokens,
         output_tokens = output_tokens + excluded.output_tokens,
         usage_unknown_count = usage_unknown_count + excluded.usage_unknown_count,
         cost_micros = cost_micros + excluded.cost_micros,
@@ -82,6 +84,7 @@ export async function upsertAnalyticsMinute(
       delta.fallback_count,
       delta.attempt_count_total,
       delta.input_tokens,
+      delta.cache_input_tokens,
       delta.output_tokens,
       delta.usage_unknown_count,
       delta.cost_micros,
@@ -102,6 +105,7 @@ export interface AnalyticsUsageSummary {
   cancelled: number;
   fallbacks: number;
   input_tokens: number;
+  cache_input_tokens: number;
   output_tokens: number;
   usage_unknown: number;
   cost_micros: number;
@@ -120,6 +124,7 @@ export interface AnalyticsTrendPoint {
   bucket: number; // Unix seconds (5-min floor)
   requests: number;
   input_tokens: number;
+  cache_input_tokens: number;
   output_tokens: number;
   cost_micros: number;
 }
@@ -161,6 +166,7 @@ export async function queryAnalyticsUsage(
         COALESCE(SUM(cancelled_count), 0) AS cancelled,
         COALESCE(SUM(fallback_count), 0) AS fallbacks,
         COALESCE(SUM(input_tokens), 0) AS input_tokens,
+        COALESCE(SUM(cache_input_tokens), 0) AS cache_input_tokens,
         COALESCE(SUM(output_tokens), 0) AS output_tokens,
         COALESCE(SUM(usage_unknown_count), 0) AS usage_unknown,
         COALESCE(SUM(cost_micros), 0) AS cost_micros,
@@ -174,12 +180,12 @@ export async function queryAnalyticsUsage(
     .bind(...values)
     .first<{
       requests: number; successes: number; errors: number; cancelled: number; fallbacks: number;
-      input_tokens: number; output_tokens: number; usage_unknown: number; cost_micros: number;
+      input_tokens: number; cache_input_tokens: number; output_tokens: number; usage_unknown: number; cost_micros: number;
       latency_ms_sum: number; latency_ms_count: number;
       ttft_ms_sum: number; ttft_ms_count: number;
     }>();
 
-  const s = summaryRow ?? { requests: 0, successes: 0, errors: 0, cancelled: 0, fallbacks: 0, input_tokens: 0, output_tokens: 0, usage_unknown: 0, cost_micros: 0, latency_ms_sum: 0, latency_ms_count: 0, ttft_ms_sum: 0, ttft_ms_count: 0 };
+  const s = summaryRow ?? { requests: 0, successes: 0, errors: 0, cancelled: 0, fallbacks: 0, input_tokens: 0, cache_input_tokens: 0, output_tokens: 0, usage_unknown: 0, cost_micros: 0, latency_ms_sum: 0, latency_ms_count: 0, ttft_ms_sum: 0, ttft_ms_count: 0 };
 
   const summary: AnalyticsUsageSummary = {
     requests: Number(s.requests),
@@ -188,6 +194,7 @@ export async function queryAnalyticsUsage(
     cancelled: Number(s.cancelled),
     fallbacks: Number(s.fallbacks),
     input_tokens: Number(s.input_tokens),
+    cache_input_tokens: Number(s.cache_input_tokens),
     output_tokens: Number(s.output_tokens),
     usage_unknown: Number(s.usage_unknown),
     cost_micros: Number(s.cost_micros),
@@ -209,6 +216,7 @@ export async function queryAnalyticsUsage(
         COALESCE(SUM(cancelled_count), 0) AS cancelled,
         COALESCE(SUM(fallback_count), 0) AS fallbacks,
         COALESCE(SUM(input_tokens), 0) AS input_tokens,
+        COALESCE(SUM(cache_input_tokens), 0) AS cache_input_tokens,
         COALESCE(SUM(output_tokens), 0) AS output_tokens,
         COALESCE(SUM(usage_unknown_count), 0) AS usage_unknown,
         COALESCE(SUM(cost_micros), 0) AS cost_micros,
@@ -226,7 +234,7 @@ export async function queryAnalyticsUsage(
     .all<{
       model_card_id: string; unified_model_id: string; requests: number; successes: number;
       errors: number; cancelled: number; fallbacks: number;
-      input_tokens: number; output_tokens: number; usage_unknown: number; cost_micros: number;
+      input_tokens: number; cache_input_tokens: number; output_tokens: number; usage_unknown: number; cost_micros: number;
       latency_ms_sum: number; latency_ms_count: number;
       ttft_ms_sum: number; ttft_ms_count: number;
     }>();
@@ -240,6 +248,7 @@ export async function queryAnalyticsUsage(
     cancelled: Number(r.cancelled),
     fallbacks: Number(r.fallbacks),
     input_tokens: Number(r.input_tokens),
+    cache_input_tokens: Number(r.cache_input_tokens),
     output_tokens: Number(r.output_tokens),
     usage_unknown: Number(r.usage_unknown),
     cost_micros: Number(r.cost_micros),
@@ -256,7 +265,10 @@ export async function queryAnalyticsUsage(
     : params.granularity === 'day'
       ? "(timestamp_minute / 86400) * 86400"
       : "timestamp_minute";
-  const trendLimit = params.granularity === 'day' ? 90 : params.granularity === 'hour' ? 168 : 1440;
+  // The retention window is 30 days, so a 5-minute query has at most 8,640
+  // buckets. Return the full selected range; the dashboard groups those raw
+  // buckets to the available chart width instead of truncating recent data.
+  const trendLimit = params.granularity === 'day' ? 90 : params.granularity === 'hour' ? 744 : 9000;
 
   const trendRows = await db
     .prepare(
@@ -264,6 +276,7 @@ export async function queryAnalyticsUsage(
         ${bucketExpr} AS bucket,
         COALESCE(SUM(request_count), 0) AS requests,
         COALESCE(SUM(input_tokens), 0) AS input_tokens,
+        COALESCE(SUM(cache_input_tokens), 0) AS cache_input_tokens,
         COALESCE(SUM(output_tokens), 0) AS output_tokens,
         COALESCE(SUM(cost_micros), 0) AS cost_micros
       FROM analytics_minutes
@@ -273,13 +286,14 @@ export async function queryAnalyticsUsage(
       LIMIT ${trendLimit}`,
     )
     .bind(...values)
-    .all<{ bucket: number; requests: number; input_tokens: number; output_tokens: number; cost_micros: number }>();
+    .all<{ bucket: number; requests: number; input_tokens: number; cache_input_tokens: number; output_tokens: number; cost_micros: number }>();
 
   for (const r of trendRows.results) {
     trends.push({
       bucket: Number(r.bucket),
       requests: Number(r.requests),
       input_tokens: Number(r.input_tokens),
+      cache_input_tokens: Number(r.cache_input_tokens),
       output_tokens: Number(r.output_tokens),
       cost_micros: Number(r.cost_micros),
     });

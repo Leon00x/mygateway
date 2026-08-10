@@ -9,8 +9,8 @@
  * Controlled component: value = { preset, start, end } in unix seconds.
  */
 
-import { createSignal, For, Show } from 'solid-js';
-import { t } from '../i18n';
+import { createMemo, createSignal, For, Show } from 'solid-js';
+import { locale, t } from '../i18n';
 
 export interface TimeRange {
   preset: string;
@@ -80,17 +80,30 @@ function ChevronIcon(props: { up: boolean }) {
   );
 }
 
+function localDateKey(date: Date): string {
+  const p = (value: number) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}`;
+}
+
+function dateFromKey(key: string): Date | null {
+  const [year, month, day] = key.split('-').map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+}
+
 export default function TimeRangePicker(props: {
   value: TimeRange;
   onChange: (range: TimeRange) => void;
 }) {
   const [isOpen, setIsOpen] = createSignal(false);
   const [mode, setMode] = createSignal<'quick' | 'calendar'>('quick');
-  // Calendar draft state (date/time strings)
+  // Calendar draft state. Dates are chosen from the calendar; only times remain editable fields.
   const [cStartDate, setCStartDate] = createSignal('');
   const [cStartTime, setCStartTime] = createSignal('00:00');
   const [cEndDate, setCEndDate] = createSignal('');
   const [cEndTime, setCEndTime] = createSignal('23:59');
+  const [calendarCursor, setCalendarCursor] = createSignal(new Date());
+  const [rangePhase, setRangePhase] = createSignal<'start' | 'end' | 'complete'>('complete');
 
   const nowValue = () => new Date();
   const label = () => props.value.preset === 'custom'
@@ -98,13 +111,14 @@ export default function TimeRangePicker(props: {
     : presetLabel(props.value.preset);
 
   const pick = (preset: string) => {
-    const { start, end } = resolvePreset(preset);
-    props.onChange({ preset, start, end });
     if (preset === 'custom') {
       openCalendarDraft();
       setMode('calendar');
       setIsOpen(true);
+      return;
     }
+    const { start, end } = resolvePreset(preset);
+    props.onChange({ preset, start, end });
     // other presets keep the popover open per spec
   };
 
@@ -116,6 +130,60 @@ export default function TimeRangePicker(props: {
     setCStartTime(`${p(s.getHours())}:${p(s.getMinutes())}`);
     setCEndDate(`${e.getFullYear()}-${p(e.getMonth() + 1)}-${p(e.getDate())}`);
     setCEndTime(`${p(e.getHours())}:${p(e.getMinutes())}`);
+    setCalendarCursor(new Date(s.getFullYear(), s.getMonth(), 1));
+    setRangePhase('complete');
+  };
+
+  const monthLabel = () => new Intl.DateTimeFormat(locale() === 'zh' ? 'zh-CN' : 'en-US', {
+    year: 'numeric', month: 'long',
+  }).format(calendarCursor());
+
+  const weekdayLabels = createMemo(() => {
+    const language = locale() === 'zh' ? 'zh-CN' : 'en-US';
+    const monday = new Date(2024, 0, 1);
+    return Array.from({ length: 7 }, (_, index) => new Intl.DateTimeFormat(language, { weekday: 'short' })
+      .format(new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + index)));
+  });
+
+  const calendarDays = createMemo(() => {
+    const cursor = calendarCursor();
+    const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+    const mondayOffset = (first.getDay() + 6) % 7;
+    const gridStart = new Date(first.getFullYear(), first.getMonth(), 1 - mondayOffset);
+    return Array.from({ length: 42 }, (_, index) => {
+      const date = new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + index);
+      return { date, key: localDateKey(date), currentMonth: date.getMonth() === cursor.getMonth() };
+    });
+  });
+
+  const moveMonth = (delta: number) => {
+    const cursor = calendarCursor();
+    setCalendarCursor(new Date(cursor.getFullYear(), cursor.getMonth() + delta, 1));
+  };
+
+  const chooseDate = (key: string) => {
+    if (rangePhase() !== 'end') {
+      setCStartDate(key);
+      setCEndDate('');
+      setRangePhase('end');
+      return;
+    }
+    if (key < cStartDate()) {
+      setCStartDate(key);
+      setCEndDate('');
+      return;
+    }
+    setCEndDate(key);
+    setRangePhase('complete');
+  };
+
+  const draftRangeLabel = () => {
+    const language = locale() === 'zh' ? 'zh-CN' : 'en-US';
+    const format = (key: string) => {
+      const date = dateFromKey(key);
+      return date ? new Intl.DateTimeFormat(language, { year: 'numeric', month: 'short', day: 'numeric' }).format(date) : '—';
+    };
+    return `${format(cStartDate())}  →  ${format(cEndDate())}`;
   };
 
   const switchMode = (next: 'quick' | 'calendar') => {
@@ -176,24 +244,38 @@ export default function TimeRangePicker(props: {
           </div>
 
           <Show when={mode() === 'quick'} fallback={
-            /* Calendar mode: Start / End, each with date + time */
+            /* Calendar mode: click dates to build a range; time remains optional precision. */
             <div class="tr-calendar">
               <div class="tr-range-bar">
                 <span class="tr-range-bar-icon"><CalendarIcon /></span>
-                <span class="tr-range-bar-text">{formatRangeLabel(props.value.start, props.value.end)}</span>
+                <span class="tr-range-bar-text">{draftRangeLabel()}</span>
               </div>
-              <div class="tr-calendar-grid">
-                <label class="tr-calendar-field">
-                  <span class="tr-calendar-label">{t('tr.startDate')}</span>
-                  <input type="date" value={cStartDate()} max={cEndDate() || undefined} onInput={(e) => setCStartDate(e.currentTarget.value)} />
-                </label>
+              <div class="tr-calendar-picker">
+                <div class="tr-calendar-head">
+                  <button type="button" aria-label={t('tr.previousMonth')} onClick={() => moveMonth(-1)}>‹</button>
+                  <strong>{monthLabel()}</strong>
+                  <button type="button" aria-label={t('tr.nextMonth')} onClick={() => moveMonth(1)}>›</button>
+                </div>
+                <div class="tr-weekdays"><For each={weekdayLabels()}>{(day) => <span>{day}</span>}</For></div>
+                <div class="tr-days"><For each={calendarDays()}>{(day) => (
+                  <button
+                    type="button"
+                    classList={{
+                      'outside': !day.currentMonth,
+                      'in-range': Boolean(cStartDate() && cEndDate() && day.key > cStartDate() && day.key < cEndDate()),
+                      'range-edge': day.key === cStartDate() || day.key === cEndDate(),
+                      'today': day.key === localDateKey(new Date()),
+                    }}
+                    aria-label={day.key}
+                    onClick={() => chooseDate(day.key)}
+                  >{day.date.getDate()}</button>
+                )}</For></div>
+                <p class="tr-calendar-guide">{rangePhase() === 'end' ? t('tr.chooseEnd') : t('tr.chooseStart')}</p>
+              </div>
+              <div class="tr-calendar-times">
                 <label class="tr-calendar-field">
                   <span class="tr-calendar-label">{t('tr.startTime')}</span>
                   <input type="time" value={cStartTime()} onInput={(e) => setCStartTime(e.currentTarget.value)} />
-                </label>
-                <label class="tr-calendar-field">
-                  <span class="tr-calendar-label">{t('tr.endDate')}</span>
-                  <input type="date" value={cEndDate()} min={cStartDate() || undefined} onInput={(e) => setCEndDate(e.currentTarget.value)} />
                 </label>
                 <label class="tr-calendar-field">
                   <span class="tr-calendar-label">{t('tr.endTime')}</span>
@@ -202,7 +284,7 @@ export default function TimeRangePicker(props: {
               </div>
               <div class="tr-calendar-actions">
                 <button type="button" class="tr-btn-secondary" onClick={cancelCalendar}>{t('common.cancel')}</button>
-                <button type="button" class="tr-btn-primary" onClick={applyCalendar}>{t('common.confirm')}</button>
+                <button type="button" class="tr-btn-primary" disabled={!cStartDate() || !cEndDate()} onClick={applyCalendar}>{t('common.confirm')}</button>
               </div>
             </div>
           }>

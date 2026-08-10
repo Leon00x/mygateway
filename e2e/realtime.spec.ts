@@ -39,7 +39,7 @@ test.beforeAll(async ({ request }) => {
 test('realtime: UI preflight then save and import', async ({ page }) => {
   await loginViaUi(page);
   await page.locator('.sidebar').getByRole('link', { name: /渠道/ }).click();
-  await page.getByRole('button', { name: '+ 添加供应商' }).click();
+  await page.getByRole('button', { name: '添加渠道' }).click();
   await page.getByRole('button', { name: /DeepSeek/ }).first().click();
   await page.getByPlaceholder('sk-...').fill(providerKey!);
   await expect(page.getByRole('button', { name: '保存', exact: true })).toHaveCount(0);

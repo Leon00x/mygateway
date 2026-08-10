@@ -204,6 +204,21 @@ describe('usage recorder level gating', () => {
     expect(insertStatements(statements)).toBe(0);
   });
 
+  test('provider cache hits are aggregated separately from total input tokens', async () => {
+    const { db, statements } = fakeDb({});
+    await recordRequestCompletion(
+      envOf(db),
+      ctx({ policy: { ...defaultPolicy(), logsEnabled: false } }),
+      'success',
+      { inputTokens: 100, cacheTokens: 40, outputTokens: 25 },
+      200,
+    );
+    const analyticsStmt = statements.find((s) => s.sql.includes('INSERT INTO analytics_minutes'));
+    expect(analyticsStmt).toBeDefined();
+    expect(analyticsStmt!.sql).toContain('input_tokens, cache_input_tokens, output_tokens');
+    expect(analyticsStmt!.params.slice(12, 15)).toEqual([100, 40, 25]);
+  });
+
   test('TTFT is recorded in analytics when stream=true', async () => {
     const { db, statements } = fakeDb({});
     await recordRequestCompletion(

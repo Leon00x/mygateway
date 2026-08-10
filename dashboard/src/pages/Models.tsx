@@ -66,7 +66,7 @@ export default function Models() {
   const [channelInventory, setChannelInventory] = createSignal<Record<string, ProviderModel[]>>({});
   const [inventoryLoading, setInventoryLoading] = createSignal(false);
 
-  // Add instance — which card is expanded
+  // Model card currently receiving a new instance.
   const [addForCard, setAddForCard] = createSignal<string | null>(null);
   const [instChannelId, setInstChannelId] = createSignal('');
   const [instUpstreamModel, setInstUpstreamModel] = createSignal('');
@@ -324,10 +324,6 @@ export default function Models() {
 
   return (
     <div class="resource-page model-page">
-      <div class="page-actions">
-        <button onClick={() => setShowCreate(!showCreate())} class="primary-button">{t('models.create')}</button>
-      </div>
-
       {/* Create card form */}
       <Show when={showCreate()}>
         <form onSubmit={submitCreate} class="panel inline-form form-stack">
@@ -376,9 +372,13 @@ export default function Models() {
       </Show>
 
       {loading() && <p class="empty-state">Loading...</p>}
-      <Show when={!loading() && cards().length === 0}><div class="panel empty-state"><span class="provider-logo">M</span><h3>{t('models.emptyTitle')}</h3><p>{t('models.emptyBody')}</p></div></Show>
-
-      <div class="channel-card-grid model-card-grid">
+      <Show when={!loading()}><div class="channel-card-grid model-card-grid">
+        <button type="button" class="panel resource-add-card" aria-label={t('models.create')} aria-expanded={showCreate()} onClick={() => setShowCreate(!showCreate())}>
+          <header class="channel-card-head resource-add-head"><span class="resource-add-icon" aria-hidden="true">+</span><div><strong>{t('models.create')}</strong><span>{t('models.createHint')}</span></div></header>
+          <div class="channel-card-metrics resource-add-metrics" aria-hidden="true"><div><span>{t('models.instances')}</span><strong>—</strong></div><div><span>{t('channels.available')}</span><strong>—</strong></div></div>
+          <div class="channel-card-section resource-add-preview" aria-hidden="true"><span /><span /><span /></div>
+          <footer class="resource-add-footer"><span><b aria-hidden="true">+</b>{t('models.create')}</span></footer>
+        </button>
         <For each={cards()}>
           {(card) => (
             <article class="panel channel-card model-card">
@@ -425,7 +425,7 @@ export default function Models() {
             </article>
           )}
         </For>
-      </div>
+      </div></Show>
 
       {/* Add instance modal */}
       <Show when={addForCard()}>{(cardId) => {
@@ -439,9 +439,9 @@ export default function Models() {
               </Show>
               <label>{t('common.channel')}
                 <select value={instChannelId()} onChange={(e) => chooseInstanceChannel(e.currentTarget.value)}>
-                  <Show when={activeChannels().length === 0}><option value="">（{t('channels.available')} —）</option></Show>
+                  <Show when={activeChannels().length === 0}><option value="">{t('channels.noneAvailable')}</option></Show>
                   <For each={activeChannels()}>
-                    {(ch) => <option value={ch.id}>{ch.name} — {ch.base_url}</option>}
+                    {(ch) => <option value={ch.id}>{ch.name} | {ch.base_url}</option>}
                   </For>
                 </select>
               </label>
@@ -458,13 +458,13 @@ export default function Models() {
               </label>
               <div class="model-bind-fields">
                 <label>{t('models.inputPrice')}
-                  <input type="number" min="0" step="0.01" placeholder="—" value={instInputPrice()} onInput={(e) => setInstInputPrice(e.currentTarget.value)} />
+                  <input type="number" min="0" step="0.01" placeholder="-" value={instInputPrice()} onInput={(e) => setInstInputPrice(e.currentTarget.value)} />
                 </label>
                 <label>{t('models.outputPrice')}
-                  <input type="number" min="0" step="0.01" placeholder="—" value={instOutputPrice()} onInput={(e) => setInstOutputPrice(e.currentTarget.value)} />
+                  <input type="number" min="0" step="0.01" placeholder="-" value={instOutputPrice()} onInput={(e) => setInstOutputPrice(e.currentTarget.value)} />
                 </label>
                 <label>{t('models.cachePrice')}
-                  <input type="number" min="0" step="0.01" placeholder="—" value={instCachePrice()} onInput={(e) => setInstCachePrice(e.currentTarget.value)} />
+                  <input type="number" min="0" step="0.01" placeholder="-" value={instCachePrice()} onInput={(e) => setInstCachePrice(e.currentTarget.value)} />
                 </label>
                 <label>{t('models.currency')}
                   <select value={instCurrency()} onChange={(e) => setInstCurrency(e.currentTarget.value as 'USD' | 'CNY')}>
@@ -487,13 +487,13 @@ export default function Models() {
             <div class="modal-title"><div><span class="eyebrow">{t('models.eyebrowPricing')}</span><h3>{t('models.pricing')}</h3><p>{target().instance.public_model_alias} · {target().card.unified_model_id}</p></div><button type="button" onClick={() => setEditInst(null)}>×</button></div>
             <div class="model-bind-fields">
               <label>{t('models.inputPrice')}
-                <input type="number" min="0" step="0.01" placeholder="—" value={editInstInput()} onInput={(e) => setEditInstInput(e.currentTarget.value)} />
+                <input type="number" min="0" step="0.01" placeholder="-" value={editInstInput()} onInput={(e) => setEditInstInput(e.currentTarget.value)} />
               </label>
               <label>{t('models.outputPrice')}
-                <input type="number" min="0" step="0.01" placeholder="—" value={editInstOutput()} onInput={(e) => setEditInstOutput(e.currentTarget.value)} />
+                <input type="number" min="0" step="0.01" placeholder="-" value={editInstOutput()} onInput={(e) => setEditInstOutput(e.currentTarget.value)} />
               </label>
               <label>{t('models.cachePrice')}
-                <input type="number" min="0" step="0.01" placeholder="—" value={editInstCache()} onInput={(e) => setEditInstCache(e.currentTarget.value)} />
+                <input type="number" min="0" step="0.01" placeholder="-" value={editInstCache()} onInput={(e) => setEditInstCache(e.currentTarget.value)} />
               </label>
               <label>{t('models.currency')}
                 <select value={editInstCurrency()} onChange={(e) => setEditInstCurrency(e.currentTarget.value as 'USD' | 'CNY')}>

@@ -1,6 +1,6 @@
-import { createSignal, onMount, Show, For, onCleanup } from 'solid-js';
+import { createSignal, onCleanup, onMount, Show, For, type JSX } from 'solid-js';
 import { A } from '@solidjs/router';
-import { t } from '../i18n';
+import { locale, t } from '../i18n';
 import TimeRangePicker, { resolvePreset, type TimeRange } from '../components/TimeRangePicker';
 
 interface AnalyticsSummary {
@@ -10,6 +10,7 @@ interface AnalyticsSummary {
   cancelled: number;
   fallbacks: number;
   input_tokens: number;
+  cache_input_tokens: number;
   output_tokens: number;
   usage_unknown: number;
   cost_micros: number;
@@ -28,6 +29,7 @@ interface AnalyticsTrendPoint {
   bucket: number;
   requests: number;
   input_tokens: number;
+  cache_input_tokens: number;
   output_tokens: number;
   cost_micros: number;
 }
@@ -54,8 +56,44 @@ function fmtNum(n = 0): string {
 }
 
 function pct(part: number, total: number): string {
-  if (total === 0) return '—';
+  if (total === 0) return '-';
   return `${Math.round((part / total) * 100)}%`;
+}
+
+function niceAxisMax(value: number): number {
+  if (value <= 1) return 1;
+  const magnitude = 10 ** Math.floor(Math.log10(value));
+  const normalized = value / magnitude;
+  const step = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+  return step * magnitude;
+}
+
+function formatAxisValue(value: number): string {
+  if (value >= 1_000_000) return `${Number((value / 1_000_000).toFixed(1))}M`;
+  if (value >= 1_000) return `${Number((value / 1_000).toFixed(1))}K`;
+  return Number(value.toFixed(value < 10 && value % 1 ? 1 : 0)).toLocaleString();
+}
+
+function formatAxisTime(timestamp: number, span: number): string {
+  const date = new Date(timestamp * 1000);
+  const language = locale() === 'zh' ? 'zh-CN' : 'en-US';
+  if (span >= 172_800) return new Intl.DateTimeFormat(language, { month: 'numeric', day: 'numeric' }).format(date);
+  if (span >= 7_200) return new Intl.DateTimeFormat(language, { hour: '2-digit', minute: '2-digit', hour12: false }).format(date);
+  return new Intl.DateTimeFormat(language, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(date);
+}
+
+function ChartFrame(props: { max: number; start: number; end: number; unit: string; children: JSX.Element }) {
+  const span = () => Math.max(1, props.end - props.start);
+  const yTicks = () => [props.max, props.max * 0.75, props.max * 0.5, props.max * 0.25, 0];
+  const xTicks = () => [props.start, props.start + span() / 2, props.end];
+  return (
+    <div class="analytics-chart-frame">
+      <div class="analytics-axis-unit">{props.unit}</div>
+      <div class="analytics-axis-y"><For each={yTicks()}>{(tick) => <span>{formatAxisValue(tick)}</span>}</For></div>
+      <div class="analytics-chart-plot">{props.children}</div>
+      <div class="analytics-axis-x"><For each={xTicks()}>{(tick) => <span>{formatAxisTime(tick, span())}</span>}</For></div>
+    </div>
+  );
 }
 
 
@@ -64,11 +102,12 @@ export default function AnalyticsUsage() {
   const [loading, setLoading] = createSignal(true);
   const [error, setError] = createSignal('');
   const [timeRange, setTimeRange] = createSignal<TimeRange>({ preset: '1w', ...resolvePreset('1w') });
-  const [granularity, setGranularity] = createSignal<'hour' | 'day' | ''>('');
+  const [granularity, setGranularity] = createSignal<'hour' | 'day' | ''>('day');
   const [modelId, setModelId] = createSignal('');
   const [keyId, setKeyId] = createSignal('');
   const [modelOptions, setModelOptions] = createSignal<{ id: string; name: string }[]>([]);
   const [keyOptions, setKeyOptions] = createSignal<{ id: string; name: string }[]>([]);
+  const [expandedChart, setExpandedChart] = createSignal<'requests' | 'tokens' | null>(null);
 
   const fetchUsage = async (start: number, end: number, g: string, m: string, k: string) => {
     setLoading(true);
@@ -117,84 +156,145 @@ export default function AnalyticsUsage() {
     } catch { /* filters not critical */ }
   };
 
-  onMount(() => { const r = resolvePreset('1w'); void fetchUsage(r.start, r.end, '', '', ''); void fetchOptions(); });
+  onMount(() => { const r = resolvePreset('1w'); void fetchUsage(r.start, r.end, 'day', '', ''); void fetchOptions(); });
+  onMount(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setExpandedChart(null);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    onCleanup(() => window.removeEventListener('keydown', closeOnEscape));
+  });
 
   const summary = () => data()?.summary;
   const models = () => data()?.models ?? [];
-  const trends = () => data()?.trends ?? [];
+  const trendStep = () => granularity() === 'day' ? 86_400 : granularity() === 'hour' ? 3_600 : 300;
+  const trends = () => {
+    const response = data();
+    const raw = response?.trends ?? [];
+    if (!response || raw.length === 0) return raw;
+    const step = trendStep();
+    const byBucket = new Map(raw.map((point) => [point.bucket, point]));
+    const start = Math.floor(response.range.start / step) * step;
+    const end = Math.floor(response.range.end / step) * step;
+    const filled: AnalyticsTrendPoint[] = [];
+    for (let bucket = start; bucket <= end && filled.length < 9001; bucket += step) {
+      filled.push(byBucket.get(bucket) ?? { bucket, requests: 0, input_tokens: 0, cache_input_tokens: 0, output_tokens: 0, cost_micros: 0 });
+    }
+    return filled;
+  };
+  const chartTrends = () => {
+    const points = trends();
+    const maxVisibleBuckets = 48;
+    if (points.length <= maxVisibleBuckets) return points;
+    const groupSize = Math.ceil(points.length / maxVisibleBuckets);
+    const grouped: AnalyticsTrendPoint[] = [];
+    for (let index = 0; index < points.length; index += groupSize) {
+      const group = points.slice(index, index + groupSize);
+      grouped.push(group.reduce<AnalyticsTrendPoint>((total, point) => ({
+        bucket: total.bucket,
+        requests: total.requests + point.requests,
+        input_tokens: total.input_tokens + point.input_tokens,
+        cache_input_tokens: total.cache_input_tokens + point.cache_input_tokens,
+        output_tokens: total.output_tokens + point.output_tokens,
+        cost_micros: total.cost_micros + point.cost_micros,
+      }), { bucket: group[0].bucket, requests: 0, input_tokens: 0, cache_input_tokens: 0, output_tokens: 0, cost_micros: 0 }));
+    }
+    return grouped;
+  };
 
   const successRate = () => {
     const s = summary();
     if (!s || s.requests === 0) return null;
     return Math.round((s.successes / s.requests) * 100);
   };
-  const usageCoverage = () => {
-    const s = summary();
-    if (!s || s.requests === 0) return 100;
-    return Math.round(((s.requests - s.usage_unknown) / s.requests) * 100);
+  const cachedTokens = () => Math.min(summary()?.input_tokens ?? 0, summary()?.cache_input_tokens ?? 0);
+  const uncachedInputTokens = () => Math.max(0, (summary()?.input_tokens ?? 0) - cachedTokens());
+  const chartRange = () => {
+    const range = data()?.range;
+    const pts = trends();
+    const step = trendStep();
+    return {
+      start: range ? Math.floor(range.start / step) * step : Math.min(...pts.map((p) => p.bucket)),
+      end: range ? Math.floor(range.end / step) * step : Math.max(...pts.map((p) => p.bucket)),
+    };
   };
 
-  // SVG trend line — points are placed on a real time axis so uneven bucket
-  // gaps don't distort the shape.
   const trendSvg = () => {
-    const pts = trends();
+    const pts = chartTrends();
     if (pts.length === 0) return null;
-    const range = data()?.range;
-    const start = range?.start ?? Math.min(...pts.map((p) => p.bucket));
-    const end = range?.end ?? Math.max(...pts.map((p) => p.bucket));
+    const { start, end } = chartRange();
     const span = Math.max(1, end - start);
-    const max = Math.max(...pts.map((p) => p.requests), 1);
+    const max = Math.max(4, niceAxisMax(Math.max(...pts.map((p) => p.requests), 1)));
+    const baseline = 174;
+    const chartHeight = 168;
     const points = pts.map((p) => {
-      const x = ((p.bucket - start) / span) * 100;
-      const y = 100 - (p.requests / max) * 100;
+      const x = ((p.bucket - start) / span) * 1000;
+      const y = baseline - (p.requests / max) * chartHeight;
       return `${x.toFixed(2)},${y.toFixed(2)}`;
     }).join(' ');
     return (
-      <svg class="analytics-trend-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
-        {[25, 50, 75].map((y) => (
-          <line x1="0" y1={y} x2="100" y2={y} stroke="currentColor" stroke-opacity="0.12" stroke-width="0.5" />
+      <ChartFrame max={max} start={start} end={end} unit={t('usage.requestsUnit')}>
+        <svg class="analytics-trend-svg" viewBox="0 0 1000 180" preserveAspectRatio="none" role="img" aria-label={t('usage.trends')}>
+        {[6, 48, 90, 132, 174].map((y) => (
+          <line x1="0" y1={y} x2="1000" y2={y} stroke="currentColor" stroke-opacity="0.1" stroke-width="1" vector-effect="non-scaling-stroke" />
         ))}
-        <Show when={pts.length === 1}>
-          <circle cx={points.split(',')[0]} cy={points.split(',')[1]} r="2.5" fill="currentColor" />
-        </Show>
-        <polyline points={points} fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-      </svg>
+        <Show when={pts.length > 1}><polygon points={`${points} 1000,${baseline} 0,${baseline}`} fill="currentColor" opacity="0.055" /></Show>
+        <polyline points={points} fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round" />
+        <For each={pts}>{(point, index) => {
+          const previous = pts[Math.max(0, index() - 1)]?.bucket ?? start;
+          const next = pts[Math.min(pts.length - 1, index() + 1)]?.bucket ?? end;
+          const left = ((Math.max(start, (previous + point.bucket) / 2) - start) / span) * 1000;
+          const right = ((Math.min(end, (next + point.bucket) / 2) - start) / span) * 1000;
+          return <rect x={left} y="0" width={Math.max(2, right - left)} height="180" fill="transparent"><title>{`${new Date(point.bucket * 1000).toLocaleString()} | ${point.requests} ${t('usage.requestsUnit')}`}</title></rect>;
+        }}</For>
+        </svg>
+      </ChartFrame>
     );
   };
 
-  // Token bar chart — input (solid) + output (light) stacked per bucket, with a
-  // real time axis so uneven gaps don't distort the shape.
   const tokenBars = () => {
-    const pts = trends();
+    const pts = chartTrends();
     if (pts.length === 0) return null;
-    const range = data()?.range;
-    const start = range?.start ?? Math.min(...pts.map((p) => p.bucket));
-    const end = range?.end ?? Math.max(...pts.map((p) => p.bucket));
+    const { start, end } = chartRange();
     const span = Math.max(1, end - start);
-    const max = Math.max(...pts.map((p) => p.input_tokens + p.output_tokens), 1);
-    const step = (end - start) / Math.max(1, pts.length);
+    const max = Math.max(4, niceAxisMax(Math.max(...pts.map((p) => p.input_tokens + p.output_tokens), 1)));
+    const baseline = 174;
+    const chartHeight = 168;
+    const width = Math.min(72, Math.max(12, (1000 / Math.max(pts.length, 1)) * 0.62));
     const bars = pts.map((p) => {
-      const center = ((p.bucket - start) / span) * 100;
-      const width = Math.min(6, ((step / span) * 100) * 0.7);
-      const x = Math.max(0, center - width / 2);
-      const inputH = (p.input_tokens / max) * 100;
-      const outputH = (p.output_tokens / max) * 100;
+      const center = ((p.bucket - start) / span) * 1000;
+      const x = Math.min(1000 - width, Math.max(0, center - width / 2));
+      const cached = Math.min(p.input_tokens, p.cache_input_tokens);
+      const uncachedInput = Math.max(0, p.input_tokens - cached);
+      const inputH = (uncachedInput / max) * chartHeight;
+      const cacheH = (cached / max) * chartHeight;
+      const outputH = (p.output_tokens / max) * chartHeight;
       return (
         <g>
-          <title>{`${new Date(p.bucket * 1000).toLocaleString()} · ${t('usage.input')} ${p.input_tokens} / ${t('usage.output')} ${p.output_tokens}`}</title>
-          <rect x={x.toFixed(2)} y={(100 - inputH - outputH).toFixed(2)} width={width.toFixed(2)} height={outputH.toFixed(2)} fill="currentColor" opacity="0.35" />
-          <rect x={x.toFixed(2)} y={(100 - inputH).toFixed(2)} width={width.toFixed(2)} height={inputH.toFixed(2)} rx="1.5" fill="currentColor" opacity="0.9" />
+          <title>{`${new Date(p.bucket * 1000).toLocaleString()} | ${t('usage.inputNonCached')} ${uncachedInput} / ${t('usage.cache')} ${cached} / ${t('usage.output')} ${p.output_tokens}`}</title>
+          <rect class="token-bar-output" x={x} y={baseline - inputH - cacheH - outputH} width={width} height={outputH} rx="3" />
+          <rect class="token-bar-cache" x={x} y={baseline - inputH - cacheH} width={width} height={cacheH} rx="3" />
+          <rect class="token-bar-input" x={x} y={baseline - inputH} width={width} height={inputH} rx="3" />
         </g>
       );
     });
     return (
-      <svg class="analytics-trend-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
-        {[25, 50, 75].map((y) => (
-          <line x1="0" y1={y} x2="100" y2={y} stroke="currentColor" stroke-opacity="0.12" stroke-width="0.5" />
+      <ChartFrame max={max} start={start} end={end} unit="Token">
+        <svg class="analytics-trend-svg" viewBox="0 0 1000 180" preserveAspectRatio="none" role="img" aria-label={t('usage.tokenConsumption')}>
+        {[6, 48, 90, 132, 174].map((y) => (
+          <line x1="0" y1={y} x2="1000" y2={y} stroke="currentColor" stroke-opacity="0.1" stroke-width="1" vector-effect="non-scaling-stroke" />
         ))}
         {bars}
-      </svg>
+        </svg>
+      </ChartFrame>
     );
+  };
+
+  const openChartWithKeyboard = (event: KeyboardEvent, chart: 'requests' | 'tokens') => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      setExpandedChart(chart);
+    }
   };
 
   return (
@@ -206,7 +306,7 @@ export default function AnalyticsUsage() {
         </div>
       </div>
 
-      {/* Filters — time range picker sits in the same row as the other filters */}
+      {/* Time range and dimensions share one compact filter row. */}
       <div class="analytics-filters">
         <div class="analytics-filters-range">
           <TimeRangePicker value={timeRange()} onChange={onRangeChange} />
@@ -250,51 +350,75 @@ export default function AnalyticsUsage() {
         {/* QwenCloud-style metric cards: requests / avg latency / avg TTFT / success rate */}
         <div class="analytics-metrics-grid">
           <div class="analytics-metric-card">
-            <div class="analytics-metric-top"><small>{t('usage.requests')}</small><span class="analytics-metric-spark">{trends().length > 1 ? trendSvg() : null}</span></div>
+            <small>{t('usage.requests')}</small>
             <strong>{fmtNum(summary()?.requests)}</strong>
           </div>
           <div class="analytics-metric-card">
             <small>{t('usage.avgLatency')}</small>
-            <strong>{summary()?.avg_latency_ms != null ? `${summary()!.avg_latency_ms}ms` : '—'}</strong>
+            <strong>{summary()?.avg_latency_ms != null ? `${summary()!.avg_latency_ms}ms` : '-'}</strong>
           </div>
           <div class="analytics-metric-card">
             <small>{t('usage.avgTtft')}</small>
-            <strong>{summary()?.avg_ttft_ms != null ? `${summary()!.avg_ttft_ms}ms` : '—'}</strong>
+            <strong>{summary()?.avg_ttft_ms != null ? `${summary()!.avg_ttft_ms}ms` : '-'}</strong>
           </div>
           <div class="analytics-metric-card">
             <small>{t('usage.successRate')}</small>
-            <strong>{successRate() !== null ? `${successRate()}%` : '—'}</strong>
+            <strong>{successRate() !== null ? `${successRate()}%` : '-'}</strong>
           </div>
         </div>
 
-        {/* Request trend (line) + token consumption (bars) — side by side at 1:1 */}
-        <div class="analytics-duo-grid" classList={{ 'analytics-duo-single': trends().length === 0 }}>
-          <Show when={trends().length > 0}>
-            <div class="panel analytics-trend-panel">
-              <div class="panel-header"><h2>{t('usage.trends')}</h2><span class="analytics-hint">{t('usage.requestsChange')}</span></div>
-              <div class="analytics-trend-chart">{trendSvg()}</div>
-            </div>
-          </Show>
-          <div class="panel analytics-token-card">
+        {/* Equal-width overview cards stack on narrow screens and expand on demand. */}
+        <div class="analytics-duo-grid">
+          <section class="panel analytics-trend-panel analytics-chart-card" role="button" tabIndex={0} aria-label={`${t('usage.trends')} · ${t('usage.expandChart')}`} onClick={() => setExpandedChart('requests')} onKeyDown={(event) => openChartWithKeyboard(event, 'requests')}>
+            <div class="panel-header"><h2>{t('usage.trends')}</h2><span class="analytics-chart-unit">{t('usage.unitRequests')}</span></div>
+            <div class="analytics-trend-chart"><Show when={trends().length > 0} fallback={<div class="analytics-empty-chart">{t('usage.noTrendData')}</div>}>{trendSvg()}</Show></div>
+          </section>
+          <section class="panel analytics-token-card analytics-chart-card" role="button" tabIndex={0} aria-label={`${t('usage.tokenConsumption')} · ${t('usage.expandChart')}`} onClick={() => setExpandedChart('tokens')} onKeyDown={(event) => openChartWithKeyboard(event, 'tokens')}>
             <div class="analytics-token-head">
               <div>
                 <h3>{t('usage.tokenConsumption')}</h3>
                 <div class="analytics-token-legend">
-                  <i class="in" />{t('usage.input')}
-                  <i class="out" />{t('usage.output')}
+                  <i class="input" />{t('usage.inputNonCached')}
+                  <i class="cache" />{t('usage.cache')}
+                  <i class="output" />{t('usage.output')}
                 </div>
               </div>
-              <span class="analytics-token-total">{t('usage.totalTokens')} <strong>{fmtNum((summary()?.input_tokens ?? 0) + (summary()?.output_tokens ?? 0))}</strong></span>
+              <div class="analytics-token-meta"><span class="analytics-token-total">{t('usage.totalTokens')} <strong>{fmtNum((summary()?.input_tokens ?? 0) + (summary()?.output_tokens ?? 0))}</strong></span></div>
             </div>
-            <div class="analytics-token-chart">{tokenBars()}</div>
+            <div class="analytics-token-chart"><Show when={trends().length > 0} fallback={<div class="analytics-empty-chart">{t('usage.noTrendData')}</div>}>{tokenBars()}</Show></div>
             <div class="analytics-token-row">
-              <div><small>{t('usage.input')}</small><strong>{fmtNum(summary()?.input_tokens)}</strong></div>
+              <div><small>{t('usage.inputNonCached')}</small><strong>{fmtNum(uncachedInputTokens())}</strong></div>
+              <div><small>{t('usage.cache')}</small><strong>{fmtNum(cachedTokens())}</strong></div>
               <div><small>{t('usage.output')}</small><strong>{fmtNum(summary()?.output_tokens)}</strong></div>
-              <div><small>{t('usage.coverage')}</small><strong>{usageCoverage()}%</strong></div>
               <div><small>{t('usage.estCost')}</small><strong>{formatUsd(summary()?.cost_micros ?? 0)}</strong></div>
             </div>
-          </div>
+          </section>
         </div>
+
+        <Show when={expandedChart()}>{(chart) => (
+          <div class="modal-backdrop analytics-chart-backdrop" onClick={() => setExpandedChart(null)}>
+            <section class="panel analytics-chart-modal" role="dialog" aria-modal="true" aria-label={chart() === 'requests' ? t('usage.trends') : t('usage.tokenConsumption')} onClick={(event) => event.stopPropagation()}>
+              <div class="analytics-chart-modal-head">
+                <div>
+                  <h2>{chart() === 'requests' ? t('usage.trends') : t('usage.tokenConsumption')}</h2>
+                  <Show when={chart() === 'tokens'}>
+                    <div class="analytics-token-legend">
+                      <i class="input" />{t('usage.inputNonCached')}
+                      <i class="cache" />{t('usage.cache')}
+                      <i class="output" />{t('usage.output')}
+                    </div>
+                  </Show>
+                </div>
+                <button type="button" class="analytics-chart-close" aria-label={t('usage.closeChart')} onClick={() => setExpandedChart(null)}>×</button>
+              </div>
+              <div class={chart() === 'requests' ? 'analytics-trend-chart' : 'analytics-token-chart'}>
+                <Show when={trends().length > 0} fallback={<div class="analytics-empty-chart">{t('usage.noTrendData')}</div>}>
+                  {chart() === 'requests' ? trendSvg() : tokenBars()}
+                </Show>
+              </div>
+            </section>
+          </div>
+        )}</Show>
 
         {/* Model table */}
         <Show when={models().length > 0}>
@@ -302,29 +426,21 @@ export default function AnalyticsUsage() {
             <div class="panel-header"><h2>{t('usage.modelsTable')}</h2><span class="analytics-hint">{t('usage.sortedByRequests')}</span></div>
             <div class="analytics-model-table">
               <div class="analytics-model-head">
-                <span>{t('common.model')}</span><span>{t('usage.requests')}</span><span>{t('usage.successRate')}</span><span>{t('usage.avgTpm')}</span><span>{t('usage.avgLatency')}</span><span>{t('usage.avgTtft')}</span><span>{t('usage.tokensInOut')}</span><span>{t('usage.cost')}</span>
+                <span>{t('common.model')}</span><span>{t('usage.requests')}</span><span>{t('usage.successRate')}</span><span>{t('usage.avgTpm')}</span><span>{t('usage.avgLatency')}</span><span>{t('usage.avgTtft')}</span><span>{t('usage.tokensSplit')}</span><span>{t('usage.cost')}</span>
               </div>
               <For each={models()}>{(model) => (
                 <div class="analytics-model-row">
-                  <span class="amodel-name"><code>{model.unified_model_id}</code></span>
-                  <span>{fmtNum(model.requests)}</span>
-                  <span>{pct(model.successes, model.requests)}</span>
-                  <span class="amodel-muted">{model.requests > 0 ? fmtNum(Math.round(model.input_tokens / model.requests)) : '—'}</span>
-                  <span class="amodel-muted">{model.avg_latency_ms != null ? `${model.avg_latency_ms}ms` : '—'}</span>
-                  <span class="amodel-muted">{model.avg_ttft_ms != null ? `${model.avg_ttft_ms}ms` : '—'}</span>
-                  <span class="amodel-tokens">{fmtNum(model.input_tokens)} / {fmtNum(model.output_tokens)}</span>
-                  <span class="amodel-cost">{formatUsd(model.cost_micros)}</span>
+                  <span class="amodel-name" data-label={t('common.model')}><code>{model.unified_model_id}</code></span>
+                  <span data-label={t('usage.requests')}>{fmtNum(model.requests)}</span>
+                  <span data-label={t('usage.successRate')}>{pct(model.successes, model.requests)}</span>
+                  <span class="amodel-muted" data-label={t('usage.avgTpm')}>{model.requests > 0 ? fmtNum(Math.round(model.input_tokens / model.requests)) : '-'}</span>
+                  <span class="amodel-muted" data-label={t('usage.avgLatency')}>{model.avg_latency_ms != null ? `${model.avg_latency_ms}ms` : '-'}</span>
+                  <span class="amodel-muted" data-label={t('usage.avgTtft')}>{model.avg_ttft_ms != null ? `${model.avg_ttft_ms}ms` : '-'}</span>
+                  <span class="amodel-tokens" data-label={t('usage.tokensSplit')}>{fmtNum(Math.max(0, model.input_tokens - Math.min(model.input_tokens, model.cache_input_tokens)))} / {fmtNum(Math.min(model.input_tokens, model.cache_input_tokens))} / {fmtNum(model.output_tokens)}</span>
+                  <span class="amodel-cost" data-label={t('usage.cost')}>{formatUsd(model.cost_micros)}</span>
                 </div>
               )}</For>
             </div>
-          </div>
-        </Show>
-
-        <Show when={!loading() && models().length === 0 && (summary()?.requests ?? 0) === 0}>
-          <div class="panel empty-state">
-            <span class="provider-logo">A</span>
-            <h3>{t('usage.noData')}</h3>
-            <p>{t('usage.noDataBody')}</p>
           </div>
         </Show>
       </Show>

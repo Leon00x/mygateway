@@ -65,7 +65,7 @@ test('4. add channel via preset modal', async ({ page }) => {
   await page.locator('.sidebar').getByRole('link', { name: /渠道/ }).click();
   await expect(page).toHaveURL(/\/channels/);
 
-  await page.getByRole('button', { name: '+ 添加供应商' }).click();
+  await page.getByRole('button', { name: '添加渠道' }).click();
   await page.getByRole('button', { name: /DeepSeek/ }).first().click();
   await page.getByPlaceholder('sk-...').fill('sk-e2e-dummy-123456');
   await expect(page.getByRole('button', { name: '保存', exact: true })).toHaveCount(0);
@@ -130,7 +130,7 @@ test('5. create model card + add instance via UI', async ({ page, request }) => 
   await expect(page).toHaveURL(/\/models/);
 
   // Create model card through the UI form
-  await page.getByRole('button', { name: '+ 创建模型' }).click();
+  await page.getByRole('button', { name: '创建模型' }).click();
   await page.getByPlaceholder('统一模型 ID (如 deepseek-chat)').fill(modelId);
   await page.getByPlaceholder('显示名称 (如 DeepSeek Chat)').fill('E2E Model');
   await page.getByRole('button', { name: '创建', exact: true }).click();
@@ -165,7 +165,7 @@ test('5. create model card + add instance via UI', async ({ page, request }) => 
   expect(created.instances[0].public_model_alias).toBe(channelAlias);
 
   // The create form can also bind a channel model in one operation.
-  await page.getByRole('button', { name: '+ 创建模型' }).click();
+  await page.getByRole('button', { name: '创建模型' }).click();
   await page.getByPlaceholder('统一模型 ID (如 deepseek-chat)').fill(directModelId);
   await page.getByPlaceholder('显示名称 (如 DeepSeek Chat)').fill('Direct E2E Model');
   await page.locator('.model-bind-fields select').selectOption(ch.id);
@@ -313,11 +313,79 @@ test('11a. analytics usage page shows metric cards and filters', async ({ page }
   await expect(page).toHaveURL(/\/analytics\/usage/);
   await expect(page.getByRole('heading', { level: 1, name: '用量分析' })).toBeVisible();
   await expect(page.locator('.analytics-metrics-grid')).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator('.analytics-axis-y').first()).toBeVisible();
+  await expect(page.locator('.analytics-axis-x').first()).toBeVisible();
+  const requestChart = page.locator('.analytics-trend-panel');
+  const tokenChart = page.locator('.analytics-token-card');
+  const [requestBox, tokenBox] = await Promise.all([requestChart.boundingBox(), tokenChart.boundingBox()]);
+  expect(requestBox).not.toBeNull();
+  expect(tokenBox).not.toBeNull();
+  expect(Math.abs(requestBox!.width - tokenBox!.width)).toBeLessThan(2);
+  expect(Math.abs(requestBox!.y - tokenBox!.y)).toBeLessThan(2);
+  await expect(tokenChart.getByText('输入（非缓存）', { exact: true }).first()).toBeVisible();
+  await expect(tokenChart.getByText('缓存', { exact: true }).first()).toBeVisible();
+  await expect(tokenChart.getByText('输出', { exact: true }).first()).toBeVisible();
+  await requestChart.click();
+  await expect(page.getByRole('dialog', { name: '请求趋势' })).toBeVisible();
+  await page.getByRole('button', { name: '关闭图表' }).click();
+  await expect(page.getByRole('dialog', { name: '请求趋势' })).toHaveCount(0);
+  // Dense five-minute data is grouped to a stable visual density rather than
+  // rendering thousands of hairline bars or stretched point markers.
+  const denseEnd = Math.floor(Date.now() / 300) * 300;
+  const denseStart = denseEnd - 7 * 86_400;
+  const denseTrends = Array.from({ length: 2017 }, (_, index) => ({
+    bucket: denseStart + index * 300,
+    requests: index % 9 === 0 ? 2 : 1,
+    input_tokens: 24 + index % 13,
+    cache_input_tokens: index % 7,
+    output_tokens: 8 + index % 5,
+    cost_micros: 0,
+  }));
+  await page.route('**/admin/api/analytics/usage?*', (route) => route.fulfill({
+    contentType: 'application/json',
+    body: JSON.stringify({
+      range: { start: denseStart, end: denseEnd },
+      summary: { requests: 2241, successes: 2241, errors: 0, cancelled: 0, fallbacks: 0, input_tokens: 60_000, cache_input_tokens: 6_000, output_tokens: 20_000, usage_unknown: 0, cost_micros: 0, avg_latency_ms: 120, avg_ttft_ms: 42, ttft_count: 2241, latency_count: 2241 },
+      models: [], trends: denseTrends,
+    }),
+  }));
+  await page.getByLabel('趋势粒度').selectOption('');
+  await expect(page.locator('.token-bar-input')).toHaveCount(47);
+  expect(await page.locator('.token-bar-input').evaluateAll((bars) => bars.every((bar) => Number(bar.getAttribute('width')) >= 12))).toBe(true);
+  await expect(page.locator('.analytics-trend-svg circle')).toHaveCount(0);
+  await page.unroute('**/admin/api/analytics/usage?*');
   // Range picker should expose quick and custom ranges.
+  await page.setViewportSize({ width: 520, height: 900 });
   await page.getByRole('button', { name: '1 周' }).click();
   await expect(page.getByRole('button', { name: '今天' })).toBeVisible();
   await expect(page.getByRole('button', { name: '昨天' })).toBeVisible();
   await expect(page.getByRole('button', { name: '自定义' })).toBeVisible();
+  await page.getByRole('button', { name: '自定义' }).click();
+  await expect(page.locator('.tr-calendar-picker')).toBeVisible();
+  await expect(page.locator('.tr-calendar input[type="date"]')).toHaveCount(0);
+  const [calendarBox, modelSelectBox] = await Promise.all([
+    page.locator('.tr-popover').boundingBox(),
+    page.locator('.analytics-filters label select').first().boundingBox(),
+  ]);
+  expect(calendarBox).not.toBeNull();
+  expect(modelSelectBox).not.toBeNull();
+  expect(calendarBox!.y + calendarBox!.height).toBeLessThanOrEqual(modelSelectBox!.y);
+  const currentMonthDays = page.locator('.tr-days button:not(.outside)');
+  await currentMonthDays.nth(4).click();
+  await currentMonthDays.nth(8).click();
+  await page.getByRole('button', { name: '确定', exact: true }).click();
+  await expect(page.locator('.tr-trigger-label')).toContainText('~');
+  // A long custom range must stay inside the fixed time-filter column instead
+  // of growing over the adjacent model selector on desktop.
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const [rangeTriggerBox, desktopModelBox] = await Promise.all([
+    page.locator('.tr-trigger').boundingBox(),
+    page.locator('.analytics-filters label select').first().boundingBox(),
+  ]);
+  expect(rangeTriggerBox).not.toBeNull();
+  expect(desktopModelBox).not.toBeNull();
+  expect(rangeTriggerBox!.x + rangeTriggerBox!.width).toBeLessThanOrEqual(desktopModelBox!.x);
+  expect(await page.locator('.tr-trigger-label').evaluate((label) => getComputedStyle(label).textOverflow)).toBe('ellipsis');
 });
 
 test('11b. analytics logs page shows settings and log table', async ({ page }) => {
