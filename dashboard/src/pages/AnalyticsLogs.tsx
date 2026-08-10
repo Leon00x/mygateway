@@ -398,7 +398,7 @@ export default function AnalyticsLogs() {
             <For each={channelOptions()}>{(c) => <option value={c.id}>{c.name}</option>}</For>
           </select>
         </label>
-        <label class="filter-request-id">Request ID
+        <label class="filter-request-id">{t('logs.requestId')}
           <input type="text" value={requestIdFilter()} placeholder="…"
             onInput={(e) => setRequestIdFilter(e.currentTarget.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') applyFilters(); }} />
@@ -427,7 +427,7 @@ export default function AnalyticsLogs() {
         <div class="panel analytics-log-panel">
           <div class="analytics-log-table">
             <div class="analytics-log-head">
-              <span>{t('logs.requestId')}</span><span>{t('logs.timestamp')}</span><span>{t('common.model')}</span><span>{t('logs.source')}</span><span>{t('logs.apiKey')}</span><span>{t('logs.usage')}</span><span>TTFT</span><span>{t('logs.latency')}</span><span>{t('common.status')}</span><span>{t('logs.actions')}</span>
+              <span>{t('logs.requestId')}</span><span>{t('logs.timestamp')}</span><span>{t('common.model')}</span><span>{t('logs.source')}</span><span>{t('logs.apiKey')}</span><span>{t('logs.usage')}</span><span>{t('logs.ttft')}</span><span>{t('logs.latency')}</span><span>{t('common.status')}</span><span>{t('logs.actions')}</span>
             </div>
             <Show when={logs().length === 0} fallback={<For each={logs()}>{(log) => (
               <div class="analytics-log-row">

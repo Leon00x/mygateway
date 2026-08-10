@@ -41,7 +41,7 @@ export default function Login() {
       <section class="login-visual">
         <div class="login-orb orb-one" /><div class="login-orb orb-two" />
         <div class="login-visual-copy">
-          <div class="login-brand"><span class="brand-symbol">M</span><strong>MyGateway</strong></div>
+          <div class="login-brand"><img class="brand-logo" src="/logo.png" alt="MyGateway" /><strong>MyGateway</strong></div>
           <span class="eyebrow light">AI AGGREGATION GATEWAY</span>
           <h1>{t('auth.tagline1')}</h1>
           <p>{t('auth.tagline2')}</p>
@@ -50,7 +50,7 @@ export default function Login() {
       </section>
       <section class="login-panel">
         <form onSubmit={handleLogin} class="login-card">
-          <span class="eyebrow">Admin</span>
+          <span class="eyebrow">{t('auth.eyebrowAdmin')}</span>
           <h2>{t('auth.loginTitle')}</h2>
           <p>{t('auth.loginSub')}</p>
           <div class="auth-form">

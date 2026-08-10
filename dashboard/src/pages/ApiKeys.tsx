@@ -176,7 +176,7 @@ export default function ApiKeys() {
 
   return (
     <div class="resource-page">
-      <div class="page-heading"><div><h2>Gateway API Keys</h2><p>{t('keys.subtitle')}</p></div></div>
+      <div class="page-heading"><div><h2>{t('keys.title')}</h2><p>{t('keys.subtitle')}</p></div></div>
 
       <Show when={revealedKey()}>
         <div class="secret-reveal panel"><div><span class="eyebrow">{t('keys.revealOnce')}</span><h3>{t('keys.copySave')}</h3><code>{revealedKey()}</code></div><button class="secondary-button" onClick={() => navigator.clipboard.writeText(revealedKey())}>{t('keys.copy')}</button><button class="secret-close" onClick={() => setRevealedKey('')}>×</button></div>
@@ -222,7 +222,7 @@ export default function ApiKeys() {
       <Show when={editKey()}>{(key) => (
         <div class="modal-backdrop" onClick={() => setEditKey(null)}>
           <form class="modal-card form-stack" onSubmit={saveEdit} onClick={(e) => e.stopPropagation()}>
-            <div class="modal-title"><div><span class="eyebrow">Key</span><h3>{t('keys.editTitle')}</h3><p>{key().key_prefix}••••</p></div><button type="button" onClick={() => setEditKey(null)}>×</button></div>
+            <div class="modal-title"><div><span class="eyebrow">{t('keys.eyebrowKey')}</span><h3>{t('keys.editTitle')}</h3><p>{key().key_prefix}••••</p></div><button type="button" onClick={() => setEditKey(null)}>×</button></div>
             <label>{t('keys.nameLabel')}<input value={editForm().name} onInput={(e) => setEditForm({ ...editForm(), name: e.currentTarget.value })} required /></label>
             {limitFields(editForm, setEditForm)}
             <Show when={editError()}><div class="form-error">{editError()}</div></Show>

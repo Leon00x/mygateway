@@ -1,7 +1,7 @@
 /* @refresh reload */
 import { render } from 'solid-js/web';
 import { Router, Route, Navigate, A, useLocation } from '@solidjs/router';
-import { createContext, useContext, createSignal, Show, onMount, onCleanup, For } from 'solid-js';
+import { createContext, useContext, createSignal, createEffect, Show, onMount, onCleanup, For } from 'solid-js';
 import './app.css';
 import Login from './pages/Login';
 import ChangeCredentials from './pages/ChangeCredentials';
@@ -63,7 +63,7 @@ function AuthProvider(props: { children: JSX.Element }) {
 
   return (
     <AuthContext.Provider value={{ authenticated, username, mustChangePassword, check, logout }}>
-      <Show when={!checking()} fallback={<div class="app-loading"><div class="brand-symbol">M</div><span>正在加载控制台…</span></div>}>
+      <Show when={!checking()} fallback={<div class="app-loading"><img class="brand-logo" src="/logo.png" alt="MyGateway" /><span>正在加载控制台…</span></div>}>
         {props.children}
       </Show>
     </AuthContext.Provider>
@@ -151,12 +151,17 @@ function AppLayout(props: { children?: JSX.Element }) {
 
   onMount(() => { document.documentElement.dataset.theme = theme(); });
 
+  // Keep <html lang> in sync with the active locale (a11y; index.html defaults to en).
+  createEffect(() => {
+    document.documentElement.lang = locale() === 'zh' ? 'zh-CN' : 'en';
+  });
+
   return (
-    <Show when={auth.authenticated()} fallback={<main class="public-shell">{props.children}<ThemeToggle theme={theme()} onToggle={toggleTheme} public /></main>}>
+    <Show when={auth.authenticated()} fallback={<main class="public-shell">{props.children}<button class="theme-toggle lang-toggle public-lang-toggle" aria-label="Switch language" title="中 / EN" onClick={() => toggleLocale()}>{locale() === 'zh' ? 'EN' : '中文'}</button><ThemeToggle theme={theme()} onToggle={toggleTheme} public /></main>}>
       <div class="app-shell" classList={{ 'sidebar-collapsed': sidebarCollapsed() }}>
         <aside class="sidebar">
           <A href="/" class="brand">
-            <span class="brand-symbol">M</span>
+            <img class="brand-logo" src="/logo.png" alt="MyGateway" />
             <span><strong>MyGateway</strong></span>
           </A>
           <nav class="sidebar-nav">
@@ -193,7 +198,7 @@ function AppLayout(props: { children?: JSX.Element }) {
           </nav>
           <div class="sidebar-bottom">
             <a href="/v1/api-docs" target="_blank" class="nav-item compact" title={sidebarCollapsed() ? t('nav.docs') : undefined}><Icon name="docs" size={18} /><span><strong>{t('nav.docs')}</strong></span></a>
-            <button class="sidebar-toggle" aria-label={sidebarCollapsed() ? 'common.expand' : 'common.collapse'} title={sidebarCollapsed() ? 'common.expand' : 'common.collapse'} onClick={toggleSidebar}>
+            <button class="sidebar-toggle" aria-label={sidebarCollapsed() ? t('common.expand') : t('common.collapse')} title={sidebarCollapsed() ? t('common.expand') : t('common.collapse')} onClick={toggleSidebar}>
               <Icon name={sidebarCollapsed() ? 'panel-expand' : 'panel-collapse'} size={18} />
             </button>
           </div>
@@ -202,8 +207,8 @@ function AppLayout(props: { children?: JSX.Element }) {
           <header class="topbar">
             <div><h1>{page().title}</h1><p>{page().subtitle}</p></div>
             <div class="topbar-actions">
-              <a class="ghost-button" href="/v1/api-docs" target="_blank"><Icon name="docs" size={16} /> API Docs</a>
-              <span class="status-pill"><i /> Gateway Online</span>
+              <a class="ghost-button" href="/v1/api-docs" target="_blank"><Icon name="docs" size={16} /> {t('nav.docs')}</a>
+              <span class="status-pill"><i /> {t('status.online')}</span>
               <button class="theme-toggle lang-toggle" aria-label="Switch language" title="中 / EN" onClick={() => toggleLocale()}>
                 {locale() === 'zh' ? 'EN' : '中文'}
               </button>

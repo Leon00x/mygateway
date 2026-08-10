@@ -134,21 +134,65 @@ export default function AnalyticsUsage() {
     return Math.round(((s.requests - s.usage_unknown) / s.requests) * 100);
   };
 
-  // SVG trend sparkline with grid
+  // SVG trend line — points are placed on a real time axis so uneven bucket
+  // gaps don't distort the shape.
   const trendSvg = () => {
     const pts = trends();
     if (pts.length === 0) return null;
-    const values = pts.map((p) => p.requests);
-    const max = Math.max(...values, 1);
-    const w = pts.length > 1 ? 100 / (pts.length - 1) : 100;
-    const points = values.map((v, i) => `${(i * w).toFixed(1)},${(100 - (v / max) * 100).toFixed(1)}`).join(' ');
-    const grid = [25, 50, 75].map((y) => (
-      <line x1="0" y1={y} x2="100" y2={y} stroke="currentColor" stroke-opacity="0.12" stroke-width="0.5" />
-    ));
+    const range = data()?.range;
+    const start = range?.start ?? Math.min(...pts.map((p) => p.bucket));
+    const end = range?.end ?? Math.max(...pts.map((p) => p.bucket));
+    const span = Math.max(1, end - start);
+    const max = Math.max(...pts.map((p) => p.requests), 1);
+    const points = pts.map((p) => {
+      const x = ((p.bucket - start) / span) * 100;
+      const y = 100 - (p.requests / max) * 100;
+      return `${x.toFixed(2)},${y.toFixed(2)}`;
+    }).join(' ');
     return (
       <svg class="analytics-trend-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
-        {grid}
+        {[25, 50, 75].map((y) => (
+          <line x1="0" y1={y} x2="100" y2={y} stroke="currentColor" stroke-opacity="0.12" stroke-width="0.5" />
+        ))}
+        <Show when={pts.length === 1}>
+          <circle cx={points.split(',')[0]} cy={points.split(',')[1]} r="2.5" fill="currentColor" />
+        </Show>
         <polyline points={points} fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
+    );
+  };
+
+  // Token bar chart — input (solid) + output (light) stacked per bucket, with a
+  // real time axis so uneven gaps don't distort the shape.
+  const tokenBars = () => {
+    const pts = trends();
+    if (pts.length === 0) return null;
+    const range = data()?.range;
+    const start = range?.start ?? Math.min(...pts.map((p) => p.bucket));
+    const end = range?.end ?? Math.max(...pts.map((p) => p.bucket));
+    const span = Math.max(1, end - start);
+    const max = Math.max(...pts.map((p) => p.input_tokens + p.output_tokens), 1);
+    const step = (end - start) / Math.max(1, pts.length);
+    const bars = pts.map((p) => {
+      const center = ((p.bucket - start) / span) * 100;
+      const width = Math.min(6, ((step / span) * 100) * 0.7);
+      const x = Math.max(0, center - width / 2);
+      const inputH = (p.input_tokens / max) * 100;
+      const outputH = (p.output_tokens / max) * 100;
+      return (
+        <g>
+          <title>{`${new Date(p.bucket * 1000).toLocaleString()} · ${t('usage.input')} ${p.input_tokens} / ${t('usage.output')} ${p.output_tokens}`}</title>
+          <rect x={x.toFixed(2)} y={(100 - inputH - outputH).toFixed(2)} width={width.toFixed(2)} height={outputH.toFixed(2)} fill="currentColor" opacity="0.35" />
+          <rect x={x.toFixed(2)} y={(100 - inputH).toFixed(2)} width={width.toFixed(2)} height={inputH.toFixed(2)} rx="1.5" fill="currentColor" opacity="0.9" />
+        </g>
+      );
+    });
+    return (
+      <svg class="analytics-trend-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
+        {[25, 50, 75].map((y) => (
+          <line x1="0" y1={y} x2="100" y2={y} stroke="currentColor" stroke-opacity="0.12" stroke-width="0.5" />
+        ))}
+        {bars}
       </svg>
     );
   };
@@ -223,27 +267,34 @@ export default function AnalyticsUsage() {
           </div>
         </div>
 
-        {/* Token consumption card */}
-        <div class="panel analytics-token-card">
-          <div class="analytics-token-head">
-            <div><h3>{t('usage.tokenConsumption')}</h3></div>
-            <span class="analytics-token-total">{t('usage.totalTokens')} <strong>{fmtNum((summary()?.input_tokens ?? 0) + (summary()?.output_tokens ?? 0))}</strong></span>
-          </div>
-          <div class="analytics-token-row">
-            <div><small>{t('usage.input')}</small><strong>{fmtNum(summary()?.input_tokens)}</strong></div>
-            <div><small>{t('usage.output')}</small><strong>{fmtNum(summary()?.output_tokens)}</strong></div>
-            <div><small>{t('usage.coverage')}</small><strong>{usageCoverage()}%</strong></div>
-            <div><small>{t('usage.estCost')}</small><strong>{formatUsd(summary()?.cost_micros ?? 0)}</strong></div>
+        {/* Request trend (line) + token consumption (bars) — side by side at 1:1 */}
+        <div class="analytics-duo-grid" classList={{ 'analytics-duo-single': trends().length === 0 }}>
+          <Show when={trends().length > 0}>
+            <div class="panel analytics-trend-panel">
+              <div class="panel-header"><h2>{t('usage.trends')}</h2><span class="analytics-hint">{t('usage.requestsChange')}</span></div>
+              <div class="analytics-trend-chart">{trendSvg()}</div>
+            </div>
+          </Show>
+          <div class="panel analytics-token-card">
+            <div class="analytics-token-head">
+              <div>
+                <h3>{t('usage.tokenConsumption')}</h3>
+                <div class="analytics-token-legend">
+                  <i class="in" />{t('usage.input')}
+                  <i class="out" />{t('usage.output')}
+                </div>
+              </div>
+              <span class="analytics-token-total">{t('usage.totalTokens')} <strong>{fmtNum((summary()?.input_tokens ?? 0) + (summary()?.output_tokens ?? 0))}</strong></span>
+            </div>
+            <div class="analytics-token-chart">{tokenBars()}</div>
+            <div class="analytics-token-row">
+              <div><small>{t('usage.input')}</small><strong>{fmtNum(summary()?.input_tokens)}</strong></div>
+              <div><small>{t('usage.output')}</small><strong>{fmtNum(summary()?.output_tokens)}</strong></div>
+              <div><small>{t('usage.coverage')}</small><strong>{usageCoverage()}%</strong></div>
+              <div><small>{t('usage.estCost')}</small><strong>{formatUsd(summary()?.cost_micros ?? 0)}</strong></div>
+            </div>
           </div>
         </div>
-
-        {/* Trend chart */}
-        <Show when={trends().length > 0}>
-          <div class="panel analytics-trend-panel">
-            <div class="panel-header"><h2>{t('usage.trends')}</h2><span class="analytics-hint">{t('usage.requestsChange')}</span></div>
-            <div class="analytics-trend-chart">{trendSvg()}</div>
-          </div>
-        </Show>
 
         {/* Model table */}
         <Show when={models().length > 0}>
@@ -251,7 +302,7 @@ export default function AnalyticsUsage() {
             <div class="panel-header"><h2>{t('usage.modelsTable')}</h2><span class="analytics-hint">{t('usage.sortedByRequests')}</span></div>
             <div class="analytics-model-table">
               <div class="analytics-model-head">
-                <span>{t('common.model')}</span><span>{t('usage.requests')}</span><span>{t('usage.successRate')}</span><span>{t('usage.avgTpm')}</span><span>{t('usage.avgLatency')}</span><span>{t('usage.avgTtft')}</span><span>Token ({t('usage.inOut')})</span><span>{t('usage.cost')}</span>
+                <span>{t('common.model')}</span><span>{t('usage.requests')}</span><span>{t('usage.successRate')}</span><span>{t('usage.avgTpm')}</span><span>{t('usage.avgLatency')}</span><span>{t('usage.avgTtft')}</span><span>{t('usage.tokensInOut')}</span><span>{t('usage.cost')}</span>
               </div>
               <For each={models()}>{(model) => (
                 <div class="analytics-model-row">
