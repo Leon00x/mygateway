@@ -101,6 +101,19 @@ describe('provider presets', () => {
   test('provides bounded common templates and documented discovery exceptions', () => {
     expect(COMMON_MODEL_TEMPLATES).toHaveLength(30);
     expect(new Set(COMMON_MODEL_TEMPLATES).size).toBe(30);
+    expect(COMMON_MODEL_TEMPLATES).toContain('gpt-5.4');
+    expect(COMMON_MODEL_TEMPLATES).toContain('claude-sonnet-5');
+    expect(COMMON_MODEL_TEMPLATES).toContain('MiniMax-M3');
+    expect(COMMON_MODEL_TEMPLATES).not.toContain('qwen/qwen3.6-27b');
+    expect(getPresetById('groq')?.popular_models).toEqual([
+      'openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'llama-3.3-70b-versatile',
+    ]);
+    expect(getPresetById('openai')?.popular_models).toEqual([
+      'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.4-nano',
+    ]);
+    expect(getPresetById('anthropic')?.popular_models).toEqual([
+      'claude-opus-5', 'claude-sonnet-5', 'claude-haiku-4-5',
+    ]);
     expect(providerModelDiscovery('deepseek')).toEqual({
       path: '/models', protocol: 'openai_chat', pagination: 'none',
     });

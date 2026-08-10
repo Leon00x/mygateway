@@ -143,9 +143,9 @@ Worker 与 Dashboard 共用 `src/shared/provider-presets.ts`。该文件是供�
 - 一次输入 Key 创建同渠道的所有已知协议；
 - 后续供应商差异通过显式 Adapter 扩展，不把未知 Provider 猜成已有类型。
 
-## 6. DeepSeek 官方余额
+## 6. Provider 余额与套餐
 
-### 6.1 支持边界
+### 6.1 当前支持边界
 
 余额只对主机名严格等于 `api.deepseek.com` 的官方渠道开放。第三方托管的 DeepSeek 模型
 不会使用其 Key 请求 DeepSeek 官方接口。
@@ -159,6 +159,14 @@ Authorization: Bearer <provider-key>
 
 官方响应中的 `CNY` / `USD` 金额以字符串验证和展示，避免 JavaScript 浮点数改变精度。
 余额是 Provider 账户维度，不等于 Token 套餐，也不能跨渠道或币种求和。
+
+重点供应商的推理 Key、MaaS Key、控制面凭据和套餐 Key 并不等价。当前只有 DeepSeek 官方
+余额完成产品接入；MiniMax Token Plan 存在 Key 可调用的剩余额度端点，但返回的是滚动套餐
+配额，不是货币余额。其余供应商多数需要 IAM、Access Key 或独立 Admin Key。完整可行性矩阵
+和官方来源见[供应商与模型](PROVIDERS.md#3-余额与套餐查询可行性)。
+
+后续 Adapter 必须区分 `monetary_balance`、`subscription_quota` 与 `billing_usage`，不能为了
+共用现有卡片把它们都转换成金额。
 
 ### 6.2 管理 API
 
@@ -280,7 +288,7 @@ Analytics
 ```
 
 两页复用带用途副标题的页面标题、Usage / Logs 胶囊分段切换和筛选控件样式，延续现有浅色 /
-暗黑主题与紫色强调，不引入新的组件库。筛选框统一为 46px 高、14px 圆角和弱边框；用量页桌面
+暗黑主题与紫色强调，不引入新的组件库。筛选框统一为 48px 高、14px 圆角和弱边框；用量页桌面
 按“时间、模型、密钥、粒度”排列，日志页将时间放在首位并按空间换行，窄屏降为两列或单列。
 旧 `/requests` 保留兼容跳转。
 
@@ -296,8 +304,9 @@ Analytics
 
 **Logs**
 
-- 顶部设置区提供“请求日志”总开关、异常日志、正常日志和“记录上下文”选项；说明关闭日志不
-  影响 Usage、费用或预算。上下文选项需要二次确认并展示隐私、存储和保留期提示。
+- 日志策略集中在 System 页面配置：请求日志总开关、异常日志、正常日志、记录上下文和保留期；
+  Logs 页面只负责查询与详情，避免高风险写入策略和日常筛选混在一起。上下文选项需要二次确认
+  并展示隐私、存储和保留期提示。
 - 筛选：时间范围、模型、Gateway Key、渠道、状态、精确 Request ID；默认手动刷新，不在后台
   每 15 秒轮询。可选自动刷新仅在页面可见时工作，并默认关闭。
 - 表格：Request ID、时间、模型、渠道、Key、Token、TTFT、延迟、状态和详情操作；移动端折叠为

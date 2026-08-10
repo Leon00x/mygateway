@@ -72,7 +72,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     base_url: 'https://api.z.ai/api/paas/v4',
     docs_url: 'https://docs.z.ai/guides/develop/openai/python',
     description: 'Z.AI 国际站 GLM 系列，OpenAI Chat 兼容接口',
-    popular_models: ['glm-5.1', 'glm-4.7', 'glm-4.7-flash'],
+    popular_models: ['glm-5.1', 'glm-5', 'glm-4.7'],
     supports_stream_usage: true,
     protocols: [{ protocol: 'openai_chat', base_url: 'https://api.z.ai/api/paas/v4', auth_scheme: 'bearer' }],
   },
@@ -83,7 +83,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     base_url: 'https://api.modelarts-maas.com/openai/v1',
     docs_url: 'https://support.huaweicloud.com/model-call-maas/model-call-021.html',
     description: 'ModelArts Studio MaaS 中国区，原生支持 Chat 与 Messages',
-    popular_models: ['deepseek-v4-flash', 'glm-5.2', 'deepseek-v3.2'],
+    popular_models: ['glm-5.2', 'deepseek-v4-pro', 'deepseek-v4-flash'],
     supports_stream_usage: true,
     protocols: [
       {
@@ -129,7 +129,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     base_url: 'https://ark.ap-southeast.bytepluses.com/api/v3',
     docs_url: 'https://docs.byteplus.com/en/docs/ModelArk/1330626',
     description: 'BytePlus ModelArk 新加坡端点，原生支持 Chat 与 Responses',
-    popular_models: ['seed-2-0-pro-260328', 'seed-2-0-lite-260428', 'deepseek-v4-flash-260425'],
+    popular_models: ['seed-2-0-pro-260328', 'seed-2-0-lite-260428', 'seed-2-0-mini-260428'],
     supports_stream_usage: true,
     protocols: [
       {
@@ -166,7 +166,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     base_url: 'https://api.groq.com/openai/v1',
     docs_url: 'https://console.groq.com/docs/openai',
     description: 'GroqCloud 高速推理，原生支持 Chat 与 Responses',
-    popular_models: ['openai/gpt-oss-120b', 'qwen/qwen3.6-27b', 'llama-3.3-70b-versatile'],
+    popular_models: ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'llama-3.3-70b-versatile'],
     supports_stream_usage: true,
     protocols: [
       {
@@ -188,7 +188,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     base_url: 'https://api.minimax.io/v1',
     docs_url: 'https://platform.minimax.io/docs/api-reference/text-anthropic-api',
     description: 'MiniMax 国际站，同一 Key 原生支持 Chat 与 Messages',
-    popular_models: ['MiniMax-M2.7', 'MiniMax-M2.7-highspeed', 'MiniMax-M2.5'],
+    popular_models: ['MiniMax-M3', 'MiniMax-M2.7', 'MiniMax-M2.7-highspeed'],
     supports_stream_usage: true,
     protocols: [
       {
@@ -211,7 +211,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     base_url: 'https://api.x.ai/v1',
     docs_url: 'https://docs.x.ai/developers/model-capabilities/text/comparison',
     description: 'Grok 官方 API，原生支持 Chat 与 Responses',
-    popular_models: ['grok-4.5', 'grok-4.5-latest', 'grok-build-latest'],
+    popular_models: ['grok-4.5', 'grok-4.3', 'grok-build-0.1'],
     supports_stream_usage: true,
     protocols: [
       {
@@ -233,7 +233,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     base_url: 'https://api.mistral.ai/v1',
     docs_url: 'https://docs.mistral.ai/resources/migration-guides',
     description: 'Mistral 官方 API，OpenAI Chat 兼容接口',
-    popular_models: ['mistral-large-latest', 'mistral-medium-latest', 'mistral-small-latest'],
+    popular_models: ['mistral-large-2512', 'mistral-medium-3-5', 'mistral-small-2603'],
     supports_stream_usage: true,
     protocols: [{
       protocol: 'openai_chat',
@@ -247,8 +247,8 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     provider_type: 'openai',
     base_url: 'https://api.openai.com/v1',
     docs_url: 'https://platform.openai.com/docs/api-reference',
-    description: 'GPT-4o / GPT-4.1 / o3 等模型',
-    popular_models: ['gpt-4o', 'gpt-4.1', 'gpt-4.1-mini', 'o3', 'o4-mini'],
+    description: 'OpenAI 官方 API，原生支持 Chat 与 Responses',
+    popular_models: ['gpt-5.4', 'gpt-5.4-mini', 'gpt-5.4-nano'],
     supports_stream_usage: true,
     protocols: [
       { protocol: 'openai_chat', base_url: 'https://api.openai.com/v1', auth_scheme: 'bearer' },
@@ -295,7 +295,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     base_url: 'https://api.anthropic.com/v1',
     docs_url: 'https://docs.anthropic.com/en/api/messages',
     description: 'Claude 原生 Messages API',
-    popular_models: ['claude-sonnet-4-5', 'claude-opus-4-1'],
+    popular_models: ['claude-opus-5', 'claude-sonnet-5', 'claude-haiku-4-5'],
     supports_stream_usage: true,
     protocols: [{
       protocol: 'anthropic_messages',
@@ -346,6 +346,21 @@ export function providerShortCode(presetId: string | null | undefined, channelNa
   return normalized || 'custom';
 }
 
-export const COMMON_MODEL_TEMPLATES = [...new Set(
-  PROVIDER_PRESETS.flatMap((preset) => preset.popular_models),
-)].slice(0, 30);
+/**
+ * Curated, provider-native model ids used by the model creation suggestions.
+ * Keep this explicit: preset ordering is a UI concern and must not silently
+ * change the 30-model baseline when a provider card is reordered.
+ */
+export const COMMON_MODEL_TEMPLATES = [
+  'deepseek-v4-flash', 'deepseek-v4-pro',
+  'glm-5.1', 'glm-5', 'glm-4.7',
+  'qwen3.7-max', 'qwen3.7-plus', 'qwen3.6-flash',
+  'seed-2-0-pro-260328', 'seed-2-0-lite-260428', 'seed-2-0-mini-260428',
+  'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite',
+  'openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'llama-3.3-70b-versatile',
+  'MiniMax-M3', 'MiniMax-M2.7', 'MiniMax-M2.7-highspeed',
+  'grok-4.5', 'grok-4.3',
+  'mistral-large-2512', 'mistral-medium-3-5', 'mistral-small-2603',
+  'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.4-nano',
+  'claude-opus-5', 'claude-sonnet-5',
+] as const;

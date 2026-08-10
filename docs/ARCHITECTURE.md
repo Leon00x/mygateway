@@ -76,7 +76,7 @@ HTTP 路由调用领域模块，领域模块调用 `db/*` 和基础工具；数�
 | `usage_minutes` | 按分钟、模型、最终渠道聚合的用量 |
 | `request_logs` | 请求明细日志（可选），含脱敏错误与加密上下文预览 |
 | `analytics_minutes` | 5 分钟聚合桶：密钥、统一模型、最终渠道维度，含输入、缓存命中、输出 Token，以及 TTFT、延迟与回退样本 |
-| `model_prices` | 模型基准价库：输入 / 输出 / 缓存价格（micros 每百万 Token）与币种 |
+| `model_prices` | 可编辑模型基准价库：30 个内置 USD 基线，输入 / 输出 / 缓存价（micros / 百万 Token）与币种 |
 | `system_settings` | 少量系统设置 |
 
 关键约束：

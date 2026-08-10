@@ -40,7 +40,7 @@ MyGateway Worker ── Gateway Key / 配额 ── 固定路由 / Fallback ─�
 | 协议 | 原生协议优先；Chat ↔ Messages 文本、工具调用、usage 与 SSE 公共子集转换 |
 | 路由 | 统一模型、渠道实例、公开别名、固定优先级、响应前 Fallback、被动熔断 |
 | 虚拟密钥 | RPM、每日请求 / Token 预算、到期时间、模型白名单 |
-| Analytics | 5 分钟聚合、Token、预估费用、延迟、流式 TTFT、成功率与请求日志 |
+| Analytics | 5 分钟聚合、Token、预估费用、延迟、首 Token 延迟、成功率与请求日志 |
 | 控制台 | 渠道检测和模型导入、模型与价格库、密钥、用量、日志、系统设置 |
 | 安全 | 管理员 Session、Provider Key AES-GCM、Gateway Key 哈希与到期控制、可选加密上下文预览 |
 
@@ -121,6 +121,7 @@ Moonshot（Kimi）和智谱（中国）。也可以添加自定义 OpenAI-compat
 | [PRD](docs/PRD.md) | 查看产品分层、已实现 / 部分实现 / 待实现和优先级 |
 | [架构](docs/ARCHITECTURE.md) | 理解控制面、数据面、D1、缓存和一致性边界 |
 | [详细设计](docs/DESIGN.md) | 修改协议转换、供应商、模型发现、Analytics 或价格逻辑 |
+| [供应商与模型](docs/PROVIDERS.md) | 核对重点预制、30 个价格基线和余额 / 套餐接入边界 |
 | [部署](docs/DEPLOY.md) | 一键部署、升级、回滚、Free Tier 和排障 |
 | [测试](docs/TESTING.md) | 单测、UI E2E、真实 Provider 集成和发布检查 |
 | [AGENTS.md](AGENTS.md) | AI Agent 接续开发时必须遵守的仓库约束 |

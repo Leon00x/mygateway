@@ -162,6 +162,7 @@ git diff --check
 还应确认：
 
 - migration 能在全新和已有本地数据库上增量执行；
+- 价格基线 migration 在全新数据库中得到 30 条记录，且不会覆盖管理员已修改的旧价格；
 - Dashboard 生产资源可加载；
 - 日志、trace 和失败报告不含 Key、Prompt 或 Response；
 - 生产 smoke test 只读取健康页和公开资源，除非明确授权使用生产凭据。
