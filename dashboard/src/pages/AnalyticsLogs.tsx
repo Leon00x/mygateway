@@ -239,8 +239,8 @@ export default function AnalyticsLogs() {
             }}
           />
         </div>
-        <label>{t('common.status')}
-          <select value={status()} onChange={(e) => {
+        <label class="analytics-filter-field"><span class="sr-only">{t('common.status')}</span>
+          <select aria-label={t('common.status')} value={status()} onChange={(e) => {
             const next = e.currentTarget.value;
             setStatus(next);
             void fetchLogsDirect(true, next, modelId(), keyId(), channelId(), requestIdFilter(), String(timeRange().start), String(timeRange().end), null);
@@ -255,8 +255,8 @@ export default function AnalyticsLogs() {
             <option value="expired">{t('status.expired')}</option>
           </select>
         </label>
-        <label>{t('common.model')}
-          <select value={modelId()} onChange={(e) => {
+        <label class="analytics-filter-field"><span class="sr-only">{t('common.model')}</span>
+          <select aria-label={t('common.model')} value={modelId()} onChange={(e) => {
             const next = e.currentTarget.value;
             setModelId(next);
             void fetchLogsDirect(true, status(), next, keyId(), channelId(), requestIdFilter(), String(timeRange().start), String(timeRange().end), null);
@@ -265,8 +265,8 @@ export default function AnalyticsLogs() {
             <For each={modelOptions()}>{(m) => <option value={m.id}>{m.name}</option>}</For>
           </select>
         </label>
-        <label>{t('common.key')}
-          <select value={keyId()} onChange={(e) => {
+        <label class="analytics-filter-field"><span class="sr-only">{t('common.key')}</span>
+          <select aria-label={t('common.key')} value={keyId()} onChange={(e) => {
             const next = e.currentTarget.value;
             setKeyId(next);
             void fetchLogsDirect(true, status(), modelId(), next, channelId(), requestIdFilter(), String(timeRange().start), String(timeRange().end), null);
@@ -275,8 +275,8 @@ export default function AnalyticsLogs() {
             <For each={keyOptions()}>{(k) => <option value={k.id}>{k.name}</option>}</For>
           </select>
         </label>
-        <label>{t('common.channel')}
-          <select value={channelId()} onChange={(e) => {
+        <label class="analytics-filter-field"><span class="sr-only">{t('common.channel')}</span>
+          <select aria-label={t('common.channel')} value={channelId()} onChange={(e) => {
             const next = e.currentTarget.value;
             setChannelId(next);
             void fetchLogsDirect(true, status(), modelId(), keyId(), next, requestIdFilter(), String(timeRange().start), String(timeRange().end), null);
@@ -285,13 +285,13 @@ export default function AnalyticsLogs() {
             <For each={channelOptions()}>{(c) => <option value={c.id}>{c.name}</option>}</For>
           </select>
         </label>
-        <label class="filter-request-id">{t('logs.requestId')}
-          <input type="text" value={requestIdFilter()} placeholder="…"
+        <label class="analytics-filter-field filter-request-id"><span class="sr-only">{t('logs.requestId')}</span>
+          <input type="text" aria-label={t('logs.requestId')} value={requestIdFilter()} placeholder={t('logs.requestId')}
             onInput={(e) => setRequestIdFilter(e.currentTarget.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') applyFilters(); }} />
         </label>
-        <label>{t('logs.perPage')}
-          <select value={String(limit())} onChange={(e) => {
+        <label class="analytics-filter-field"><span class="sr-only">{t('logs.perPage')}</span>
+          <select aria-label={t('logs.perPage')} value={String(limit())} onChange={(e) => {
             const next = Number(e.currentTarget.value);
             setLimit(next);
             void fetchLogsDirect(true, status(), modelId(), keyId(), channelId(), requestIdFilter(), String(timeRange().start), String(timeRange().end), null, next);

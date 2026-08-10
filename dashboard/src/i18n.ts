@@ -67,6 +67,7 @@ const dict: Record<string, Entry> = {
   'common.disabled': { zh: '已停用', en: 'Disabled' },
   'common.status': { zh: '状态', en: 'Status' },
   'common.time': { zh: '时间', en: 'Time' },
+  'common.timeRange': { zh: '时间范围', en: 'Time range' },
   'common.model': { zh: '模型', en: 'Model' },
   'common.channel': { zh: '渠道', en: 'Channel' },
   'common.key': { zh: '密钥', en: 'Key' },
@@ -300,7 +301,7 @@ const dict: Record<string, Entry> = {
 
   // --- Analytics: Usage ---
   'usage.title': { zh: '用量分析', en: 'Usage Analytics' },
-  'usage.subtitle': { zh: '查看网关用量、性能趋势与模型明细', en: 'View gateway usage, performance trends, and model details' },
+  'usage.subtitle': { zh: '查看网关的用量与分析', en: 'View usage and analytics for your gateway' },
   'usage.modelsTable': { zh: '模型明细', en: 'By model' },
   'usage.totalTokens': { zh: '总 Token', en: 'Total Tokens' },
   'usage.requests': { zh: '请求量', en: 'Requests' },
@@ -372,7 +373,7 @@ const dict: Record<string, Entry> = {
 
   // --- Analytics: Logs ---
   'logs.title': { zh: '请求日志', en: 'Request Logs' },
-  'logs.subtitle': { zh: '检查网关请求、路由结果与错误详情', en: 'Inspect gateway requests, routing results, and errors' },
+  'logs.subtitle': { zh: '查看网关请求与错误详情', en: 'View gateway requests and error details' },
   'logs.settings': { zh: '日志设置', en: 'Settings' },
   'logs.hideSettings': { zh: '收起设置', en: 'Hide settings' },
   'logs.clear': { zh: '清空日志', en: 'Clear logs' },

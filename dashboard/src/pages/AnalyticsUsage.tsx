@@ -311,8 +311,8 @@ export default function AnalyticsUsage() {
         <div class="analytics-filters-range">
           <TimeRangePicker value={timeRange()} onChange={onRangeChange} />
         </div>
-        <label>{t('common.model')}
-          <select value={modelId()} onChange={(e) => {
+        <label class="analytics-filter-field"><span class="sr-only">{t('common.model')}</span>
+          <select aria-label={t('common.model')} value={modelId()} onChange={(e) => {
             const next = e.currentTarget.value;
             setModelId(next);
             void fetchUsage(timeRange().start, timeRange().end, granularity(), next, keyId());
@@ -321,8 +321,8 @@ export default function AnalyticsUsage() {
             <For each={modelOptions()}>{(m) => <option value={m.id}>{m.name}</option>}</For>
           </select>
         </label>
-        <label>{t('common.key')}
-          <select value={keyId()} onChange={(e) => {
+        <label class="analytics-filter-field"><span class="sr-only">{t('common.key')}</span>
+          <select aria-label={t('common.key')} value={keyId()} onChange={(e) => {
             const next = e.currentTarget.value;
             setKeyId(next);
             void fetchUsage(timeRange().start, timeRange().end, granularity(), modelId(), next);
@@ -331,8 +331,8 @@ export default function AnalyticsUsage() {
             <For each={keyOptions()}>{(k) => <option value={k.id}>{k.name}</option>}</For>
           </select>
         </label>
-        <label>{t('usage.granularity')}
-          <select value={granularity()} onChange={(e) => applyGranularity(e.currentTarget.value as 'hour' | 'day' | '')}>
+        <label class="analytics-filter-field"><span class="sr-only">{t('usage.granularity')}</span>
+          <select aria-label={t('usage.granularity')} value={granularity()} onChange={(e) => applyGranularity(e.currentTarget.value as 'hour' | 'day' | '')}>
             <option value="">5 {t('usage.minutes')}</option>
             <option value="hour">{t('usage.hourly')}</option>
             <option value="day">{t('usage.daily')}</option>

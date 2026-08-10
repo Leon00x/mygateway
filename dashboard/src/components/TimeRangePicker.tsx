@@ -212,6 +212,7 @@ export default function TimeRangePicker(props: {
       <button
         type="button"
         class={`tr-trigger ${isOpen() ? 'tr-active' : ''}`}
+        aria-label={`${t('common.timeRange')}: ${label()}`}
         aria-haspopup="true"
         aria-expanded={isOpen()}
         onClick={() => setIsOpen(!isOpen())}
