@@ -40,6 +40,9 @@ export default function Dashboard() {
   const [protocolOpen, setProtocolOpen] = createSignal(false);
   const endpointUrl = () => baseUrl() + protocolPath();
   const protocolLabel = () => protocols.includes(protocolPath()) ? protocolPath() : protocols[0];
+  const [tempKey, setTempKey] = createSignal('');
+  const [tempBusy, setTempBusy] = createSignal(false);
+  const [tempCopied, setTempCopied] = createSignal(false);
 
   const fetchOverview = async () => {
     const response = await fetch(`/admin/api/usage/overview?range=${range()}`);
@@ -69,6 +72,29 @@ export default function Dashboard() {
       if (!(e.target as HTMLElement).closest('.protocol-picker')) setProtocolOpen(false);
     });
   });
+
+  const createTempKey = async () => {
+    setTempBusy(true);
+    try {
+      const response = await fetch('/admin/api/keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: t('dash.tempKeyName'),
+          expires_at: Math.floor(Date.now() / 1000) + 3600,
+        }),
+      });
+      if (!response.ok) return;
+      const data = (await response.json()) as { key: string };
+      setTempKey(data.key);
+      setTempCopied(true);
+      setTimeout(() => setTempCopied(false), 2000);
+      try { await navigator.clipboard.writeText(curlExample(baseUrl(), activeModels()[0]?.unified_model_id, data.key)); } catch { /* command stays visible in the example */ }
+      void fetchKeys();
+    } finally {
+      setTempBusy(false);
+    }
+  };
 
   const changeRange = (value: 'today' | '7d' | '30d') => {
     setRange(value);
@@ -222,15 +248,24 @@ export default function Dashboard() {
       </Show>
 
       <section class="panel quickstart-panel">
-        <div class="panel-header"><div><h2>{t('dash.quickstart')}</h2><p>{t('dash.quickstartSub')}</p></div><button class="secondary-button" onClick={() => copy(curlExample(baseUrl(), activeModels()[0]?.unified_model_id), 'curl')}>{copied() === 'curl' ? t('dash.copied') : t('dash.copyCmd')}</button></div>
-        <pre>{curlExample(baseUrl(), activeModels()[0]?.unified_model_id)}</pre>
+        <div class="panel-header">
+          <div><h2>{t('dash.quickstart')}</h2><p>{t('dash.quickstartSub')}</p></div>
+          <div class="action-row">
+            <button class="secondary-button" onClick={() => copy(curlExample(baseUrl(), activeModels()[0]?.unified_model_id, tempKey() || 'YOUR_GATEWAY_KEY'), 'curl')}>{copied() === 'curl' ? t('dash.copied') : t('dash.copyCmd')}</button>
+            <button class="secondary-button" disabled={tempBusy()} onClick={createTempKey}>{tempBusy() ? t('dash.creatingTempKey') : tempCopied() ? t('dash.tempKeyCopied') : t('dash.createTempKey')}</button>
+          </div>
+        </div>
+        <Show when={tempKey()}>
+          <small class="quickstart-hint">{t('dash.tempKeyHint')}</small>
+        </Show>
+        <pre>{curlExample(baseUrl(), activeModels()[0]?.unified_model_id, tempKey() || 'YOUR_GATEWAY_KEY')}</pre>
       </section>
     </div>
   );
 }
 
-function curlExample(baseUrl: string, model = 'your-model') {
-  return `curl ${baseUrl}/chat/completions \\\n  -H "Authorization: Bearer YOUR_GATEWAY_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d '{"model":"${model}","messages":[{"role":"user","content":"Hello"}]}'`;
+function curlExample(baseUrl: string, model = 'your-model', token = 'YOUR_GATEWAY_KEY') {
+  return `curl ${baseUrl}/chat/completions \\\n  -H "Authorization: Bearer ${token}" \\\n  -H "Content-Type: application/json" \\\n  -d '{"model":"${model}","messages":[{"role":"user","content":"Hello"}]}'`;
 }
 
 function Metric(props: { title: string; value: string; note?: string; tone: string }) {

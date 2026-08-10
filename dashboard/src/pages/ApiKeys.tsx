@@ -134,11 +134,6 @@ export default function ApiKeys() {
     });
     void fetchKeys();
   };
-  const regenerate = async (key: ApiKey) => {
-    if (!confirm(`${t('keys.regenerateConfirm')}`)) return;
-    const response = await fetch(`/admin/api/keys/${key.id}/regenerate`, { method: 'POST' });
-    if (response.ok) { setRevealedKey((await response.json()).key); void fetchKeys(); }
-  };
   const deleteKey = async (id: string) => {
     if (!confirm(t('keys.deleteConfirm'))) return;
     await fetch(`/admin/api/keys/${id}`, { method: 'DELETE' });
@@ -210,7 +205,6 @@ export default function ApiKeys() {
               <span class={`badge ${key.status}`}>{key.status === 'active' ? t('keys.valid') : t('common.disabled')}</span>
               <button onClick={() => openEdit(key)}>{t('keys.editLimits')}</button>
               <button onClick={() => toggleKey(key)}>{key.status === 'active' ? t('keys.disable') : t('keys.enable')}</button>
-              <button onClick={() => regenerate(key)}>{t('keys.regenerate')}</button>
               <button class="danger-link" onClick={() => deleteKey(key.id)}>{t('common.delete')}</button>
             </div>
           </div>
