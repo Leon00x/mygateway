@@ -44,7 +44,7 @@ test('realtime: UI preflight then save and import', async ({ page }) => {
   await page.getByPlaceholder('sk-...').fill(providerKey!);
   await expect(page.getByRole('button', { name: '保存', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: '检测连接与模型' }).click();
-  await expect(page.getByText(/检测成功 · 2 个模型/)).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(/检测成功 · 2/)).toBeVisible({ timeout: 15_000 });
   const preflightList = page.locator('.preflight-model-list');
   await expect(preflightList.getByText('deepseek-v4-flash', { exact: true })).toBeVisible();
   await expect(preflightList.getByText('deepseek-v4-pro', { exact: true })).toBeVisible();
@@ -53,7 +53,7 @@ test('realtime: UI preflight then save and import', async ({ page }) => {
   await expect(page.getByText('已选 1 / 2')).toBeVisible();
   // A successful preflight still must not persist a draft channel.
   expect(await page.request.get('/admin/api/channels').then((response) => response.json())).toHaveLength(0);
-  await page.getByRole('button', { name: '保存并导入 1 个模型' }).click();
+  await page.getByRole('button', { name: /保存并导入.*1/ }).click();
   const detail = page.locator('.channel-detail-modal');
   await expect(detail.getByRole('heading', { name: channelName })).toBeVisible({ timeout: 15_000 });
   await expect(detail.locator('.catalog-row', { hasText: upstreamModel }).getByText('已导入')).toBeVisible({ timeout: 15_000 });

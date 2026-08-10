@@ -1,3 +1,5 @@
+import type { JSX } from 'solid-js';
+
 export type IconName = 'home' | 'channels' | 'models' | 'keys' | 'analytics' | 'analytics-folder' | 'requests' | 'system' | 'docs' | 'logout' | 'search' | 'menu' | 'close' | 'moon' | 'sun' | 'panel-collapse' | 'panel-expand';
 
 export default function Icon(props: { name: IconName; size?: number; class?: string }) {

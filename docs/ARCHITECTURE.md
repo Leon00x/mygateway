@@ -87,8 +87,12 @@ HTTP 路由调用领域模块，领域模块调用 `db/*` 和基础工具；数�
 - usage 保存名称快照，配置删除后仍可显示历史统计；
 - migration 是 Schema 的权威来源，文档不复制完整 SQL。
 
-`usage_minutes` 每个完成请求至少 UPSERT 一次。分钟聚合减少数据行数量，但不减少更新次数；
-新行还会写入索引，因此容量评估必须以 D1 的 `rows_written` 为准。
+`analytics_minutes` 每个完成请求至少 UPSERT 一次。5 分钟聚合减少数据行数量，但不减少更新
+次数；新行还会写入索引，因此容量评估必须以 D1 的 `rows_written` 为准。`usage_minutes` 只保留
+为旧版本历史归档，并随保留期清理，不再由网关写入。
+
+当前 `cost_micros` 系列字段没有币种维度：实例和价格库虽保存 USD / CNY 元数据，聚合层并不
+换汇或拆分。这是 0.1.x 的已知数据模型缺口；修复前同一部署应统一使用一种记账币种。
 
 ## 5. 认证和密钥
 
@@ -208,7 +212,8 @@ Gateway 错误使用稳定 JSON envelope 并附带 Request ID。Provider 已返�
 管理端使用 SolidJS、Vite 和 Worker Static Assets，包含登录、首次改密、Dashboard、
 Channels、Models、API Keys 和 System。侧边栏可收缩，主题偏好保存在浏览器 localStorage。
 
-控制台和 Worker 共用 `src/shared/provider-presets.ts`，避免供应商预制漂移。前端不接触
+控制台和 Worker 共用 `src/shared/provider-presets.ts`，避免供应商预制漂移。Worker 和
+Dashboard 分别由根 `tsconfig.json` 与 `tsconfig.dashboard.json` 严格检查；前端不接触
 `MASTER_KEY` 或 Provider Key 明文。
 
 ## 12. 可观测性与降级

@@ -38,13 +38,13 @@ test('2. wrong administrator credentials show error', async ({ page }) => {
   await page.goto('/login');
   await page.getByPlaceholder('用户名').fill('admin');
   await page.getByPlaceholder('密码').fill('wrong-password');
-  await page.getByRole('button', { name: '登录控制台' }).click();
+  await page.getByRole('button', { name: '登录', exact: true }).click();
   await expect(page.locator('.form-error')).toBeVisible({ timeout: 10_000 });
 });
 
 test('3. correct credentials log in → dashboard shows endpoint', async ({ page }) => {
   await loginViaUi(page);
-  await expect(page.getByText('网关接入地址')).toBeVisible();
+  await expect(page.getByText('API 基础地址')).toBeVisible();
   await expect(page.locator('code').first()).toContainText('/v1');
 
   await page.getByRole('button', { name: '收起侧边栏' }).click();
@@ -71,7 +71,7 @@ test('4. add channel via preset modal', async ({ page }) => {
   await expect(page.getByRole('button', { name: '保存', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: '检测连接与模型' }).click();
   await expect(page.getByText('检测未通过')).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByRole('button', { name: '保存并导入 0 个模型' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: /保存并导入.*0/ })).toBeDisabled();
   await page.getByRole('button', { name: '仍然保存' }).click();
 
   // A failed preflight still offers an explicit save-only fallback and the
@@ -112,7 +112,7 @@ test('4. add channel via preset modal', async ({ page }) => {
   await expect(channelCard.getByText('查询失败')).toBeVisible();
   await expect(channelCard.getByRole('button', { name: '编辑' })).toBeVisible();
   await channelCard.getByRole('button', { name: '编辑' }).click();
-  await page.locator('.channel-detail-modal').getByRole('button', { name: '修改连接配置' }).click();
+  await page.locator('.channel-detail-modal').getByRole('button', { name: '连接配置', exact: true }).click();
   const editModal = page.locator('.modal-card', { hasText: '连接配置' });
   await expect(editModal.getByText('Chat', { exact: true })).toBeVisible();
   await expect(editModal.getByText('Messages', { exact: true })).toBeVisible();
@@ -148,10 +148,10 @@ test('5. create model card + add instance via UI', async ({ page, request }) => 
   await cardRow.getByRole('button', { name: '+ 添加实例' }).click();
 
   // Select the channel in the dropdown
-  await page.locator('form select').selectOption(ch.id);
-  await page.getByPlaceholder('选择已发现模型或直接输入上游模型 ID').fill('deepseek-chat');
-  await page.getByPlaceholder('如 ds-deepseek-chat').fill(channelAlias);
-  await page.getByRole('button', { name: '添加实例', exact: true }).click();
+  await page.locator('form select').first().selectOption(ch.id);
+  await page.getByPlaceholder('选择已发现模型或直接输入').fill('deepseek-chat');
+  await page.getByPlaceholder('ds-deepseek-chat').fill(channelAlias);
+  await page.locator('form.modal-card').getByRole('button', { name: '+ 添加实例', exact: true }).click();
 
   // Instance row appears with alias + channel
   await expect(page.getByText(channelAlias, { exact: true })).toBeVisible({ timeout: 10_000 });
@@ -181,11 +181,11 @@ test('5. create model card + add instance via UI', async ({ page, request }) => 
 
 test('6. create gateway key → plaintext shown once', async ({ page }) => {
   await loginViaUi(page);
-  await page.locator('.sidebar').getByRole('link', { name: /API 密钥/ }).click();
+  await page.locator('.sidebar').getByRole('link', { name: /密钥/ }).click();
   await expect(page).toHaveURL(/\/keys/);
 
-  await page.getByPlaceholder('Key name').fill(uniq('e2e-key'));
-  await page.getByRole('button', { name: 'Create Key' }).click();
+  await page.getByPlaceholder('密钥名称').fill(uniq('e2e-key'));
+  await page.getByRole('button', { name: /创建密钥/ }).click();
 
   const reveal = page.locator('.secret-reveal');
   await expect(reveal).toBeVisible({ timeout: 10_000 });
@@ -245,7 +245,7 @@ test('8. no auth → 401 from gateway', async ({ request }) => {
 
 test('9. dashboard shows channel and model', async ({ page }) => {
   await loginViaUi(page);
-  await expect(page.getByText('网关接入地址')).toBeVisible();
+  await expect(page.getByText('API 基础地址')).toBeVisible();
   await expect(page.getByText(channelName, { exact: true }).first()).toBeVisible();
   await expect(page.getByText(modelId, { exact: true })).toBeVisible();
   await expect(page.getByText('供应商余额')).toBeVisible();
@@ -312,11 +312,12 @@ test('11a. analytics usage page shows metric cards and filters', async ({ page }
   await page.locator('.sidebar').getByRole('link', { name: /用量分析/ }).click();
   await expect(page).toHaveURL(/\/analytics\/usage/);
   await expect(page.getByRole('heading', { level: 1, name: '用量分析' })).toBeVisible();
-  await expect(page.locator('.analytics-card-layout')).toBeVisible({ timeout: 10_000 });
-  // Range tabs should be visible
-  await expect(page.getByRole('button', { name: '今日' })).toBeVisible();
-  await expect(page.getByRole('button', { name: '过去 7 天' })).toBeVisible();
-  await expect(page.getByRole('button', { name: '过去 30 天' })).toBeVisible();
+  await expect(page.locator('.analytics-metrics-grid')).toBeVisible({ timeout: 10_000 });
+  // Range picker should expose quick and custom ranges.
+  await page.getByRole('button', { name: '1 周' }).click();
+  await expect(page.getByRole('button', { name: '今天' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '昨天' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '自定义' })).toBeVisible();
 });
 
 test('11b. analytics logs page shows settings and log table', async ({ page }) => {

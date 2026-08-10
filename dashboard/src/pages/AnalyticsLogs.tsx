@@ -305,7 +305,7 @@ export default function AnalyticsLogs() {
                   }
                   void updateSettings({ log_context: e.currentTarget.checked });
                 }} />
-              <span><strong>{t('logs.context')}</strong><small>{t('logs.contextHint')}</small></span>
+              <span><strong>{t('logs.recordContext')}</strong><small>{t('logs.contextHint')}</small></span>
             </label>
           </div>
 

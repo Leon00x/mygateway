@@ -7,7 +7,7 @@
 | 层次 | 命令 | 目的 |
 |---|---|---|
 | 单元测试 | `npm test` | 纯逻辑、边界条件和协议 fixtures |
-| 类型检查 | `npm run typecheck` | Worker TypeScript 类型 |
+| 类型检查 | `npm run typecheck` | Worker 与 Dashboard 严格 TypeScript 类型 |
 | 前端构建 | `npm run build:dashboard` | SolidJS 生产构建 |
 | Worker dry-run | `npm run build` | 前端构建和 Wrangler 打包 |
 | UI E2E | `npx playwright test e2e/journey.spec.ts` | 浏览器管理闭环和 Gateway HTTP |
@@ -15,7 +15,7 @@
 
 ## 2. 单元测试
 
-当前共有 19 个测试文件、123 个用例：
+单元测试按领域拆分如下；准确用例数以 `npm test` 输出为准：
 
 | 文件 | 覆盖重点 |
 |---|---|

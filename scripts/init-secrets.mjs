@@ -1,7 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 
-const workerName = process.env.MYGATEWAY_WORKER_NAME || 'mygatewaydemo';
 const wrangler = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 const initialAdminPassword = 'mygateway123';
 
@@ -18,14 +17,14 @@ function runWrangler(args, input) {
   return result.stdout;
 }
 function listSecretNames() {
-  const output = runWrangler(['secret', 'list', '--name', workerName]);
+  const output = runWrangler(['secret', 'list', '--env', '']);
   const start = output.indexOf('[');
   if (start < 0) throw new Error('Unable to parse Wrangler secret list');
   return new Set(JSON.parse(output.slice(start)).map((entry) => entry.name));
 }
 
 function putSecret(name, value) {
-  runWrangler(['secret', 'put', name, '--name', workerName], `${value}\n`);
+  runWrangler(['secret', 'put', name, '--env', ''], `${value}\n`);
 }
 
 const existing = listSecretNames();

@@ -43,21 +43,13 @@ const dict: Record<string, Entry> = {
   'nav.analyticsLogs': { zh: '请求日志', en: 'Logs' },
   'nav.system': { zh: '系统设置', en: 'Settings' },
   'nav.docs': { zh: '接口文档', en: 'API Docs' },
-  'title.overview': { zh: '控制台概览', en: 'Overview' },
-  'title.channels': { zh: '渠道管理', en: 'Channels' },
-  'title.models': { zh: '模型路由', en: 'Models' },
-  'title.keys': { zh: '密钥', en: 'API Keys' },
+  'title.overview': { zh: '概览', en: 'Overview' },
+  'title.channels': { zh: '渠道', en: 'Channels' },
+  'title.models': { zh: '模型', en: 'Models' },
+  'title.keys': { zh: 'API 密钥', en: 'API Keys' },
   'title.usage': { zh: '用量分析', en: 'Usage Analytics' },
   'title.logs': { zh: '请求日志', en: 'Request Logs' },
   'title.system': { zh: '系统设置', en: 'Settings' },
-  'subtitle.overview': { zh: '查看网关状态、资源配置和调用数据', en: 'Gateway status, resources and traffic' },
-  'subtitle.channels': { zh: '连接并管理 OpenAI 兼容模型服务', en: 'Connect and manage OpenAI-compatible providers' },
-  'subtitle.models': { zh: '配置统一模型、渠道实例和故障回退顺序', en: 'Unified models, channel instances and fallback order' },
-  'subtitle.keys': { zh: '创建和管理调用 MyGateway 的访问凭据', en: 'Credentials for calling MyGateway' },
-  'subtitle.usage': { zh: 'Token 用量、费用、延迟与成功率', en: 'Tokens, spend, latency and success rate' },
-  'subtitle.logs': { zh: '查看最近调用的用量、费用与状态', en: 'Recent requests, usage and status' },
-  'subtitle.system': { zh: '查看运行状态并维护管理员账号', en: 'Runtime status and admin account' },
-  'subtitle.overviewSub': { zh: '概览', en: 'Overview' },
 
   // --- Shared / common ---
   'common.cancel': { zh: '取消', en: 'Cancel' },
@@ -83,8 +75,8 @@ const dict: Record<string, Entry> = {
   'common.collapse': { zh: '收起侧边栏', en: 'Collapse sidebar' },
 
   // --- Dashboard ---
-  'dash.endpoint': { zh: '网关接入地址', en: 'Gateway Endpoint' },
-  'dash.endpointSub': { zh: 'OpenAI 兼容 API 入口', en: 'OpenAI-compatible API entry' },
+  'dash.endpoint': { zh: 'API 基础地址', en: 'API Base URL' },
+  'dash.endpointSub': { zh: '统一接入 Chat Completions、Responses 与 Messages', en: 'Unified access for Chat Completions, Responses, and Messages' },
   'dash.usageTitle': { zh: '用量概览', en: 'Usage Overview' },
   'dash.usageSub': { zh: '供应商上报值，未知用量单独标记', en: 'Provider-reported; unknown usage flagged' },
   'dash.providerBalance': { zh: '供应商余额', en: 'Provider Balance' },
@@ -103,7 +95,6 @@ const dict: Record<string, Entry> = {
   'dash.apiDocs': { zh: '接口文档', en: 'API Docs' },
   'dash.viewSpec': { zh: '查看请求规范', en: 'View request spec' },
   'dash.successes': { zh: '次成功', en: 'successes' },
-  'dash.providerReported': { zh: '供应商上报 · 覆盖率', en: 'Provider-reported · coverage' },
   'dash.byPrice': { zh: '按渠道模型单价计算', en: 'From channel model prices' },
   'dash.today': { zh: '今日', en: 'Today' },
   'dash.unknownUsage': { zh: '未知用量', en: 'Unknown usage' },
@@ -129,8 +120,6 @@ const dict: Record<string, Entry> = {
   'dash.inputTokens': { zh: '输入 Token', en: 'Input tokens' },
 
   // --- Channels ---
-  'channels.title': { zh: '供应商渠道', en: 'Provider Channels' },
-  'channels.subtitle': { zh: '集中管理供应商协议、余额与可用模型。', en: 'Manage provider protocols, balances and models.' },
   'channels.addProvider': { zh: '+ 添加供应商', en: '+ Add Provider' },
   'channels.connected': { zh: '已连接渠道', en: 'Connected channels' },
   'channels.search': { zh: '搜索渠道', en: 'Search channels' },
@@ -234,8 +223,6 @@ const dict: Record<string, Entry> = {
   'dash.available': { zh: '可用', en: 'Available' },
 
   // --- Models ---
-  'models.title': { zh: '统一模型', en: 'Unified Models' },
-  'models.subtitle': { zh: '一个模型 ID 可以绑定多个渠道，并按顺序自动回退。', en: 'One model ID can bind multiple channels with ordered fallback.' },
   'models.create': { zh: '+ 创建模型', en: '+ Create Model' },
   'models.createTitle': { zh: '创建统一模型', en: 'Create Unified Model' },
   'models.createSub': { zh: '客户端将使用统一模型 ID 发起调用。', en: 'Clients call this unified model ID.' },
@@ -264,7 +251,6 @@ const dict: Record<string, Entry> = {
   'models.outputPrice': { zh: '输出价格 ($/M token)', en: 'Output price ($/M tokens)' },
   'models.editModel': { zh: '编辑模型', en: 'Edit Model' },
   'models.pricing': { zh: '实例定价', en: 'Instance Pricing' },
-  'models.pricingNote': { zh: '费用 = (输入 tokens × 输入价 + 输出 tokens × 输出价) / 1,000,000，按美元统计。', en: 'Spend = (in tokens × in price + out tokens × out price) / 1,000,000 USD.' },
   'models.savePricing': { zh: '保存定价', en: 'Save pricing' },
   'models.unpriced': { zh: '未定价', en: 'Unpriced' },
   'models.notBound': { zh: '尚未绑定渠道，点下方"添加实例"。', en: 'No instances yet — use "Add Instance" below.' },
@@ -272,8 +258,6 @@ const dict: Record<string, Entry> = {
   'models.instance': { zh: '实例', en: 'Instance' },
 
   // --- API Keys ---
-  'keys.title': { zh: '网关密钥', en: 'Gateway API Keys' },
-  'keys.subtitle': { zh: '创建带限流、预算和模型白名单的访问密钥。', en: 'Keys with rate limits, budgets and model allowlists.' },
   'keys.revealOnce': { zh: '仅显示一次', en: 'Shown once' },
   'keys.copySave': { zh: '复制并安全保存这个密钥', en: 'Copy and store this key securely' },
   'keys.copy': { zh: '复制密钥', en: 'Copy key' },
@@ -381,7 +365,7 @@ const dict: Record<string, Entry> = {
   'logs.errorsHint': { zh: '错误、中断、限流、预算和权限事件', en: 'Errors, cancellations, rate limits, budgets, permissions' },
   'logs.success': { zh: '正常日志', en: 'Success logs' },
   'logs.successHint': { zh: '成功请求明细', en: 'Successful requests' },
-  'logs.context': { zh: '记录上下文', en: 'Record context' },
+  'logs.recordContext': { zh: '记录上下文', en: 'Record context' },
   'logs.contextHint': { zh: '请求/响应前 4 KiB 预览 · 加密存储 · 隐私提示 · 不含 Header 或密钥', en: '4 KiB request/response preview · encrypted · no headers or keys' },
   'logs.contextConfirm': { zh: '开启上下文记录将保存请求和响应的前 4 KiB 预览，使用 AES-GCM 加密。\n\n确认开启？', en: 'Enabling context records encrypted 4 KiB request/response previews (AES-GCM).\n\nConfirm?' },
   'logs.logRetention': { zh: '日志保留天数', en: 'Log retention' },

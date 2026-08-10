@@ -402,7 +402,14 @@ TTFT 的历史桶；界面必须据样本数计算覆盖率。
 
 请求完成时由 `usage-recorder` 调用，费用随 analytics 聚合、密钥日用量同一 `batch()` 写入。
 
-### 10.4 管理 API 与控制台
+### 10.4 已知币种边界
+
+0.1.x 的 `analytics_minutes`、`request_logs` 和 `key_daily_usage` 只有 `cost_micros`，没有币种
+列；计算也没有汇率换算。因此 USD / CNY 实例价格可以分别配置和展示，但聚合费用不能安全地
+跨币种相加。修复前部署必须选择单一记账币种。后续实现应新增币种维度并分币种汇总，或将
+产品明确收敛为单一币种；不得使用隐式实时汇率。
+
+### 10.5 管理 API 与控制台
 
 - `GET /admin/api/model-prices` 列表；`PUT` 全量 upsert；`DELETE /:id` 单条删除。
 - System 页价格库卡片：行内编辑输入 / 输出 / 缓存 / 币种，批量保存；删除行同步调用 DELETE，

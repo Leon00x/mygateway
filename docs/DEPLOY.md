@@ -21,7 +21,7 @@ Workers Builds 持续更新。
 `deploy.workers.cloudflare.com/?url=<repo>` → Cloudflare Dash 读取仓库 `wrangler.jsonc`：
 
 1. 读取 Wrangler 配置（识别 Worker / D1 / Assets 绑定）
-2. 创建或更新 Worker（名称为 `wrangler.jsonc` 中的 `mygatewaydemo`）
+2. 创建或更新 Worker（模板默认名为 `mygatewaydemo`，部署页面可以自定义）
 3. 自动创建 D1 —— `database_id` 可选，缺失时 wrangler 自动 provision
 4. 执行 Deploy 命令（默认 `npx wrangler deploy`，可自定义）
 5. `wrangler deploy` 自动上传 `assets.directory`（`./dashboard/dist`）作为 Static Assets
@@ -30,7 +30,8 @@ Workers Builds 持续更新。
 
 - 生产 `wrangler.jsonc` 的 D1 **不填 `database_id`** → 首次部署自动创建；若要固化，`wrangler d1 list` 拿 ID 回填
 - 升级时的 Deploy 脚本顺序：`build:dashboard → db:migrate:remote → wrangler deploy → secrets:init`。必须先让 D1 具备新代码需要的兼容结构，再切换 Worker
-- `secrets:init` 仅在 Secret 不存在时设置 `INITIAL_ADMIN_PASSWORD` 与 `MASTER_KEY`，已有值永不覆盖
+- `secrets:init` 通过当前 Wrangler 配置定位 Worker，仅在 Secret 不存在时设置
+  `INITIAL_ADMIN_PASSWORD` 与 `MASTER_KEY`，已有值永不覆盖；Fork 后修改 Worker 名也无需改脚本
 - 管理员初始密码固定为 `mygateway123`；Master Key 随机生成且只在部署日志显示一次，用户必须立即保存
 - `.dev.vars.example` 提供公开的固定初始密码；真实 `MASTER_KEY` 永不入库
 - `wrangler.jsonc` 启用 Workers Logs，并使用 10% head sampling；性能响应头不依赖额外服务
@@ -98,8 +99,9 @@ Cloudflare Dashboard 或 Wrangler 可以回滚 Worker 代码和 Static Assets，
 
 ## 5. 常见问题
 
-1. **Git 存储库选错**：把 Worker 名 `mygatewaydemo` 当成仓库名 → 连到不存在的仓库，构建永不触发。**仓库名必须与 GitHub 上真实一致**。
-2. **Worker 名称不匹配**：Dash 上 Worker 名和 `wrangler.jsonc` 的 `name` 都必须是 `mygatewaydemo`，否则 Builds 可能尝试创建另一个 Worker。
+1. **Git 存储库选错**：把 Worker 名当成仓库名 → 连到不存在的仓库，构建永不触发。**仓库名必须与 GitHub 上真实一致**。
+2. **Worker 名称不匹配**：手工导入仓库时，确认 Dash 中目标 Worker 与当前 `wrangler.jsonc`
+   的 `name` 一致；Deploy Button 创建的 Fork 会把用户选择反映到生成配置中。
 3. **构建/部署命令错误**：`npm run build`（会 dry-run deploy）不是纯构建；Workers Builds 默认的 `npx wrangler deploy` 也不会执行 migration。部署阶段必须按“migration → deploy → Secret 检查”的顺序执行，正确组合见上表。
 4. **D1 权限缺失**：API Token 若缺 D1: Edit 权限，部署报 `Authentication error`。创建 Token 选 "Edit Cloudflare Workers" 模板并**手动加 D1: Edit**。
 5. **database_id 硬编码**：不要把某个账号的 D1 ID 提交到仓库（未来用户会用别人的库）。
@@ -109,7 +111,7 @@ Cloudflare Dashboard 或 Wrangler 可以回滚 Worker 代码和 Static Assets，
 
 ```bash
 # 查看部署历史（确认是否 Git 触发）
-npx wrangler deployments list --name mygatewaydemo
+npx wrangler deployments list
 
 # 查看 D1
 npx wrangler d1 list
@@ -118,13 +120,13 @@ npx wrangler d1 list
 npx wrangler d1 migrations list DB --remote
 
 # 查看实时日志
-npx wrangler tail mygatewaydemo
+npx wrangler tail
 
 # 手动部署——已配置好环境变量时
 npm run deploy
 ```
 
-部署后至少确认：Worker 名称为 `mygatewaydemo`、管理控制台可打开、D1 migration
+部署后至少确认：目标 Worker 名称正确、管理控制台可打开、D1 migration
 已完成，并对健康页或一个已配置的模型完成 smoke test。不要在日志或工单中粘贴
 `MASTER_KEY`、Gateway Key、Provider Key、Prompt 或完整响应。
 

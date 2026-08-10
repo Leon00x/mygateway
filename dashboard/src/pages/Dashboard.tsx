@@ -85,9 +85,6 @@ export default function Dashboard() {
     return balances().filter((item) => activeIds.has(item.channel_id));
   };
   const successRate = () => overview()?.requests ? Math.round((overview()!.successes / overview()!.requests) * 100) : 0;
-  const usageCoverage = () => overview()?.requests
-    ? Math.round(((overview()!.requests - overview()!.usage_unknown) / overview()!.requests) * 100)
-    : 100;
   const spendLabel = () => {
     const micros = overview()?.cost_micros ?? 0;
     return micros > 0 ? `$${(micros / 1_000_000).toFixed(4)}` : '—';
@@ -108,7 +105,7 @@ export default function Dashboard() {
       <section class="metric-grid">
         <Metric title={t('dash.requests')} value={fmt(overview()?.requests)} note={range() === 'today' ? t('dash.today') : `${range()}`} tone="violet" />
         <Metric title={t('dash.successRate')} value={`${successRate()}%`} note={`${fmt(overview()?.successes)} ${t('dash.successes')}`} tone="green" />
-        <Metric title={t('dash.tokens')} value={fmt((overview()?.input_tokens ?? 0) + (overview()?.output_tokens ?? 0))} note={`${t('dash.providerReported')} ${usageCoverage()}%`} tone="orange" />
+        <Metric title={t('dash.tokens')} value={fmt((overview()?.input_tokens ?? 0) + (overview()?.output_tokens ?? 0))} tone="orange" />
         <Metric title={t('dash.spend')} value={spendLabel()} note={t('dash.byPrice')} tone="blue" />
       </section>
 
@@ -164,18 +161,19 @@ export default function Dashboard() {
                 <div class="provider-balance-name"><ProviderLogo presetId="deepseek" name="DeepSeek" /><div><strong>{balance.channel_name}</strong><small>{t('dash.officialApi')}</small></div></div>
                 <Show when={balance.status === 'not_queried'}><span class="balance-state muted">{t('dash.clickToQuery')}</span></Show>
                 <Show when={balance.status === 'error'}><span class="balance-state error">{balance.status === 'error' ? balance.error : ''}</span></Show>
-                <Show when={balance.status === 'ok'}>{() => {
-                  if (balance.status !== 'ok') return null;
+                <Show when={balance.status === 'ok' ? balance : undefined}>{(resolved) => {
+                  const current = resolved();
+                  if (current.status !== 'ok') return null;
                   return <div class="provider-balance-values">
-                    <span class={`balance-state ${balance.is_available ? 'available' : 'unavailable'}`}>{balance.is_available ? t('dash.accountAvailable') : t('dash.accountUnavailable')}</span>
-                    <For each={balance.balance_infos}>{(item) => (
+                    <span class={`balance-state ${current.is_available ? 'available' : 'unavailable'}`}>{current.is_available ? t('dash.accountAvailable') : t('dash.accountUnavailable')}</span>
+                    <For each={current.balance_infos}>{(item) => (
                       <div class="provider-balance-value">
                         <small>{item.currency} {t('dash.balanceTotal')}</small>
                         <strong>{balanceCurrencySymbol(item.currency)}{item.total_balance}</strong>
                         <span>{t('dash.balanceGranted')} {balanceCurrencySymbol(item.currency)}{item.granted_balance} · {t('dash.balanceToppedUp')} {balanceCurrencySymbol(item.currency)}{item.topped_up_balance}</span>
                       </div>
                     )}</For>
-                    <small class="balance-updated">{balanceUpdatedAt(balance.fetched_at)}{balance.cached ? ` · ${t('dash.cached')}` : ''}</small>
+                    <small class="balance-updated">{balanceUpdatedAt(current.fetched_at)}{current.cached ? ` · ${t('dash.cached')}` : ''}</small>
                   </div>;
                 }}</Show>
               </div>
@@ -196,8 +194,8 @@ function curlExample(baseUrl: string, model = 'your-model') {
   return `curl ${baseUrl}/chat/completions \\\n  -H "Authorization: Bearer YOUR_GATEWAY_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d '{"model":"${model}","messages":[{"role":"user","content":"Hello"}]}'`;
 }
 
-function Metric(props: { title: string; value: string; note: string; tone: string }) {
-  return <div class={`metric-card panel ${props.tone}`}><span class="metric-dot"/><small>{props.title}</small><strong>{props.value}</strong><p>{props.note}</p></div>;
+function Metric(props: { title: string; value: string; note?: string; tone: string }) {
+  return <div class={`metric-card panel ${props.tone}`}><span class="metric-dot"/><small>{props.title}</small><strong>{props.value}</strong><Show when={props.note}><p>{props.note}</p></Show></div>;
 }
 
 function UsageBar(props: { label: string; value: number; max: number; accent?: boolean; subtle?: boolean }) {

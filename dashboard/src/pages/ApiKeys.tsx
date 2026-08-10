@@ -176,8 +176,6 @@ export default function ApiKeys() {
 
   return (
     <div class="resource-page">
-      <div class="page-heading"><div><h2>{t('keys.title')}</h2><p>{t('keys.subtitle')}</p></div></div>
-
       <Show when={revealedKey()}>
         <div class="secret-reveal panel"><div><span class="eyebrow">{t('keys.revealOnce')}</span><h3>{t('keys.copySave')}</h3><code>{revealedKey()}</code></div><button class="secondary-button" onClick={() => navigator.clipboard.writeText(revealedKey())}>{t('keys.copy')}</button><button class="secret-close" onClick={() => setRevealedKey('')}>×</button></div>
       </Show>

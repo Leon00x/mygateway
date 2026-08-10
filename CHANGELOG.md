@@ -4,6 +4,17 @@
 [PRD](docs/PRD.md)；技术细节分别见[架构](docs/ARCHITECTURE.md)、
 [详细设计](docs/DESIGN.md)、[部署](docs/DEPLOY.md)和[测试](docs/TESTING.md)。
 
+## 未发布：仓库整理与接续开发基线
+
+- README 重写为开源项目入口，明确 public alpha 定位、15 个供应商预制、快速部署、适用边界
+  和文档导航；新增根 `AGENTS.md` 作为 AI 接续开发约束。
+- `npm run typecheck` 现在同时严格检查 Worker 与 Dashboard；修复由此发现的重复 i18n key、
+  SolidJS 类型错误和无类型空集合，并移除仅用于旧地址跳转的冗余页面组件。
+- Secret 初始化改为读取当前 Wrangler 配置，不再把 Worker 名写死，支持 Deploy Button Fork
+  后自定义名称；Worker dry-run 显式选择顶层环境，消除多环境警告。
+- 审计确认费用聚合缺少币种维度；PRD 将其列为稳定版前 P0，不再宣称混合 USD / CNY 时
+  费用汇总准确。管理登录失败限速也列入 P0。
+
 ## 2026-08-10：价格库与产品化整理
 
 - 新增模型价格库（`model_prices`）：管理员维护模型基准价（输入/输出/缓存，USD/CNY），

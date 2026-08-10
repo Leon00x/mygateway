@@ -1,7 +1,7 @@
 /* @refresh reload */
 import { render } from 'solid-js/web';
 import { Router, Route, Navigate, A, useLocation } from '@solidjs/router';
-import { createContext, useContext, createSignal, createEffect, Show, onMount, onCleanup, For } from 'solid-js';
+import { createContext, useContext, createSignal, createEffect, Show, onMount, onCleanup, For, type JSX } from 'solid-js';
 import './app.css';
 import Login from './pages/Login';
 import ChangeCredentials from './pages/ChangeCredentials';
@@ -9,7 +9,6 @@ import Dashboard from './pages/Dashboard';
 import Channels from './pages/Channels';
 import Models from './pages/Models';
 import ApiKeys from './pages/ApiKeys';
-import Requests from './pages/Requests';
 import AnalyticsUsage from './pages/AnalyticsUsage';
 import AnalyticsLogs from './pages/AnalyticsLogs';
 import System from './pages/System';
@@ -111,15 +110,15 @@ const navigationSections: { label?: string; icon?: IconName; nested?: boolean; c
   { items: [{ href: '/system', label: 'nav.system', icon: 'system' }] },
 ];
 
-const titles: Record<string, { title: string; subtitle: string }> = {
-  '/': { title: 'title.overview', subtitle: 'subtitle.overview' },
-  '/channels': { title: 'title.channels', subtitle: 'subtitle.channels' },
-  '/models': { title: 'title.models', subtitle: 'subtitle.models' },
-  '/keys': { title: 'title.keys', subtitle: 'subtitle.keys' },
-  '/analytics/usage': { title: 'title.usage', subtitle: 'subtitle.usage' },
-  '/analytics/logs': { title: 'title.logs', subtitle: 'subtitle.logs' },
-  '/requests': { title: 'title.logs', subtitle: 'subtitle.logs' },
-  '/system': { title: 'title.system', subtitle: 'subtitle.system' },
+const titles: Record<string, string> = {
+  '/': 'title.overview',
+  '/channels': 'title.channels',
+  '/models': 'title.models',
+  '/keys': 'title.keys',
+  '/analytics/usage': 'title.usage',
+  '/analytics/logs': 'title.logs',
+  '/requests': 'title.logs',
+  '/system': 'title.system',
 };
 
 const startupTheme = readThemePreference();
@@ -128,10 +127,7 @@ document.documentElement.dataset.theme = startupTheme;
 function AppLayout(props: { children?: JSX.Element }) {
   const auth = useAuth();
   const location = useLocation();
-  const page = () => {
-    const meta = titles[location.pathname] ?? titles['/'];
-    return { title: t(meta.title), subtitle: t(meta.subtitle) };
-  };
+  const pageTitle = () => t(titles[location.pathname] ?? titles['/']);
   const [theme, setTheme] = createSignal<'light' | 'dark'>(startupTheme);
   const [sidebarCollapsed, setSidebarCollapsed] = createSignal(readSidebarPreference());
   const [analyticsExpanded, setAnalyticsExpanded] = createSignal(true);
@@ -205,7 +201,7 @@ function AppLayout(props: { children?: JSX.Element }) {
         </aside>
         <section class="workspace">
           <header class="topbar">
-            <div><h1>{page().title}</h1><p>{page().subtitle}</p></div>
+            <h1>{pageTitle()}</h1>
             <div class="topbar-actions">
               <a class="ghost-button" href="/v1/api-docs" target="_blank"><Icon name="docs" size={16} /> {t('nav.docs')}</a>
               <span class="status-pill"><i /> {t('status.online')}</span>
@@ -287,7 +283,7 @@ render(() => (
       <Route path="/channels" component={() => <RequireReady><Channels /></RequireReady>} />
       <Route path="/models" component={() => <RequireReady><Models /></RequireReady>} />
       <Route path="/keys" component={() => <RequireReady><ApiKeys /></RequireReady>} />
-      <Route path="/requests" component={() => <RequireReady><Requests /></RequireReady>} />
+      <Route path="/requests" component={() => <RequireReady><Navigate href="/analytics/logs" /></RequireReady>} />
       <Route path="/analytics/usage" component={() => <RequireReady><AnalyticsUsage /></RequireReady>} />
       <Route path="/analytics/logs" component={() => <RequireReady><AnalyticsLogs /></RequireReady>} />
       <Route path="/system" component={() => <RequireReady><System /></RequireReady>} />

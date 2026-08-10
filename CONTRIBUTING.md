@@ -30,7 +30,7 @@ Admin login on first run uses the bootstrap credentials documented in
 ## Development loop
 
 ```bash
-npm run typecheck        # tsc --noEmit
+npm run typecheck        # Worker + Dashboard strict TypeScript
 npm test                 # vitest unit tests
 npm run test:e2e         # Playwright (some suites need DEEPSEEK_TEST_KEY)
 npm run build:dashboard  # rebuild dashboard static assets into dist/
@@ -42,8 +42,9 @@ Before opening a PR make sure:
 2. `npm test` passes (all unit tests, including new coverage for your change).
 3. The dashboard builds (`npm run build:dashboard`).
 4. Database schema changes are a new numbered migration in `migrations/`.
-5. New user-visible behavior is documented in `docs/PRD.md` / `docs/` and the
-   test count is updated in `docs/TESTING.md`.
+5. New user-visible behavior is documented in `docs/PRD.md`; implementation
+   details go in the relevant architecture or design document without copying
+   the same section into every file.
 
 ## Where things live
 

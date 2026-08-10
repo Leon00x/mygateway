@@ -1,10 +1,29 @@
-# Security
+# Security Policy
 
-面向个人开发者与小团队的轻量网关，安全做到“够用”即可。
+## Reporting a vulnerability
 
-发现安全问题直接开 issue 说明即可，避免在 issue 里贴出密钥或日志原文。
+Please do not publish credentials, prompts, responses, database exports, exploit details, or production
+URLs in a public Issue. Use GitHub's private vulnerability reporting / Security Advisory flow when it is
+available. If it is unavailable, open a minimal Issue asking the maintainer for a private contact channel
+without including sensitive details.
 
-部署提醒：
+Include the affected version or commit, impact, reproduction conditions, and a proposed mitigation if known.
+You should receive an acknowledgement before details are made public; coordinated disclosure is preferred.
 
-- `MASTER_KEY` 首次部署只显示一次，保存在 Cloudflare Secrets 中，不要提交到代码仓库；
-- Provider Key 由网关加密存储，Gateway Key 只保存哈希，明文都不会再次展示。
+## Supported version
+
+MyGateway is currently a `0.1.x` public alpha. Security fixes target the latest `main`; older commits and
+fork-specific modifications are not maintained by this repository.
+
+## Deployment responsibilities
+
+- Replace the bootstrap administrator credentials immediately after first login.
+- Back up `MASTER_KEY` in a password manager; never commit or rotate it casually. Existing encrypted Provider
+  Keys cannot be recovered after it is lost.
+- Keep Provider Keys and Gateway Keys out of Issues, logs, screenshots, traces, and test artifacts.
+- Context logging is off by default. Enable it only when needed and use the shortest practical retention.
+- The management login currently has no shared, durable brute-force limiter; do not advertise the console URL
+  unnecessarily, and track the hardening item in [PRD](docs/PRD.md).
+
+The implemented key storage, session, logging, and consistency boundaries are documented in
+[ARCHITECTURE](docs/ARCHITECTURE.md).

@@ -324,8 +324,7 @@ export default function Models() {
 
   return (
     <div class="resource-page model-page">
-      <div class="page-heading">
-        <div><h2>{t('models.title')}</h2><p>{t('models.subtitle')}</p></div>
+      <div class="page-actions">
         <button onClick={() => setShowCreate(!showCreate())} class="primary-button">{t('models.create')}</button>
       </div>
 

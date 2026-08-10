@@ -49,7 +49,7 @@ export async function loginViaUi(page: Page, password: string = activePassword):
   await expect(page.getByPlaceholder('用户名')).toBeVisible({ timeout: 10_000 });
   await page.getByPlaceholder('用户名').fill(ADMIN_USERNAME);
   await page.getByPlaceholder('密码').fill(password);
-  await page.getByRole('button', { name: '登录控制台' }).click();
+  await page.getByRole('button', { name: '登录', exact: true }).click();
   // After login we land on the dashboard
   await expect(page).toHaveURL(/\/$/, { timeout: 10_000 });
 }

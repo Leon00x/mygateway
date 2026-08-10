@@ -6,17 +6,17 @@
   "scripts": {
     "dev": "wrangler dev",
     "dev:setup": "npm run db:migrate:local",
-    "deploy": "npm run build:dashboard && npm run db:migrate:remote && wrangler deploy && npm run secrets:init",
-    "build": "npm run build:dashboard && wrangler deploy --dry-run",
+    "deploy": "npm run build:dashboard && npm run db:migrate:remote && wrangler deploy --env=\"\" && npm run secrets:init",
+    "build": "npm run build:dashboard && wrangler deploy --dry-run --env=\"\"",
     "build:dashboard": "vite build --config dashboard/vite.config.ts",
     "secrets:init": "node scripts/init-secrets.mjs",
-    "db:migrate:local": "wrangler d1 migrations apply DB --local",
-    "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local --env=\"\"",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote --env=\"\"",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc --project tsconfig.dashboard.json --noEmit"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.18.8",
