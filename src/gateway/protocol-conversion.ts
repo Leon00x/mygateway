@@ -321,7 +321,17 @@ export function convertRequest(
   from: GatewayProtocol,
   to: GatewayProtocol,
 ): JsonObject {
-  if (from === to) return structuredClone(body);
+  if (from === to) {
+    const cloned = structuredClone(body);
+    if (from === 'openai_chat' && Array.isArray(cloned.messages)) {
+      // Some OpenAI clients (e.g. pi, newer SDKs) send a `developer` role that many
+      // OpenAI-compatible providers (e.g. DeepSeek) reject — normalize to `system`.
+      for (const message of cloned.messages as Array<Record<string, unknown>>) {
+        if (message?.role === 'developer') message.role = 'system';
+      }
+    }
+    return cloned;
+  }
   if (from === 'openai_chat' && to === 'anthropic_messages') return chatRequestToMessages(body);
   if (from === 'anthropic_messages' && to === 'openai_chat') return messagesRequestToChat(body);
   throw new UnsupportedProtocolFeatureError(`${from}->${to}`, 'No protocol conversion path is configured');

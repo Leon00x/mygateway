@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import {
   chatRequestToMessages,
   chatResponseToMessages,
+  convertRequest,
   messagesRequestToChat,
   messagesResponseToChat,
   UnsupportedProtocolFeatureError,
@@ -95,6 +96,27 @@ describe('Chat and Messages protocol conversion', () => {
       message: { role: 'assistant', content: 'Done' },
     })]);
     expect(chat.usage).toEqual({ prompt_tokens: 8, completion_tokens: 2, total_tokens: 10 });
+  });
+
+  test('normalizes developer role to system for openai_chat pass-through', () => {
+    const result = convertRequest({
+      model: 'm', stream: false,
+      messages: [
+        { role: 'developer', content: 'Be concise.' },
+        { role: 'user', content: 'Hi' },
+        { role: 'system', content: 'Stay.' },
+      ],
+    }, 'openai_chat', 'openai_chat');
+
+    expect(result.messages).toEqual([
+      { role: 'system', content: 'Be concise.' },
+      { role: 'user', content: 'Hi' },
+      { role: 'system', content: 'Stay.' },
+    ]);
+    // Original body untouched (structuredClone)
+    expect(convertRequest({ model: 'm', messages: [{ role: 'developer', content: 'x' }] }, 'openai_chat', 'openai_chat')).toEqual({
+      model: 'm', messages: [{ role: 'system', content: 'x' }],
+    });
   });
 
   test('rejects unsupported fields instead of silently dropping them', () => {
