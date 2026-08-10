@@ -127,3 +127,45 @@ npm run deploy
 部署后至少确认：Worker 名称为 `mygatewaydemo`、管理控制台可打开、D1 migration
 已完成，并对健康页或一个已配置的模型完成 smoke test。不要在日志或工单中粘贴
 `MASTER_KEY`、Gateway Key、Provider Key、Prompt 或完整响应。
+
+## 7. Free Tier 容量规划
+
+默认部署只使用：
+
+```text
+1 个 Worker（包含 Static Assets）
+1 个 D1 数据库
+2 个首次部署 Secrets
+1 个每日 Cron Trigger
+```
+
+与本项目最相关的官方 Free 限制（额度可能变化，部署前应查看
+[Workers Limits](https://developers.cloudflare.com/workers/platform/limits/)、
+[D1 Pricing](https://developers.cloudflare.com/d1/platform/pricing/) 和
+[D1 Limits](https://developers.cloudflare.com/d1/platform/limits/)）：
+
+| 项目 | Free 限制 | MyGateway 的控制方式 |
+|---|---:|---|
+| Worker 请求 | 100,000/天 | 建议轻量使用不超过约 10,000 次网关调用/天 |
+| Worker CPU | 10ms/请求 | 流式转发、有限解析，不缓存完整响应 |
+| 外部子请求 | 50/请求 | 最多尝试 3 个 Provider，候选串行而非广播 |
+| 并发出站连接 | 6/请求 | 单请求顺序尝试渠道 |
+| D1 读取 | 5,000,000 行/天 | 索引、一次 batch、短 TTL isolate 缓存 |
+| D1 写入 | 100,000 行/天 | 每个完成请求一次 Analytics 聚合 + 密钥用量 + 可选日志写入（同一 waitUntil，`batch()` 提交）；轻量使用建议不超过约 30,000 次调用/天 |
+| D1 存储 | 500MB/数据库、账号总计 5GB | 一个数据库，分钟聚合 30 天、请求日志 1–7 天（控制台可调）、密钥用量 30 天 |
+| Workers Logs | 200,000 事件/天、保留 3 天 | 10% head sampling 和脱敏事件 |
+
+降低额度的关键做法：
+
+- 热请求使用有容量上限的 isolate 内存缓存，缓存命中时不查询 D1；冷请求一次 `batch()`
+  完成鉴权与路由；
+- 用量、密钥用量和请求日志在同一 `waitUntil()` 内通过一次 `batch()` 提交，失败不阻断
+  模型响应；
+- 密钥未配置每日预算时跳过配额 D1 读取；每日 Cron 只清理过期统计，不执行余额、模型同步
+  或健康探测；
+- 熔断和 RPM 窗口保存在 isolate 内存，不使用 KV、DO 或额外数据库写入。
+
+边界与超额行为：D1 达到每日读写额度后配置路由可能返回 503；usage 写入或看板查询失败
+不会中断已完成的模型响应；Workers 达到每日请求或 CPU 限制后由 Cloudflare 拒绝请求。
+如果代表性负载持续接近额度，应降低统计/日志开销或升级 Workers Paid，不能静默牺牲
+安全校验和流式正确性。

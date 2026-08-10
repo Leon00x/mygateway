@@ -257,10 +257,10 @@ Provider adapter 扩展点；尚未实现的供应商显示“暂未接入”，
 6. 是否引入新的 Cloudflare 组件、读写或共享状态；
 7. 单元测试和真实集成测试覆盖。
 
-已发布变化记录在 [CHANGELOG](../CHANGELOG.md)，未来方向只保留在
-[README Roadmap](../README.md#7-roadmap)。
+已发布变化记录在 [CHANGELOG](../CHANGELOG.md)，产品特性与未来方向见
+[PRD](PRD.md)（含 Roadmap）。
 
-## 9. Analytics（Usage / Logs）重构（已实现，待发布）
+## 9. Analytics（Usage / Logs）重构
 
 ### 9.1 目标与边界
 
@@ -366,5 +366,51 @@ TTFT 的历史桶；界面必须据样本数计算覆盖率。
 - 移除无清理的 15 秒定时器；任何可选轮询在路由卸载和页面隐藏时停止。
 - 单元测试覆盖聚合数学、TTFT 样本、策略矩阵、批量写入、游标稳定性、上下文上限/加密/清理；
   E2E 覆盖 Usage/Logs 切换、筛选、空/错/加载状态、移动端详情和日志关闭后 Usage 仍增长。
-- 生产基线记录 Worker CPU、D1 rows read/write、批量写入失败率和查询耗时；超过 README Free
-  Tier 建议值时优先缩短保留期、关闭成功日志或降低聚合维度，不牺牲认证和流式正确性。
+- 生产基线记录 Worker CPU、D1 rows read/write、批量写入失败率和查询耗时；超过 Free Tier
+  建议值时优先缩短保留期、关闭成功日志或降低聚合维度，不牺牲认证和流式正确性。
+
+## 10. 价格库与费用计算
+
+### 10.1 数据模型
+
+- `model_prices`（迁移 0009）：以 `provider_model_id` 为主键的模型基准价，包含输入 / 输出
+  价格（`*_price_micros_per_million`，整数 micro-USD 或 micro-CNY 每百万 Token）、可选缓存
+  命中价和币种（`currency`：USD / CNY）。迁移同时为 `channel_models` 增加可选
+  `cache_input_price_micros_per_million` 列，使渠道实例价与基准价结构对齐。
+- 价格一律以整数 micros 存储（`$3 / M` → `3_000_000`），避免浮点累计漂移；
+  `cost_micros` 汇总同样为整数。
+
+### 10.2 价格解析优先级
+
+计费价格按以下顺序解析（`model-discovery.ts` `resolvePrice`）：
+
+1. **渠道实例价**（`channel_models` 的 input / output / cache / currency）——用户覆盖优先；
+2. **价格库基准价**（`model_prices`）——导入预填与无覆盖时的兜底；
+3. **未定价**——按 0 计费，不阻断请求。
+
+渠道导入时，控制台先查询基准价并预填输入 / 输出 / 缓存与币种（`preflight` 响应携带
+`baseline_price`），用户可修改后随模型导入写入渠道实例。
+
+### 10.3 费用计算
+
+`computeCostMicros`（`src/shared/cost.ts`）：
+
+- 缓存命中 Token 按缓存价计费；未配置缓存价时按正常输入价（保守）；
+- `cost = (非缓存输入 × 输入价 + 缓存 Token × 缓存价 + 输出 × 输出价) / 1_000_000`，四舍五入
+  到整数 micros；
+- 输入 / 输出价均为 0 且无缓存 Token 时直接返回 0，跳过计算。
+
+请求完成时由 `usage-recorder` 调用，费用随 analytics 聚合、密钥日用量同一 `batch()` 写入。
+
+### 10.4 管理 API 与控制台
+
+- `GET /admin/api/model-prices` 列表；`PUT` 全量 upsert；`DELETE /:id` 单条删除。
+- System 页价格库卡片：行内编辑输入 / 输出 / 缓存 / 币种，批量保存；删除行同步调用 DELETE，
+  失败时回滚并重新加载。
+
+## 11. 控制台 i18n
+
+- 中英双语字典以模块级 Solid signal `locale` 提供，`t(key)` 返回 `entry[locale()] ?? entry.zh ?? key`。
+- 默认中文；顶部语言开关切换并持久化到 `localStorage`（`mygateway.locale`）；`<html lang>` 随
+  语言同步。
+- 新页面文案必须同时提供 zh / en 条目；缺失时回退中文，不阻断渲染。

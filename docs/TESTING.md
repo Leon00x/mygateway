@@ -173,5 +173,5 @@ git diff --check
 - D1 `rows_read`、`rows_written` 和索引写放大基线；
 - 接近 Cloudflare Free 10ms CPU 时的持续负载。
 
-这些结果建立后应更新 [README Free Tier](../README.md#4-cloudflare-free-tier-first) 中的建议
+这些结果建立后应更新 [部署指南 Free Tier 容量规划](DEPLOY.md#7-free-tier-容量规划) 中的建议
 使用范围，而不是把估算写成已验证事实。

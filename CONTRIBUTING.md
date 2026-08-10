@@ -42,7 +42,7 @@ Before opening a PR make sure:
 2. `npm test` passes (all unit tests, including new coverage for your change).
 3. The dashboard builds (`npm run build:dashboard`).
 4. Database schema changes are a new numbered migration in `migrations/`.
-5. New user-visible behavior is documented in `README.md` / `docs/` and the
+5. New user-visible behavior is documented in `docs/PRD.md` / `docs/` and the
    test count is updated in `docs/TESTING.md`.
 
 ## Where things live
@@ -52,7 +52,7 @@ Before opening a PR make sure:
 | `src/gateway/` | `/v1/*` request path: auth, routing, fallback, quota, caching |
 | `src/admin/` | `/admin/api/*` control plane |
 | `src/db/` | D1 statements for the different tables |
-| `src/db/migrations/` | schema migrations (applied in order) |
+| `migrations/` | D1 schema migrations (applied in order) |
 | `dashboard/` | SolidJS admin console (static assets served by the Worker) |
 | `test/` | Vitest unit tests |
 | `e2e/` | Playwright UI / real-provider suites |
@@ -60,7 +60,7 @@ Before opening a PR make sure:
 ## Commit conventions
 
 Commits follow conventional style, e.g. `feat:`, `fix:`, `docs:`, `refactor:`.
-The `docs/TESTING.md` table and `README.md` test counts should stay accurate.
+The `docs/TESTING.md` table should stay accurate.
 
 ## Getting help
 

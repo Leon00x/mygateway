@@ -1,7 +1,7 @@
 # MyGateway 技术架构
 
-本文只描述当前已实现的系统结构和关键技术决策。产品能力、Free Tier 和 Roadmap 见
-[README](../README.md)，协议与供应商细节见 [详细设计](DESIGN.md)，部署与测试分别见
+本文只描述当前已实现的系统结构和关键技术决策。产品特性见 [PRD](PRD.md)，
+协议与供应商细节见 [详细设计](DESIGN.md)，部署与测试分别见
 [DEPLOY](DEPLOY.md) 和 [TESTING](TESTING.md)。
 
 ## 1. 系统边界
@@ -13,7 +13,8 @@ MyGateway 的控制面和数据面部署在同一个 Cloudflare Worker：
 管理员 ── /admin/api/* ── Session 鉴权 ── D1
 客户端 ── /v1/* ── Gateway Key ── 模型解析 ── AI Provider
                                              └─ usage 聚合 ── D1
-Cron ── 每日清理过期 usage_minutes
+Cron ── 每日清理过期 usage_minutes、analytics_minutes、
+        request_logs、key_daily_usage 与加密上下文预览
 ```
 
 默认只使用一个 Worker（包含 Static Assets）、一个 D1、两个部署 Secret 和一个每日 Cron，
@@ -71,7 +72,11 @@ HTTP 路由调用领域模块，领域模块调用 `db/*` 和基础工具；数�
 | `channel_models` | 上游模型 ID、公开别名和固定顺序 |
 | `model_identifiers` | 统一模型 ID 与别名的全局命名空间 |
 | `gateway_api_keys` | Gateway Key hash、短 prefix 和状态 |
+| `key_daily_usage` | 每密钥每日用量与预算扣减台账 |
 | `usage_minutes` | 按分钟、模型、最终渠道聚合的用量 |
+| `request_logs` | 请求明细日志（可选），含脱敏错误与加密上下文预览 |
+| `analytics_minutes` | 5 分钟聚合桶：密钥、统一模型、最终渠道维度，含 TTFT、延迟与回退样本 |
+| `model_prices` | 模型基准价库：输入 / 输出 / 缓存价格（micros 每百万 Token）与币种 |
 | `system_settings` | 少量系统设置 |
 
 关键约束：
@@ -183,10 +188,12 @@ usage 写入失败只记录脱敏错误，不修改已经返回的模型响应�
 |---|---|
 | `/v1/*` | Gateway、模型列表和 API 文档 |
 | `/admin/api/auth/*` | 登录、Session、退出和修改凭据 |
-| `/admin/api/channels*` | 渠道、连接测试、Provider 余额、模型发现/库存/导入 |
+| `/admin/api/channels*` | 渠道、连接测试、预检（preflight）、Provider 余额、模型发现/库存/导入 |
 | `/admin/api/models*` | 模型卡片、可选渠道绑定、实例和排序 |
 | `/admin/api/keys*` | Gateway Key 生命周期 |
-| `/admin/api/usage*` | 用量概览与维度统计 |
+| `/admin/api/analytics/*` | 用量聚合、日志查询、日志设置（当前用量与日志主路径） |
+| `/admin/api/usage*` | 首页用量概览与维度统计 |
+| `/admin/api/model-prices*` | 模型价格库（列表 / 批量 upsert / 单条删除） |
 | `/admin/api/system*` | 系统状态、设置和 Provider 预制 |
 | `/health` | 最小健康检查 |
 
@@ -217,8 +224,7 @@ Channels、Models、API Keys 和 System。侧边栏可收缩，主题偏好保�
 降级原则：usage 或看板失败不影响数据面已有响应；D1 配置查询失败时返回 503；余额失败
 只影响余额卡片；CPU 接近 Free 限制时不放弃认证、输入校验或流式正确性。
 
-Cloudflare 预算和超额行为以 [README Free Tier](../README.md#4-cloudflare-free-tier-first)
-为权威说明。
+Cloudflare 预算与 Free Tier 容量规划见 [DEPLOY](DEPLOY.md)。
 
 ## 13. 运行配置
 

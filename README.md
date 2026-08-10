@@ -1,156 +1,63 @@
 # MyGateway
 
-MyGateway 是一个部署在用户自己 Cloudflare 账号中的轻量 AI API 网关。它统一管理多个
-模型供应商，对外提供 OpenAI Chat、OpenAI Responses 和 Anthropic Messages 接口，并以
-固定、可解释的顺序完成模型路由、响应前 Fallback、虚拟密钥限流与预算、费用统计和请求日志。
-
-项目优先适配 Cloudflare Free：不需要自建服务器，默认不依赖 KV、R2、Queues 或
-Durable Objects。
+部署在自有 Cloudflare 账号中的轻量 AI API 网关：一份 Key 统一接入多家模型供应商，
+对外提供 OpenAI Chat / Responses 与 Anthropic Messages 兼容端点，内置固定优先级路由、
+响应前 Fallback、虚拟密钥限流与预算、费用统计和请求日志。适配 Cloudflare Free Tier，
+不依赖 KV、R2、Queues 或 Durable Objects。
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Leon00x/mygateway)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![CI](https://github.com/Leon00x/mygateway/actions/workflows/ci.yml/badge.svg)](https://github.com/Leon00x/mygateway/actions/workflows/ci.yml)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 
-文档：[架构](docs/ARCHITECTURE.md) · [详细设计](docs/DESIGN.md) ·
-[部署](docs/DEPLOY.md) · [测试](docs/TESTING.md) · [更新记录](CHANGELOG.md)
+## 这是什么
 
-参与贡献：[CONTRIBUTING](CONTRIBUTING.md) · 安全：[SECURITY](SECURITY.md) · 许可：MIT（[LICENSE](LICENSE)）
-
-## 1. 产品定位
-
-MyGateway 面向需要统一管理少量 AI 供应商渠道的个人开发者和小型团队，解决以下问题：
-
-- 应用只连接一个 Gateway 地址，不直接散落多个 Provider Key；
-- 使用统一模型 ID，按管理员保存的顺序选择渠道；
-- 首选渠道在响应开始前失败时自动尝试备用渠道；
-- 客户端可以使用 Chat、Responses 或 Messages 协议；
-- 在自己的 Cloudflare 账号中保存配置、密钥和统计数据；
-- 以较少的 Cloudflare 组件和数据库操作运行在轻量负载下。
-
-典型配置流程：
+- 应用只连接一个 Gateway 地址，不散落多个 Provider Key；
+- 统一模型 ID，按管理员保存的顺序选择渠道，首选渠道失败时自动尝试备用；
+- 客户端可选 Chat、Responses 或 Messages 协议，控制台一站式管理。
 
 ```text
-部署并修改初始密码
-  → 添加供应商渠道
-  → 创建统一模型并绑定渠道模型
-  → 创建 Gateway Key
-  → 调用 /v1/chat/completions、/v1/responses 或 /v1/messages
+部署并修改初始密码 → 添加供应商渠道 → 创建统一模型 → 创建 Gateway Key → 调用 /v1/*
 ```
 
-### 产品原则
+## 核心特性
 
-- **好用易用**：一个 Key 即可接入，控制台一站式管理；默认配置即开即用，不为省额度牺牲体验。
-- **固定路由**：默认使用保存后的固定优先级，不做随机、轮询或动态成本调度。
-- **原生优先**：客户端协议优先转发到供应商同协议端点。
-- **有限转换**：只转换明确支持的 Chat / Messages 公共子集，不能无损表达时直接报错。
-- **响应前回退**：一旦向客户端提交响应字节，不再跨渠道续接。
-- **默认不存内容，可选加密预览**：默认不保存 Prompt/Response；显式开启“记录上下文”后仅加密保存 4 KiB 预览并短期保留，供排查使用。
-- **统计不冒充账单**：Token 和余额以 Provider 返回值为准，未知用量单独标记。
-- **需求先确认**：新需求先讨论目标、范围和取舍；确认后先更新 PRD，再开始设计与实施。
+- **统一网关**：OpenAI Chat / Responses、Anthropic Messages 端点，协议转换、SSE 流式、
+  响应前 Fallback、被动熔断。[详见 PRD](docs/PRD.md)
+- **管理控制台**：渠道 / 模型 / 密钥 / 用量 / 日志一站式管理，中英双语、浅色暗黑主题。
+- **虚拟密钥**：RPM、每日请求与 Token 预算、到期时间、模型白名单，超额 429/403。
+- **用量与日志**：5 分钟聚合统计（Token、费用、延迟、TTFT），请求日志独立开关、
+  可选加密上下文预览、7 天保留。
+- **供应商预制**：12 家供应商一键接入，只声明经过确认的原生协议。
 
-## 2. 快速部署
+## 快速开始
 
 ### Deploy Button
 
 1. 点击上方按钮并登录 Cloudflare；
 2. 选择或 Fork `Leon00x/mygateway`；
-3. Cloudflare 创建 Worker `mygatewaydemo`、Static Assets 和 D1 `mygateway-db`；
-4. 部署脚本运行 migrations，并初始化管理员密码和 `MASTER_KEY`；
-5. 保存部署日志中只显示一次的 `MASTER_KEY`；
-6. 打开 `https://mygatewaydemo.<你的 workers.dev 子域>.workers.dev`。
-
-首次账号为：
+3. Cloudflare 创建 Worker、Static Assets 与 D1，部署脚本运行 migrations 并初始化
+   `MASTER_KEY`（部署日志中只显示一次，请立即保存）；
+4. 打开生成的 `https://mygatewaydemo.<子域>.workers.dev`，首次登录：
 
 ```text
 用户名：admin
 密码：mygateway123
 ```
 
-首次登录必须修改用户名和密码。固定初始密码不是长期凭据；`MASTER_KEY` 用于加密
-Provider Key，一旦丢失或替换，已有密文将无法解密。
+首次登录必须修改用户名和密码。完整部署、Secrets 与排障见 [部署指南](docs/DEPLOY.md)。
 
-### 本地部署
+### 本地开发
 
 ```bash
 git clone https://github.com/Leon00x/mygateway
 cd mygateway
 npm install
-npx wrangler login
-npm run deploy
+npm run dev:setup   # 本地 D1 migrations
+npm run dev         # http://localhost:8787
 ```
 
-自动部署、Secrets、migration 和排障见 [部署指南](docs/DEPLOY.md)。
-使用 Workers Builds 时必须将部署命令设为 `npm run deploy`；该脚本会确保数据库结构
-先于新 Worker 更新。
-
-## 3. 已实现能力
-
-| 能力 | 当前行为 |
-|---|---|
-| 管理认证 | D1 单管理员账号、HttpOnly Session、首次强制改密 |
-| 渠道 | 预制或自定义 Provider，一份 Key 配置多个协议端点；按需发现、刷新和手工维护模型库存 |
-| 模型 | 从渠道库存勾选导入，或从 30 个常见模板/自由输入创建；统一模型、渠道实例、可编辑 ID 和稳定直达别名 |
-| Gateway Key | 创建、一次性展示、启停、删除、重新生成 |
-| 虚拟密钥限额 | 每个密钥可配置 RPM、每日请求/Token 预算、到期时间和模型白名单；超额返回 429/403 |
-| 费用统计 | 渠道实例可配置 $/M Token 单价；按 Provider 上报 Token 计算并汇总到用量、密钥和首页 |
-| 请求日志 | 最近请求的密钥、模型、渠道、状态、Token、费用、耗时与错误详情；管理页可独立开关正常/异常日志，保留 7 天 |
-| 协议 | OpenAI Chat、OpenAI Responses、Anthropic Messages |
-| 协议转换 | Chat ↔ Messages 的文本、工具调用、usage 和 SSE 公共子集 |
-| 路由 | 原生协议优先、固定优先级、完整别名直达 |
-| Fallback | 连接错误、超时、408、429、部分 5xx 和可靠额度不足错误 |
-| 被动熔断 | 连续故障后在当前 isolate 冷却，不主动探测 Provider |
-| 流式 | SSE 增量解析与透传，客户端取消向上游传播 |
-| 用量 | Provider 上报 Token、未知用量、请求量、错误和 Fallback |
-| Provider 余额 | DeepSeek 官方账户余额按需查询和 5 分钟短缓存 |
-| 控制台 | 左右布局、可收缩侧边栏、浅色/暗黑主题 |
-| 可观测性 | 脱敏结构化日志、`X-Gateway-Timing`、`Server-Timing`、`/health` |
-
-### 渠道管理交互
-
-- 预置渠道只要求用户输入 Key；服务端按已确认的供应商元数据写入 Chat、Responses、Messages
-  等原生协议，模型列表不得用于推测协议能力。
-- 添加渠道必须先明确执行“检测连接与模型”，并在提交前展示协议、检测结果和模型列表；
-  检测阶段不创建渠道、不写 D1，连接信息或 Key 改动后必须重新检测。
-- 渠道页使用响应式竖向卡片网格。卡片展示状态、协议、缓存余额、套餐余量占位、模型总数和
-  最多 3 个模型预览；其余模型以 `+N` 表示，避免大量模型撑高卡片。
-- 卡片高频操作为“编辑”和“测试”；“编辑”进入统一详情，包含基础配置、协议、余额和模型。
-  启停、删除等低频操作收纳到更多菜单。
-- 渠道保存成功后在详情顶部展示一次轻量完成动效和持续可见的成功状态；动画必须支持系统
-  `prefers-reduced-motion`，不能阻塞余额查询、模型导入或后续操作。
-- 多渠道摘要使用批量查询，不按卡片产生模型库存 N+1 查询；模型发现和余额仍只由用户创建、
-  编辑或刷新触发，不使用 Cron。
-- 套餐余量本期只预留展示和 adapter 边界，未接入时明确显示“暂未接入”，不生成估算值。
-- 完成检测后展示可勾选的模型清单，默认全选并支持全选、取消全选和逐项选择。“保存”只保存
-  渠道及完整模型库存，“保存并导入网关”只导入已勾选模型并显示选中数量。检测失败代表已经
-  完成一次预检，允许用户仅保存后手工维护；没有勾选模型时禁用导入操作。支持的余额查询仍在
-  渠道保存成功后自动执行一次。
-- 删除渠道前展示关联实例和受影响统一模型数量。有其他渠道实例的模型只移除当前渠道实例；
-  失去最后实例的模型在确认后软删除，历史 usage 保留，避免留下仍可见但无法路由的模型。
-- 预置渠道在编辑页只读展示服务端声明的协议与端点，只允许修改名称和 Key；自定义渠道才允许
-  编辑协议地址。DeepSeek 预置包含官方 Chat 与 Anthropic Messages 端点。
-
-### 供应商预制
-
-当前包含 OpenAI、Anthropic、DeepSeek、Z.AI、华为云（中国）、阿里云国际、
-火山国际（BytePlus）、Google Gemini、Groq、MiniMax 国际、xAI 和 Mistral AI。
-
-预制只声明经过确认的原生协议。用户只需输入一次 Key，系统会创建该供应商已知的协议
-端点；未知能力不会自动开启。
-
-### 对外接口
-
-| 方法 | 路径 | 说明 |
-|---|---|---|
-| GET | `/v1/models` | 列出统一模型和公开别名 |
-| POST | `/v1/chat/completions` | OpenAI Chat Completions |
-| POST | `/v1/responses` | OpenAI Responses；当前只走原生 Responses 渠道 |
-| POST | `/v1/messages` | Anthropic Messages；可在必要时与 Chat 转换 |
-| GET | `/v1/openapi.json` | OpenAPI 文档 |
-| GET | `/v1/api-docs` | API 文档页面 |
-| GET | `/health` | 不暴露配置和 Secret 的健康检查 |
-
-Chat 调用示例：
+### 调用示例
 
 ```bash
 curl https://your-gateway.workers.dev/v1/chat/completions \
@@ -159,145 +66,37 @@ curl https://your-gateway.workers.dev/v1/chat/completions \
   -d '{"model":"your-model","messages":[{"role":"user","content":"Hello"}]}'
 ```
 
-协议能力和转换边界见 [详细设计](docs/DESIGN.md)。
+## 支持的供应商
 
-## 4. Cloudflare Free Tier First
+OpenAI、Anthropic、DeepSeek、Z.AI、华为云（中国）、阿里云国际、火山国际（BytePlus）、
+Google Gemini、Groq、MiniMax 国际、xAI、Mistral AI。
 
-免费档适配是 MyGateway 的核心产品特点。默认部署只使用：
+## 对外接口
 
-```text
-1 个 Worker（包含 Static Assets）
-1 个 D1 数据库
-2 个首次部署 Secrets
-1 个每日 Cron Trigger
-```
-
-截至 2026-08-05，与本项目最相关的官方 Free 限制如下。额度可能变化，部署前应同时查看
-[Workers Limits](https://developers.cloudflare.com/workers/platform/limits/)、
-[D1 Pricing](https://developers.cloudflare.com/d1/platform/pricing/) 和
-[D1 Limits](https://developers.cloudflare.com/d1/platform/limits/)。
-
-| 项目 | Free 限制 | MyGateway 的控制方式 |
-|---|---:|---|
-| Worker 请求 | 100,000/天 | 建议轻量使用不超过约 10,000 次网关调用/天 |
-| Worker CPU | 10ms/请求 | 流式转发、有限解析，不缓存完整响应 |
-| 外部子请求 | 50/请求 | 最多尝试 3 个 Provider，候选串行而非广播 |
-| 并发出站连接 | 6/请求 | 单请求顺序尝试渠道 |
-| D1 读取 | 5,000,000 行/天 | 索引、一次 batch、短 TTL isolate 缓存 |
-| D1 写入 | 100,000 行/天 | 每个完成请求一次 Analytics 聚合 + 密钥用量 + 可选日志写入（同一 waitUntil，`batch()` 提交）；轻量使用建议不超过约 30,000 次调用/天 |
-| D1 存储 | 500MB/数据库、账号总计 5GB | 一个数据库，分钟聚合 30 天、请求日志 1–7 天（控制台可调）、密钥用量 30 天 |
-| Workers Logs | 200,000 事件/天、保留 3 天 | 10% head sampling 和脱敏事件 |
-
-### 我们如何减少额度消耗
-
-- 热请求使用有容量上限的 isolate 内存缓存；缓存命中时不查询 D1。
-- 冷请求通过一次 `DB.batch()` 完成 Gateway Key 鉴权与模型路由。
-- SSE 按事件增量处理，不把完整生成结果读入内存。
-- 用量、密钥用量和请求日志在同一 `waitUntil()` 内顺序写入；失败不阻断模型响应。
-- 密钥未配置每日预算时，配额检查跳过 D1 读取。
-- 每日 Cron 只清理过期统计，不执行余额、模型同步或健康探测。
-- 熔断和 RPM 窗口保存在 isolate 内存，不使用 KV、DO 或额外数据库写入。
-- DeepSeek 余额只有用户主动刷新时才访问 Provider，并缓存 5 分钟。
-- 浏览器会话会保留最后一次余额刷新结果，避免其他 Worker isolate 的 `not_queried` 覆盖，
-  不增加 D1、KV 或 Durable Objects 写入。
-- 不引入 Pages、KV、R2、Queues、Durable Objects 或额外后台服务。
-
-### 边界与超额行为
-
-MyGateway 是“优先适配 Free”，不是无限流量保证。实际容量取决于模型数、缓存命中率、
-D1 索引写放大、Cloudflare 账号中的其他 Worker，以及异常或恶意流量。
-
-- D1 达到每日读写额度后会拒绝查询，配置路由可能返回 503；
-- usage 写入或看板查询失败不会中断已经完成的模型响应；
-- Workers 达到每日请求或 CPU 限制后由 Cloudflare 拒绝请求；
-- Provider 模型调用费用与 Cloudflare 免费额度相互独立，MyGateway 不替用户承担上游费用；
-- 如果代表性负载持续接近额度，应降低统计/日志开销或升级 Workers Paid，不能静默牺牲
-  安全校验和流式正确性。
-
-## 5. 安全（够用就行）
-
-面向个人开发者和小团队，安全做到“够用”即可：
-
-- Provider Key 用 `MASTER_KEY` AES-GCM 加密存储；Gateway Key 只存哈希，明文只显示一次；
-- 控制台需要登录；日志不记录任何密钥凭证，默认不存对话内容（排查时可在日志设置里显式开启加密的短期预览）。
-
-### 可调配置（Worker Secrets / Vars）
-
-| 配置 | 默认 | 说明 |
+| 方法 | 路径 | 说明 |
 |---|---|---|
-| `MASTER_KEY` | 必填 | 32 字节 base64，用于加密 Provider Key |
-| `INITIAL_ADMIN_USERNAME` / `INITIAL_ADMIN_PASSWORD` | `admin` / 文档引导值 | 首次登录凭据，登录后强制修改 |
-| `APP_VERSION` | `0.1.0` | 展示在 `/health` 和控制台 |
-| `DEFAULT_TIMEZONE` | `Asia/Shanghai` | “今日”统计边界 |
-| `MAX_REQUEST_BYTES` | `2097152` | 请求体上限 |
-| `MAX_CHANNEL_ATTEMPTS` | `3` | 每请求最多尝试渠道数 |
-| `UPSTREAM_HEADER_TIMEOUT_MS` | `30000` | 上游响应头超时 |
-| `USAGE_RETENTION_DAYS` | `30` | 分钟用量与密钥用量保留天数 |
-| 日志保留天数 / 上下文保留 | 控制台日志设置 | 在 `system_settings` 中配置（1/3/7 天、1–168 小时） |
-| `KEY_QUOTA_REFRESH_MS` | `5000` | 每日预算台账刷新 D1 的间隔（降低每请求 D1 读） |
+| GET | `/v1/models` | 列出统一模型和公开别名 |
+| POST | `/v1/chat/completions` | OpenAI Chat Completions |
+| POST | `/v1/responses` | OpenAI Responses |
+| POST | `/v1/messages` | Anthropic Messages |
+| GET | `/v1/openapi.json` | OpenAPI 文档 |
+| GET | `/v1/api-docs` | API 文档页面 |
+| GET | `/health` | 健康检查 |
 
-## 6. 当前产品边界
+## 文档
 
-当前明确不包含：
+- [产品需求（PRD）](docs/PRD.md) — 特性总览与详细行为、产品边界、Roadmap
+- [架构](docs/ARCHITECTURE.md) · [详细设计](docs/DESIGN.md)
+- [部署](docs/DEPLOY.md) · [测试](docs/TESTING.md) · [更新记录](CHANGELOG.md)
+- [贡献](CONTRIBUTING.md) · [安全](SECURITY.md) · 许可：MIT（[LICENSE](LICENSE)）
 
-- Responses 与 Chat / Messages 之间的协议转换；
-- Gemini 原生协议、Embeddings、Images、Audio、Realtime、Batch 和 Files；
-- 同渠道自动重试、流输出后的 Fallback；
-- 动态价格路由、自动套餐扣减和精确账单；
-- OAuth Provider、多用户、RBAC、Team/Project；
-- Prompt/Response 存储或语义缓存；
-- 跨 isolate 强一致的熔断、限流或预算状态（RPM 为 per-isolate 尽力窗口，每日预算以 D1 为准）。
-
-## 7. Roadmap
-
-### 已确认：Analytics（Usage / Logs）重构
-
-- 左侧导航新增 Analytics 分组，包含 Usage 与 Logs；页面内保留同名分段切换，旧
-  `/requests` 地址兼容跳转到 `/analytics/logs`。
-- Usage 提供时间范围、统一模型、Gateway Key 和聚合粒度筛选；展示 Token、请求量、
-  平均延迟、流式 TTFT、成功率与预估费用，并提供模型维度明细。
-- Logs 提供时间范围、模型、Key、渠道、状态和 Request ID 筛选，使用游标分页与按需刷新；
-  行详情展示路由尝试、Fallback、Token、费用、延迟和脱敏错误，不默认保存请求或响应正文。
-- 请求明细日志提供总开关，并保留异常/正常级别开关。上下文记录是独立的显式选项，默认关闭；
-  开启后只保存有上限、加密且短期保留的请求/响应预览，不记录 Header 或任何密钥。
-- 聚合指标始终保留，以支持用量、费用和预算；明细日志关闭时不写 `request_logs`。指标、Key
-  日用量和可选日志在同一个 `waitUntil()` 中通过一次 D1 `batch()` 提交，不阻塞模型响应。
-- 指标使用五分钟桶和有界保留期；日志列表默认不自动轮询、不做无条件总数查询。该能力不引入
-  KV、R2、Queues、Durable Objects 或外部日志服务，继续以 Cloudflare Free Tier 为约束。
-
-近期：
-
-- 发布 Analytics（Usage / Logs）重构并完成 Free Tier 写入基线验证；
-- 使用 OpenAI SDK 验证 Chat 和原生 Responses 的真实流式/非流式调用；
-- 使用 Anthropic SDK 验证原生 Messages 和 Messages → Chat 转换；
-- 完善自定义渠道的协议端点编辑校验和变更影响提示；
-- 完善 Anthropic 错误 envelope 和图片内容公共子集；
-- 建立 Free Tier 生产指标基线：CPU、D1 rows read/write、缓存命中率；
-- 密钥页面展示每日用量与剩余预算。
-
-后续候选：
-
-- Provider Adapter 能力矩阵与更多官方余额接口；
-- Responses ↔ Chat 转换；
-- 缓存命中的预算扣减策略；
-- 多用户和 RBAC；
-- 只有需要共享强状态时再评估 Durable Objects。
-
-Roadmap 不是已承诺的发布日期，已发布变化以 [CHANGELOG](CHANGELOG.md) 为准。
-
-## 8. 开发与验证
+## 开发与验证
 
 ```bash
-npm install
-npm run dev:setup
-npm run dev
-
-npm test
+npm test              # 单元测试
 npm run typecheck
-npm run build
-npm run test:e2e
+npm run build         # 构建 + 部署预检
+npm run test:e2e      # UI E2E
 ```
 
-当前测试包括 93 个单元测试、11 个无需真实 Provider Key 的 UI E2E，以及 10 个需要真实
-`DEEPSEEK_TEST_KEY` 的集成测试。环境准备、用例清单和运行边界见
-[测试指南](docs/TESTING.md)。
+测试环境准备与用例清单见 [测试指南](docs/TESTING.md)。

@@ -1,12 +1,23 @@
 # MyGateway 更新日志
 
-本文记录已发布变化和明确标记的待发布变化。产品现状与 Roadmap 见
-[README](README.md)；技术细节分别见[架构](docs/ARCHITECTURE.md)、
+本文记录已发布变化和明确标记的待发布变化。产品特性与 Roadmap 见
+[PRD](docs/PRD.md)；技术细节分别见[架构](docs/ARCHITECTURE.md)、
 [详细设计](docs/DESIGN.md)、[部署](docs/DEPLOY.md)和[测试](docs/TESTING.md)。
 
-## Unreleased：Analytics 用量与日志重构
+## 2026-08-10：价格库与产品化整理
 
-状态：本地实现并验证完成，待合入和部署。
+- 新增模型价格库（`model_prices`）：管理员维护模型基准价（输入/输出/缓存，USD/CNY），
+  渠道导入时自动预填；计费优先级为渠道实例价 > 价格库基准价 > 未定价不计费。
+- 缓存命中 Token 按缓存价计算费用（`computeCostMicros`），费用汇总到用量、密钥日用量与首页。
+- 新增 `/admin/api/model-prices`（GET/PUT/DELETE）；本地开发允许 loopback HTTP 渠道
+   （`scripts/mock-provider.mjs` 用于无真实 Key 的端到端验证）。
+- 管理控制台中英双语（i18n），顶部语言开关，选择持久化。
+- Analytics 页面重构：时间范围选择器（今日/7 天/30 天/自定义 + 粒度）、QwenCloud 风格
+  指标卡、Request trend 折线图与 Token consumption 堆叠柱状图（真实时间轴）。
+- 新增 [PRD](docs/PRD.md)（特性总表 + 分模块详述 + 边界 + Roadmap），README 精简为
+  入口文档；根目录废弃 `logo.png` 移除（品牌图统一放 `dashboard/public/`）。
+
+## 2026-08-08：Analytics 用量与日志重构
 
 - 左侧导航新增 Analytics 分组，包含用量分析和请求日志两个页面；旧 `/requests`
   自动跳转至 `/analytics/logs`。
@@ -54,8 +65,8 @@
 - 项目标准开源化：MIT License、CONTRIBUTING、SECURITY、GitHub Actions CI。
 - 单元测试 93 例。
 
-本文只记录已经合入并部署的用户可见变化。产品现状与 Roadmap 见
-[README](README.md)；技术细节分别见[架构](docs/ARCHITECTURE.md)、
+本文只记录已经合入并部署的用户可见变化。产品特性与 Roadmap 见
+[PRD](docs/PRD.md)；技术细节分别见[架构](docs/ARCHITECTURE.md)、
 [详细设计](docs/DESIGN.md)、[部署](docs/DEPLOY.md)和[测试](docs/TESTING.md)。
 
 ## 2026-08-05：控制台侧边栏与暗黑模式
