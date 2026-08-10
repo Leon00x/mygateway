@@ -63,6 +63,7 @@ export async function recordRequestCompletion(
 ): Promise<void> {
   const inputTokens = usage?.inputTokens ?? 0;
   const cacheInputTokens = Math.max(0, Math.min(inputTokens, usage?.cacheTokens ?? 0));
+  const cacheHit = ctx.cached || cacheInputTokens > 0;
   const outputTokens = usage?.outputTokens ?? 0;
   const costMicros = computeCostMicros(
     inputTokens,
@@ -209,7 +210,7 @@ export async function recordRequestCompletion(
         ctx.channelName,
         status,
         ctx.stream ? 1 : 0,
-        ctx.cached ? 1 : 0,
+        cacheHit ? 1 : 0,
         inputTokens,
         outputTokens,
         costMicros,

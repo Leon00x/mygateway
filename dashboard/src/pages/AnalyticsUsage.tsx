@@ -426,7 +426,7 @@ export default function AnalyticsUsage() {
             <div class="panel-header"><h2>{t('usage.modelsTable')}</h2><span class="analytics-hint">{t('usage.sortedByRequests')}</span></div>
             <div class="analytics-model-table">
               <div class="analytics-model-head">
-                <span>{t('common.model')}</span><span>{t('usage.requests')}</span><span>{t('usage.successRate')}</span><span>{t('usage.avgTpm')}</span><span>{t('usage.avgLatency')}</span><span>{t('usage.avgTtft')}</span><span>{t('usage.tokensSplit')}</span><span>{t('usage.cost')}</span>
+                <span>{t('common.model')}</span><span>{t('usage.requests')}</span><span>{t('usage.successRate')}</span><span>{t('usage.avgTpm')}</span><span>{t('usage.avgLatency')}</span><span>{t('usage.avgTtft')}</span><span>{t('usage.tokensSplit')}</span><span>{t('usage.cacheHitRate')}</span><span>{t('usage.cost')}</span>
               </div>
               <For each={models()}>{(model) => (
                 <div class="analytics-model-row">
@@ -437,6 +437,7 @@ export default function AnalyticsUsage() {
                   <span class="amodel-muted" data-label={t('usage.avgLatency')}>{model.avg_latency_ms != null ? `${model.avg_latency_ms}ms` : '-'}</span>
                   <span class="amodel-muted" data-label={t('usage.avgTtft')}>{model.avg_ttft_ms != null ? `${model.avg_ttft_ms}ms` : '-'}</span>
                   <span class="amodel-tokens" data-label={t('usage.tokensSplit')}>{fmtNum(Math.max(0, model.input_tokens - Math.min(model.input_tokens, model.cache_input_tokens)))} / {fmtNum(Math.min(model.input_tokens, model.cache_input_tokens))} / {fmtNum(model.output_tokens)}</span>
+                  <span data-label={t('usage.cacheHitRate')}>{pct(model.cache_input_tokens, model.input_tokens)}</span>
                   <span class="amodel-cost" data-label={t('usage.cost')}>{formatUsd(model.cost_micros)}</span>
                 </div>
               )}</For>

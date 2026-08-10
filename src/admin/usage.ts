@@ -42,6 +42,7 @@ export async function handleUsageOverview(
         COALESCE(SUM(cancelled_count), 0) AS cancelled,
         COALESCE(SUM(fallback_count), 0) AS fallbacks,
         COALESCE(SUM(input_tokens), 0) AS input_tokens,
+        COALESCE(SUM(cache_input_tokens), 0) AS cache_input_tokens,
         COALESCE(SUM(output_tokens), 0) AS output_tokens,
         COALESCE(SUM(usage_unknown_count), 0) AS usage_unknown,
         COALESCE(SUM(cost_micros), 0) AS cost_micros
@@ -51,8 +52,8 @@ export async function handleUsageOverview(
     .bind(start, end)
     .first<{
       requests: number; successes: number; errors: number; cancelled: number;
-      fallbacks: number; input_tokens: number; output_tokens: number;
-      usage_unknown: number; cost_micros: number;
+      fallbacks: number; input_tokens: number; cache_input_tokens: number;
+      output_tokens: number; usage_unknown: number; cost_micros: number;
     }>()
     .then((r) => ({
       requests: Number(r?.requests ?? 0),
@@ -61,6 +62,7 @@ export async function handleUsageOverview(
       cancelled: Number(r?.cancelled ?? 0),
       fallbacks: Number(r?.fallbacks ?? 0),
       input_tokens: Number(r?.input_tokens ?? 0),
+      cache_input_tokens: Number(r?.cache_input_tokens ?? 0),
       output_tokens: Number(r?.output_tokens ?? 0),
       usage_unknown: Number(r?.usage_unknown ?? 0),
       cost_micros: Number(r?.cost_micros ?? 0),
@@ -88,6 +90,7 @@ export async function handleUsageByModel(
         COALESCE(SUM(success_count), 0) AS successes,
         COALESCE(SUM(error_count), 0) AS errors,
         COALESCE(SUM(input_tokens), 0) AS input_tokens,
+        COALESCE(SUM(cache_input_tokens), 0) AS cache_input_tokens,
         COALESCE(SUM(output_tokens), 0) AS output_tokens,
         COALESCE(SUM(cost_micros), 0) AS cost_micros
       FROM analytics_minutes

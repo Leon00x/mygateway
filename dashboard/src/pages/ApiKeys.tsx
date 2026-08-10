@@ -176,10 +176,6 @@ export default function ApiKeys() {
 
   return (
     <div class="resource-page">
-      <Show when={revealedKey()}>
-        <div class="secret-reveal panel"><div><span class="eyebrow">{t('keys.revealOnce')}</span><h3>{t('keys.copySave')}</h3><code>{revealedKey()}</code></div><button class="secondary-button" onClick={() => navigator.clipboard.writeText(revealedKey())}>{t('keys.copy')}</button><button class="secret-close" onClick={() => setRevealedKey('')}>×</button></div>
-      </Show>
-
       <form onSubmit={createKey} class="panel key-create key-create-form">
         <div><h3>{t('keys.createTitle')}</h3><p>{t('keys.createSub')}</p></div>
         <input placeholder={t('keys.name')} value={createForm().name}
@@ -193,6 +189,10 @@ export default function ApiKeys() {
         <Show when={showLimits()}>{limitFields(createForm, setCreateForm)}</Show>
         <Show when={createError()}><div class="form-error">{createError()}</div></Show>
       </form>
+
+      <Show when={revealedKey()}>
+        <div class="secret-reveal panel"><div><span class="eyebrow">{t('keys.revealOnce')}</span><h3>{t('keys.copySave')}</h3><code>{revealedKey()}</code></div><button class="secondary-button" onClick={() => navigator.clipboard.writeText(revealedKey())}>{t('keys.copy')}</button><button class="secret-close" onClick={() => setRevealedKey('')}>×</button></div>
+      </Show>
 
       <section class="panel resource-list">
         <div class="panel-header"><div><h3>{t('keys.list')}</h3><p>{keys().filter((key) => key.status === 'active').length} {t('keys.activeCount')}</p></div></div>
