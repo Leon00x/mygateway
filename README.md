@@ -42,7 +42,7 @@ MyGateway Worker ── Gateway Key / 配额 ── 固定路由 / Fallback ─�
 | 虚拟密钥 | RPM、每日请求 / Token 预算、到期时间、模型白名单 |
 | Analytics | 5 分钟聚合、Token、预估费用、延迟、流式 TTFT、成功率与请求日志 |
 | 控制台 | 渠道检测和模型导入、模型与价格库、密钥、用量、日志、系统设置 |
-| 安全 | 管理员 Session、Provider Key AES-GCM、Gateway Key 哈希、可选加密上下文预览 |
+| 安全 | 管理员 Session、Provider Key AES-GCM、Gateway Key 哈希与到期控制、可选加密上下文预览 |
 
 完整状态、行为和 Roadmap 以 [PRD](docs/PRD.md) 为准。
 

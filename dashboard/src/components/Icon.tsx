@@ -1,6 +1,6 @@
 import type { JSX } from 'solid-js';
 
-export type IconName = 'home' | 'channels' | 'models' | 'keys' | 'analytics' | 'analytics-folder' | 'requests' | 'system' | 'docs' | 'logout' | 'search' | 'menu' | 'close' | 'moon' | 'sun' | 'panel-collapse' | 'panel-expand';
+export type IconName = 'home' | 'channels' | 'models' | 'keys' | 'analytics' | 'analytics-folder' | 'requests' | 'system' | 'docs' | 'logout' | 'search' | 'menu' | 'close' | 'moon' | 'sun' | 'panel-collapse' | 'panel-expand' | 'copy' | 'sliders' | 'pause' | 'play' | 'trash' | 'plus' | 'calendar';
 
 export default function Icon(props: { name: IconName; size?: number; class?: string }) {
   const size = () => props.size ?? 18;
@@ -22,6 +22,13 @@ export default function Icon(props: { name: IconName; size?: number; class?: str
     sun: <><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42"/></>,
     'panel-collapse': <><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M16 9l-3 3 3 3"/></>,
     'panel-expand': <><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M13 9l3 3-3 3"/></>,
+    copy: <><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></>,
+    sliders: <><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></>,
+    pause: <><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></>,
+    play: <path d="m8 5 11 7-11 7Z"/>,
+    trash: <><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></>,
+    plus: <path d="M12 5v14M5 12h14"/>,
+    calendar: <><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></>,
   };
   return (
     <svg class={props.class} width={size()} height={size()} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

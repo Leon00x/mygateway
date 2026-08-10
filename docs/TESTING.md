@@ -97,10 +97,11 @@ E2E 会创建、修改和删除渠道、模型与 Gateway Key。不要指向包�
 4. 通过预制弹窗添加 DeepSeek 渠道，验证保存前必须预检、失败降级保存、完成动效、自动余额
    查询、手工库存、勾选导入、批量摘要和竖向渠道卡片；
 5. 创建统一模型和渠道实例；
-6. 创建 Gateway Key，明文只展示一次；
+6. 创建带精确到期时间的 Gateway Key，验证明文只展示一次，并拒绝创建已过期密钥；
 7. 调用 `/v1/models` 和 Chat 接口，验证认证、错误和 timing Header；
 8. 无 Gateway Key 返回 401；
-9. Dashboard 显示渠道、模型和 Provider Balance；
+9. Dashboard 显示渠道、模型和 Provider Balance；创建 1 小时临时密钥，验证刷新后从
+   `localStorage` 恢复，并在本地到期后自动清除；
 10. 删除渠道显示关联影响，清理失去最后实例的统一模型，并保留仍有备用渠道的模型；
 11. Analytics Usage 页面展示指标卡、模型表和筛选切换；
 12. Analytics Logs 页面展示日志表、游标分页和详情抽屉，日志设置区在系统设置页；

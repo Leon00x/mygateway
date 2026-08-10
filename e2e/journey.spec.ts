@@ -145,13 +145,13 @@ test('5. create model card + add instance via UI', async ({ page, request }) => 
 
   // Expand the card and add an instance through the UI
   const cardRow = page.locator('.model-card', { hasText: modelId });
-  await cardRow.getByRole('button', { name: '+ 添加实例' }).click();
+  await cardRow.getByRole('button', { name: '+ 添加渠道' }).click();
 
   // Select the channel in the dropdown
   await page.locator('form select').first().selectOption(ch.id);
   await page.getByPlaceholder('选择已发现模型或直接输入').fill('deepseek-chat');
   await page.getByPlaceholder('ds-deepseek-chat').fill(channelAlias);
-  await page.locator('form.modal-card').getByRole('button', { name: '+ 添加实例', exact: true }).click();
+  await page.locator('form.modal-card').getByRole('button', { name: '+ 添加渠道', exact: true }).click();
 
   // Instance row appears with alias + channel
   await expect(page.getByText(channelAlias, { exact: true })).toBeVisible({ timeout: 10_000 });
@@ -179,12 +179,17 @@ test('5. create model card + add instance via UI', async ({ page, request }) => 
   expect(direct.instances[0].channel_model_id).toBe('deepseek-direct-e2e');
 });
 
-test('6. create gateway key → plaintext shown once', async ({ page }) => {
+test('6. create gateway key with expiration → plaintext shown once', async ({ page }) => {
   await loginViaUi(page);
   await page.locator('.sidebar').getByRole('link', { name: /密钥/ }).click();
   await expect(page).toHaveURL(/\/keys/);
 
-  await page.getByPlaceholder('密钥名称').fill(uniq('e2e-key'));
+  const keyName = uniq('e2e-key');
+  const expiresAt = new Date(Date.now() + 86_400_000);
+  const localExpiry = new Date(expiresAt.getTime() - expiresAt.getTimezoneOffset() * 60_000)
+    .toISOString().slice(0, 16);
+  await page.getByPlaceholder('密钥名称').fill(keyName);
+  await page.getByLabel('到期时间').fill(localExpiry);
   await page.getByRole('button', { name: /创建密钥/ }).click();
 
   const reveal = page.locator('.secret-reveal');
@@ -194,6 +199,15 @@ test('6. create gateway key → plaintext shown once', async ({ page }) => {
   gwKey = text.trim();
 
   await expect(page.getByText(/gw_/).first()).toBeVisible();
+  const keys = await page.request.get('/admin/api/keys').then((response) => response.json());
+  const created = keys.find((key: any) => key.name === keyName);
+  expect(created.expires_at).toBeGreaterThan(Math.floor(Date.now() / 1000));
+  expect(created.expires_at).toBeLessThanOrEqual(Math.floor(expiresAt.getTime() / 1000) + 60);
+
+  const invalidExpiry = await page.request.post('/admin/api/keys', {
+    data: { name: 'expired-e2e', expires_at: Math.floor(Date.now() / 1000) - 60 },
+  });
+  expect(invalidExpiry.status()).toBe(400);
 });
 
 test('7. gateway call via real HTTP with Bearer key', async ({ request }) => {
@@ -250,6 +264,25 @@ test('9. dashboard shows channel and model', async ({ page }) => {
   await expect(page.getByText(modelId, { exact: true })).toBeVisible();
   await expect(page.getByText('供应商余额')).toBeVisible();
   await expect(page.getByText('点击刷新后查询')).toBeVisible();
+
+  await page.getByRole('button', { name: '创建临时密钥并复制命令' }).click();
+  await expect(page.getByText(/临时密钥仅保存在此浏览器/)).toBeVisible();
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('mygateway.quickstartTempKey') ?? 'null'));
+  expect(stored.key).toMatch(/^gw_[A-Za-z0-9_-]{20,}/);
+  expect(stored.expiresAt).toBeGreaterThan(Date.now());
+  await expect(page.locator('.quickstart-panel pre')).toContainText(stored.key);
+
+  await page.reload();
+  await expect(page.locator('.quickstart-panel pre')).toContainText(stored.key);
+  await expect(page.getByRole('button', { name: '复制临时密钥命令' })).toBeVisible();
+
+  await page.evaluate(() => {
+    const storedKey = JSON.parse(localStorage.getItem('mygateway.quickstartTempKey') ?? 'null');
+    localStorage.setItem('mygateway.quickstartTempKey', JSON.stringify({ ...storedKey, expiresAt: Date.now() - 1 }));
+  });
+  await page.reload();
+  await expect(page.locator('.quickstart-panel pre')).toContainText('YOUR_GATEWAY_KEY');
+  expect(await page.evaluate(() => localStorage.getItem('mygateway.quickstartTempKey'))).toBeNull();
 });
 
 test('10. delete channel reports impact and removes orphan models', async ({ page }) => {

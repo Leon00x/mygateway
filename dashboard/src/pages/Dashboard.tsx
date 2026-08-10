@@ -1,4 +1,4 @@
-import { createSignal, onMount, Show, For } from 'solid-js';
+import { createSignal, onCleanup, onMount, Show, For } from 'solid-js';
 import { A } from '@solidjs/router';
 import Icon, { IconName } from '../components/Icon';
 import { t } from '../i18n';
@@ -12,7 +12,7 @@ import {
 } from '../provider-balances';
 
 interface UsageOverview { requests: number; successes: number; errors: number; input_tokens: number; cache_input_tokens: number; output_tokens: number; usage_unknown: number; fallbacks?: number; cost_micros?: number; }
-interface ApiKey { id: string; name: string; key_prefix: string; status: string; }
+interface ApiKey { id: string; name: string; key_prefix: string; status: string; expires_at: number | null; }
 interface Channel { id: string; name: string; provider_type: string; base_url: string; status: string; }
 interface ModelItem { id: string; unified_model_id: string; display_name: string; status: string; }
 
@@ -24,6 +24,23 @@ const shortcuts: { href: string; label: string; note: string; icon: IconName }[]
 ];
 
 const protocols = ['/chat/completions', '/responses', '/messages'];
+const TEMP_KEY_STORAGE = 'mygateway.quickstartTempKey';
+
+interface StoredTempKey {
+  key: string;
+  expiresAt: number;
+}
+
+function readStoredTempKey(): StoredTempKey | null {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(TEMP_KEY_STORAGE) ?? 'null') as Partial<StoredTempKey> | null;
+    if (typeof parsed?.key === 'string' && typeof parsed.expiresAt === 'number' && parsed.expiresAt > Date.now()) {
+      return { key: parsed.key, expiresAt: parsed.expiresAt };
+    }
+    localStorage.removeItem(TEMP_KEY_STORAGE);
+  } catch { /* storage can be unavailable or contain stale data */ }
+  return null;
+}
 
 export default function Dashboard() {
   const [overview, setOverview] = createSignal<UsageOverview | null>(null);
@@ -41,8 +58,11 @@ export default function Dashboard() {
   const endpointUrl = () => baseUrl() + protocolPath();
   const protocolLabel = () => protocols.includes(protocolPath()) ? protocolPath() : protocols[0];
   const [tempKey, setTempKey] = createSignal('');
+  const [tempKeyExpiresAt, setTempKeyExpiresAt] = createSignal(0);
   const [tempBusy, setTempBusy] = createSignal(false);
   const [tempCopied, setTempCopied] = createSignal(false);
+  const [tempError, setTempError] = createSignal('');
+  let tempExpiryTimer: ReturnType<typeof setTimeout> | undefined;
 
   const fetchOverview = async () => {
     const response = await fetch(`/admin/api/usage/overview?range=${range()}`);
@@ -66,31 +86,78 @@ export default function Dashboard() {
       }
     } finally { setLoading(false); }
   };
-  onMount(fetchData);
+  const refreshKeys = async () => {
+    const response = await fetch('/admin/api/keys');
+    if (response.ok) setKeys(await response.json());
+  };
+
+  const clearTempKey = () => {
+    setTempKey('');
+    setTempKeyExpiresAt(0);
+    try { localStorage.removeItem(TEMP_KEY_STORAGE); } catch { /* storage may be unavailable */ }
+    if (tempExpiryTimer) clearTimeout(tempExpiryTimer);
+    tempExpiryTimer = undefined;
+  };
+
+  const keepTempKeyUntilExpiry = (key: string, expiresAtSeconds: number) => {
+    const expiresAt = expiresAtSeconds * 1000;
+    setTempKey(key);
+    setTempKeyExpiresAt(expiresAt);
+    try { localStorage.setItem(TEMP_KEY_STORAGE, JSON.stringify({ key, expiresAt } satisfies StoredTempKey)); } catch { /* storage may be unavailable */ }
+    if (tempExpiryTimer) clearTimeout(tempExpiryTimer);
+    tempExpiryTimer = setTimeout(clearTempKey, Math.max(0, expiresAt - Date.now()));
+  };
+
   onMount(() => {
-    document.addEventListener('click', (e) => {
-      if (!(e.target as HTMLElement).closest('.protocol-picker')) setProtocolOpen(false);
-    });
+    void fetchData();
+    const stored = readStoredTempKey();
+    if (stored) keepTempKeyUntilExpiry(stored.key, Math.floor(stored.expiresAt / 1000));
   });
+  onMount(() => {
+    const closeProtocolPicker = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement).closest('.protocol-picker')) setProtocolOpen(false);
+    };
+    document.addEventListener('click', closeProtocolPicker);
+    onCleanup(() => document.removeEventListener('click', closeProtocolPicker));
+  });
+  onCleanup(() => { if (tempExpiryTimer) clearTimeout(tempExpiryTimer); });
+
+  const copyTempCommand = async (key = tempKey()) => {
+    try {
+      await navigator.clipboard.writeText(curlExample(baseUrl(), activeModels()[0]?.unified_model_id, key));
+      setTempCopied(true);
+      setTimeout(() => setTempCopied(false), 2000);
+    } catch {
+      setTempError(t('dash.copyFailed'));
+    }
+  };
 
   const createTempKey = async () => {
+    if (tempKey() && tempKeyExpiresAt() > Date.now()) {
+      await copyTempCommand();
+      return;
+    }
     setTempBusy(true);
+    setTempError('');
     try {
+      const requestedExpiry = Math.floor(Date.now() / 1000) + 3600;
       const response = await fetch('/admin/api/keys', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: t('dash.tempKeyName'),
-          expires_at: Math.floor(Date.now() / 1000) + 3600,
+          expires_at: requestedExpiry,
         }),
       });
-      if (!response.ok) return;
-      const data = (await response.json()) as { key: string };
-      setTempKey(data.key);
-      setTempCopied(true);
-      setTimeout(() => setTempCopied(false), 2000);
-      try { await navigator.clipboard.writeText(curlExample(baseUrl(), activeModels()[0]?.unified_model_id, data.key)); } catch { /* command stays visible in the example */ }
-      void fetchKeys();
+      if (!response.ok) {
+        const data = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+        setTempError(data?.error?.message ?? t('dash.tempKeyFailed'));
+        return;
+      }
+      const data = (await response.json()) as { key: string; expires_at: number | null };
+      keepTempKeyUntilExpiry(data.key, data.expires_at ?? requestedExpiry);
+      await copyTempCommand(data.key);
+      void refreshKeys();
     } finally {
       setTempBusy(false);
     }
@@ -114,7 +181,7 @@ export default function Dashboard() {
   const copy = async (text: string, label: string) => {
     await navigator.clipboard.writeText(text); setCopied(label); setTimeout(() => setCopied(''), 1800);
   };
-  const activeKeys = () => keys().filter((item) => item.status === 'active');
+  const activeKeys = () => keys().filter((item) => item.status === 'active' && (!item.expires_at || item.expires_at * 1000 > Date.now()));
   const activeModels = () => models().filter((item) => item.status === 'active');
   const activeChannels = () => channels().filter((item) => item.status === 'active');
   const visibleBalances = () => {
@@ -251,13 +318,14 @@ export default function Dashboard() {
         <div class="panel-header">
           <div><h2>{t('dash.quickstart')}</h2><p>{t('dash.quickstartSub')}</p></div>
           <div class="action-row">
-            <button class="secondary-button" onClick={() => copy(curlExample(baseUrl(), activeModels()[0]?.unified_model_id, tempKey() || 'YOUR_GATEWAY_KEY'), 'curl')}>{copied() === 'curl' ? t('dash.copied') : t('dash.copyCmd')}</button>
-            <button class="secondary-button" disabled={tempBusy()} onClick={createTempKey}>{tempBusy() ? t('dash.creatingTempKey') : tempCopied() ? t('dash.tempKeyCopied') : t('dash.createTempKey')}</button>
+            <button class="secondary-button" onClick={() => copy(curlExample(baseUrl(), activeModels()[0]?.unified_model_id, tempKey() || 'YOUR_GATEWAY_KEY'), 'curl')}><Icon name="copy" size={15} />{copied() === 'curl' ? t('dash.copied') : t('dash.copyCmd')}</button>
+            <button class="primary-button" disabled={tempBusy()} onClick={createTempKey}><Icon name={tempKey() ? 'copy' : 'keys'} size={15} />{tempBusy() ? t('dash.creatingTempKey') : tempCopied() ? t('dash.tempKeyCopied') : tempKey() ? t('dash.copyTempKey') : t('dash.createTempKey')}</button>
           </div>
         </div>
         <Show when={tempKey()}>
-          <small class="quickstart-hint">{t('dash.tempKeyHint')}</small>
+          <small class="quickstart-hint">{t('dash.tempKeyStoredUntil')} {new Date(tempKeyExpiresAt()).toLocaleString()}</small>
         </Show>
+        <Show when={tempError()}><div class="form-error quickstart-error">{tempError()}</div></Show>
         <pre>{curlExample(baseUrl(), activeModels()[0]?.unified_model_id, tempKey() || 'YOUR_GATEWAY_KEY')}</pre>
       </section>
     </div>

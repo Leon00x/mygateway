@@ -41,6 +41,9 @@ function parseOptionalExpiry(value: unknown): number | null {
   if (!Number.isInteger(parsed) || parsed <= 0) {
     throw new Error('expires_at must be a unix timestamp in seconds');
   }
+  if (parsed <= Math.floor(Date.now() / 1000)) {
+    throw new Error('expires_at must be in the future');
+  }
   return parsed;
 }
 
