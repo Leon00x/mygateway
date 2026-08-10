@@ -28,6 +28,7 @@ import {
   PROVIDER_PRESETS,
 } from '../shared/provider-presets.ts';
 import { invalidateModelRouteCache } from '../gateway/access-resolver.ts';
+import { getModelPrices } from '../db/model-prices.ts';
 import type { ChannelProtocol } from '../gateway/protocols.ts';
 
 const DISCOVERY_TIMEOUT_MS = 10_000;
@@ -260,10 +261,26 @@ export async function handleChannelModelImport(
 ): Promise<Response> {
   const channel = await getChannel(env.DB, channelId);
   if (!channel) return json({ error: { message: 'Channel not found' } }, 404);
-  const body = await request.json() as { models?: Array<{ provider_model_id?: string; unified_model_id?: string }> };
+  const body = await request.json() as {
+    models?: Array<{ provider_model_id?: string; unified_model_id?: string }>;
+    prices?: Record<string, { input?: number | null; output?: number | null; cache?: number | null; currency?: string }>;
+  };
   if (!Array.isArray(body.models) || body.models.length === 0 || body.models.length > 100) {
     return json({ error: { message: 'models must contain 1 to 100 items' } }, 400);
   }
+  const baseline = await getModelPrices(env.DB, body.models.map((m) => m.provider_model_id?.trim() ?? ''));
+  const resolvePrice = (providerModelId: string) => {
+    const override = body.prices?.[providerModelId];
+    const base = baseline.get(providerModelId);
+    const pick = (v: number | null | undefined, fallback: number | null | undefined): number | null =>
+      v !== undefined && v !== null && !Number.isNaN(v) ? Math.round(v) : (fallback ?? null);
+    return {
+      input: pick(override?.input, base?.input_price_micros_per_million ?? null),
+      output: pick(override?.output, base?.output_price_micros_per_million ?? null),
+      cache: pick(override?.cache, base?.cache_input_price_micros_per_million ?? null),
+      currency: override?.currency === 'CNY' ? 'CNY' : (base?.currency ?? 'USD'),
+    };
+  };
   const results: Array<Record<string, unknown>> = [];
   for (const item of body.models) {
     const providerModelId = item.provider_model_id?.trim() ?? '';
@@ -325,8 +342,11 @@ export async function handleChannelModelImport(
         channel_model_id: providerModelId, public_model_alias: alias,
         sort_order: count?.count ?? 0, status: 'active',
         supports_stream_usage: getPresetById(inferPresetId(channel) ?? '')?.supports_stream_usage ? 1 : 0,
-        input_price_micros_per_million: null, output_price_micros_per_million: null,
-        currency: null, plan_tokens_total: null, plan_tokens_remaining: null, plan_expires_at: null,
+        input_price_micros_per_million: resolvePrice(providerModelId).input,
+        output_price_micros_per_million: resolvePrice(providerModelId).output,
+        cache_input_price_micros_per_million: resolvePrice(providerModelId).cache,
+        currency: resolvePrice(providerModelId).currency,
+        plan_tokens_total: null, plan_tokens_remaining: null, plan_expires_at: null,
       });
       await createIdentifier(env.DB, {
         identifier: alias, identifier_type: 'alias', model_card_id: existingCard?.id ?? modelCardId, channel_model_id: instanceId,

@@ -6,6 +6,8 @@
 export interface Usage {
   inputTokens: number;
   outputTokens: number;
+  /** Prompt cache-hit tokens (DeepSeek prompt_cache_hit_tokens / OpenAI cached_tokens). */
+  cacheTokens?: number;
 }
 
 export class SseDecoder {
@@ -152,7 +154,7 @@ export class SseDecoder {
         const prompt = obj.usage.prompt_tokens ?? obj.usage.input_tokens;
         const completion = obj.usage.completion_tokens ?? obj.usage.output_tokens;
         if (isTokenCount(prompt) && isTokenCount(completion)) {
-          this.lastUsage = { inputTokens: prompt, outputTokens: completion };
+          this.lastUsage = { inputTokens: prompt, outputTokens: completion, cacheTokens: readCacheTokens(obj.usage as Record<string, unknown>) };
         } else if (isTokenCount(completion) && this.lastUsage) {
           this.lastUsage = { ...this.lastUsage, outputTokens: completion };
         }
@@ -162,7 +164,7 @@ export class SseDecoder {
         const prompt = responseUsage.input_tokens;
         const completion = responseUsage.output_tokens;
         if (isTokenCount(prompt) && isTokenCount(completion)) {
-          this.lastUsage = { inputTokens: prompt, outputTokens: completion };
+          this.lastUsage = { inputTokens: prompt, outputTokens: completion, cacheTokens: readCacheTokens(responseUsage as Record<string, unknown>) };
         }
       }
       const messageUsage = obj.message?.usage;
@@ -170,7 +172,7 @@ export class SseDecoder {
         const prompt = messageUsage.input_tokens;
         const completion = messageUsage.output_tokens;
         if (isTokenCount(prompt) && isTokenCount(completion)) {
-          this.lastUsage = { inputTokens: prompt, outputTokens: completion };
+          this.lastUsage = { inputTokens: prompt, outputTokens: completion, cacheTokens: readCacheTokens(messageUsage as Record<string, unknown>) };
         }
       }
     } catch {
@@ -195,10 +197,22 @@ export function extractNonStreamUsage(body: unknown): Usage | null {
   const completion = u.completion_tokens ?? u.output_tokens;
 
   if (isTokenCount(prompt) && isTokenCount(completion)) {
-    return { inputTokens: prompt, outputTokens: completion };
+    return { inputTokens: prompt, outputTokens: completion, cacheTokens: readCacheTokens(u) };
   }
 
   return null;
+}
+
+/** Prompt cache-hit tokens from common usage shapes. */
+function readCacheTokens(u: Record<string, unknown>): number | undefined {
+  const details = u.prompt_tokens_details;
+  if (details && typeof details === 'object') {
+    const cached = (details as Record<string, unknown>).cached_tokens;
+    if (isTokenCount(cached)) return cached;
+  }
+  if (isTokenCount(u.prompt_cache_hit_tokens)) return u.prompt_cache_hit_tokens;
+  if (isTokenCount(u.cached_tokens)) return u.cached_tokens;
+  return undefined;
 }
 
 function isTokenCount(value: unknown): value is number {

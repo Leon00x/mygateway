@@ -38,6 +38,7 @@ const ctx = (overrides: Partial<UsageRecordContext> = {}): UsageRecordContext =>
   channelName: 'DeepSeek',
   inputPriceMicrosPerMillion: null,
   outputPriceMicrosPerMillion: null,
+  cacheInputPriceMicrosPerMillion: null,
   attemptCount: 1,
   fallbackOccurred: false,
   stream: false,

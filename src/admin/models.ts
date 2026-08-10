@@ -106,6 +106,7 @@ export async function handleModelsCollection(
             sort_order: 0, status: 'active',
             supports_stream_usage: getPresetById(channel.preset_id ?? '')?.supports_stream_usage ? 1 : 0,
             input_price_micros_per_million: null, output_price_micros_per_million: null,
+            cache_input_price_micros_per_million: null,
             currency: null, plan_tokens_total: null, plan_tokens_remaining: null, plan_expires_at: null,
           });
           await createIdentifier(env.DB, {
@@ -208,6 +209,7 @@ export async function handleModelInstances(
       supports_stream_usage?: boolean;
       input_price_micros_per_million?: number | null;
       output_price_micros_per_million?: number | null;
+      cache_input_price_micros_per_million?: number | null;
     };
 
     if (!body.channel_id || !body.channel_model_id || !body.public_model_alias) {
@@ -235,6 +237,7 @@ export async function handleModelInstances(
       supports_stream_usage: body.supports_stream_usage ? 1 : 0,
       input_price_micros_per_million: parseOptionalPrice(body.input_price_micros_per_million),
       output_price_micros_per_million: parseOptionalPrice(body.output_price_micros_per_million),
+      cache_input_price_micros_per_million: parseOptionalPrice(body.cache_input_price_micros_per_million),
       currency: 'USD',
       plan_tokens_total: null,
       plan_tokens_remaining: null,
@@ -273,6 +276,8 @@ export async function handleModelInstanceItem(
     const body = (await request.json()) as {
       input_price_micros_per_million?: number | null;
       output_price_micros_per_million?: number | null;
+      cache_input_price_micros_per_million?: number | null;
+      currency?: string;
       supports_stream_usage?: boolean;
     };
     const now = Math.floor(Date.now() / 1000);
@@ -285,6 +290,17 @@ export async function handleModelInstanceItem(
     if (body.output_price_micros_per_million !== undefined) {
       fields.push('output_price_micros_per_million = ?');
       values.push(parseOptionalPrice(body.output_price_micros_per_million));
+    }
+    if (body.cache_input_price_micros_per_million !== undefined) {
+      fields.push('cache_input_price_micros_per_million = ?');
+      values.push(parseOptionalPrice(body.cache_input_price_micros_per_million));
+    }
+    if (body.currency !== undefined) {
+      if (body.currency !== 'USD' && body.currency !== 'CNY') {
+        return gatewayErrorResponse('invalid_request', 'currency must be USD or CNY', requestId);
+      }
+      fields.push('currency = ?');
+      values.push(body.currency);
     }
     if (body.supports_stream_usage !== undefined) {
       fields.push('supports_stream_usage = ?');

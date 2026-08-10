@@ -11,11 +11,17 @@ export function computeCostMicros(
   outputTokens: number,
   inputPriceMicrosPerMillion: number | null,
   outputPriceMicrosPerMillion: number | null,
+  cacheTokens: number = 0,
+  cacheInputPriceMicrosPerMillion: number | null = null,
 ): number {
   const inputPrice = inputPriceMicrosPerMillion ?? 0;
   const outputPrice = outputPriceMicrosPerMillion ?? 0;
-  if (inputPrice === 0 && outputPrice === 0) return 0;
-  const cost = (inputTokens * inputPrice + outputTokens * outputPrice) / 1_000_000;
+  if (inputPrice === 0 && outputPrice === 0 && !cacheTokens) return 0;
+  // Cache-hit tokens bill at the cache price when configured, otherwise at the
+  // normal input price (conservative).
+  const cachePrice = cacheInputPriceMicrosPerMillion ?? inputPrice;
+  const nonCachedInput = Math.max(0, inputTokens - cacheTokens);
+  const cost = (nonCachedInput * inputPrice + cacheTokens * cachePrice + outputTokens * outputPrice) / 1_000_000;
   return Math.round(cost);
 }
 

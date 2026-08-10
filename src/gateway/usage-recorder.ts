@@ -25,6 +25,7 @@ export interface UsageRecordContext {
   channelName: string;
   inputPriceMicrosPerMillion: number | null;
   outputPriceMicrosPerMillion: number | null;
+  cacheInputPriceMicrosPerMillion: number | null;
   attemptCount: number;
   fallbackOccurred: boolean;
   stream: boolean;
@@ -67,6 +68,8 @@ export async function recordRequestCompletion(
     outputTokens,
     ctx.inputPriceMicrosPerMillion,
     ctx.outputPriceMicrosPerMillion,
+    usage?.cacheTokens ?? 0,
+    ctx.cacheInputPriceMicrosPerMillion,
   );
   const date = utcDateString();
   const logId = generateId();

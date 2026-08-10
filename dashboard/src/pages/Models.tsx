@@ -38,6 +38,8 @@ interface Instance {
   supports_stream_usage: number;
   input_price_micros_per_million: number | null;
   output_price_micros_per_million: number | null;
+  cache_input_price_micros_per_million: number | null;
+  currency: string | null;
 }
 
 interface ModelCard {
@@ -72,6 +74,8 @@ export default function Models() {
   const [instStreamUsage, setInstStreamUsage] = createSignal(true);
   const [instInputPrice, setInstInputPrice] = createSignal('');
   const [instOutputPrice, setInstOutputPrice] = createSignal('');
+  const [instCachePrice, setInstCachePrice] = createSignal('');
+  const [instCurrency, setInstCurrency] = createSignal<'USD' | 'CNY'>('USD');
   const [instError, setInstError] = createSignal('');
   const [instBusy, setInstBusy] = createSignal(false);
 
@@ -79,6 +83,8 @@ export default function Models() {
   const [editInst, setEditInst] = createSignal<{ card: ModelCard; instance: Instance } | null>(null);
   const [editInstInput, setEditInstInput] = createSignal('');
   const [editInstOutput, setEditInstOutput] = createSignal('');
+  const [editInstCache, setEditInstCache] = createSignal('');
+  const [editInstCurrency, setEditInstCurrency] = createSignal<'USD' | 'CNY'>('USD');
   const [editInstBusy, setEditInstBusy] = createSignal(false);
 
   // Edit card
@@ -180,6 +186,8 @@ export default function Models() {
     setInstStreamUsage(true);
     setInstInputPrice('');
     setInstOutputPrice('');
+    setInstCachePrice('');
+    setInstCurrency('USD');
     setInstError('');
     if (activeChannels()[0]?.id) void loadChannelInventory(activeChannels()[0].id);
   };
@@ -201,6 +209,8 @@ export default function Models() {
           supports_stream_usage: instStreamUsage(),
           input_price_micros_per_million: dollarsToMicros(instInputPrice()),
           output_price_micros_per_million: dollarsToMicros(instOutputPrice()),
+          cache_input_price_micros_per_million: dollarsToMicros(instCachePrice()),
+          currency: instCurrency(),
         }),
       });
       if (resp.ok) {
@@ -276,6 +286,8 @@ export default function Models() {
     setEditInst({ card, instance });
     setEditInstInput(microsToDollars(instance.input_price_micros_per_million));
     setEditInstOutput(microsToDollars(instance.output_price_micros_per_million));
+    setEditInstCache(microsToDollars(instance.cache_input_price_micros_per_million));
+    setEditInstCurrency(instance.currency === 'CNY' ? 'CNY' : 'USD');
   };
 
   const savePricing = async (e: Event) => {
@@ -290,6 +302,8 @@ export default function Models() {
         body: JSON.stringify({
           input_price_micros_per_million: dollarsToMicros(editInstInput()),
           output_price_micros_per_million: dollarsToMicros(editInstOutput()),
+          cache_input_price_micros_per_million: dollarsToMicros(editInstCache()),
+          currency: editInstCurrency(),
         }),
       });
       if (resp.ok) { setEditInst(null); await fetchAll(); }
@@ -300,13 +314,18 @@ export default function Models() {
     const input = inst.input_price_micros_per_million;
     const output = inst.output_price_micros_per_million;
     if (input === null && output === null) return t('models.unpriced');
-    return `$${((input ?? 0) / 1_000_000).toFixed(2)} / $${((output ?? 0) / 1_000_000).toFixed(2)} M`;
+    const sym = inst.currency === 'CNY' ? '¥' : '$';
+    const parts = [`${sym}${((input ?? 0) / 1_000_000).toFixed(2)}/${sym}${((output ?? 0) / 1_000_000).toFixed(2)} M`];
+    if (inst.cache_input_price_micros_per_million != null && inst.cache_input_price_micros_per_million > 0) {
+      parts.push(`${sym}${(inst.cache_input_price_micros_per_million / 1_000_000).toFixed(2)} C`);
+    }
+    return parts.join(' · ');
   };
 
   return (
     <div class="resource-page model-page">
       <div class="page-heading">
-        <div><h2>Unified Models</h2><p>{t('models.subtitle')}</p></div>
+        <div><h2>{t('models.title')}</h2><p>{t('models.subtitle')}</p></div>
         <button onClick={() => setShowCreate(!showCreate())} class="primary-button">{t('models.create')}</button>
       </div>
 
@@ -415,7 +434,7 @@ export default function Models() {
         return (
           <div class="modal-backdrop" onClick={() => setAddForCard(null)}>
             <form class="modal-card form-stack" onSubmit={submitInstance} onClick={(e) => e.stopPropagation()}>
-              <div class="modal-title"><div><span class="eyebrow">Instance</span><h3>{t('models.bindInstanceTitle')}</h3><p>{card()?.display_name} · {card()?.unified_model_id}</p></div><button type="button" onClick={() => setAddForCard(null)}>×</button></div>
+              <div class="modal-title"><div><span class="eyebrow">{t('models.eyebrowInstance')}</span><h3>{t('models.bindInstanceTitle')}</h3><p>{card()?.display_name} · {card()?.unified_model_id}</p></div><button type="button" onClick={() => setAddForCard(null)}>×</button></div>
               <Show when={activeChannels().length === 0}>
                 <div class="form-error">{t('models.noChannels')}</div>
               </Show>
@@ -445,6 +464,15 @@ export default function Models() {
                 <label>{t('models.outputPrice')}
                   <input type="number" min="0" step="0.01" placeholder="—" value={instOutputPrice()} onInput={(e) => setInstOutputPrice(e.currentTarget.value)} />
                 </label>
+                <label>{t('models.cachePrice')}
+                  <input type="number" min="0" step="0.01" placeholder="—" value={instCachePrice()} onInput={(e) => setInstCachePrice(e.currentTarget.value)} />
+                </label>
+                <label>{t('models.currency')}
+                  <select value={instCurrency()} onChange={(e) => setInstCurrency(e.currentTarget.value as 'USD' | 'CNY')}>
+                    <option value="USD">USD</option>
+                    <option value="CNY">CNY</option>
+                  </select>
+                </label>
               </div>
               <Show when={instError()}><div class="form-error">{instError()}</div></Show>
               <div class="modal-actions"><button type="button" class="secondary-button" onClick={() => setAddForCard(null)}>{t('common.cancel')}</button><button type="submit" disabled={instBusy()} class="primary-button">{instBusy() ? t('common.loading') : t('models.addInstance')}</button></div>
@@ -457,13 +485,22 @@ export default function Models() {
       <Show when={editInst()}>{(target) => (
         <div class="modal-backdrop" onClick={() => setEditInst(null)}>
           <form class="modal-card form-stack" onSubmit={savePricing} onClick={(e) => e.stopPropagation()}>
-            <div class="modal-title"><div><span class="eyebrow">Pricing</span><h3>{t('models.pricing')}</h3><p>{target().instance.public_model_alias} · {target().card.unified_model_id}</p></div><button type="button" onClick={() => setEditInst(null)}>×</button></div>
+            <div class="modal-title"><div><span class="eyebrow">{t('models.eyebrowPricing')}</span><h3>{t('models.pricing')}</h3><p>{target().instance.public_model_alias} · {target().card.unified_model_id}</p></div><button type="button" onClick={() => setEditInst(null)}>×</button></div>
             <div class="model-bind-fields">
               <label>{t('models.inputPrice')}
                 <input type="number" min="0" step="0.01" placeholder="—" value={editInstInput()} onInput={(e) => setEditInstInput(e.currentTarget.value)} />
               </label>
               <label>{t('models.outputPrice')}
                 <input type="number" min="0" step="0.01" placeholder="—" value={editInstOutput()} onInput={(e) => setEditInstOutput(e.currentTarget.value)} />
+              </label>
+              <label>{t('models.cachePrice')}
+                <input type="number" min="0" step="0.01" placeholder="—" value={editInstCache()} onInput={(e) => setEditInstCache(e.currentTarget.value)} />
+              </label>
+              <label>{t('models.currency')}
+                <select value={editInstCurrency()} onChange={(e) => setEditInstCurrency(e.currentTarget.value as 'USD' | 'CNY')}>
+                  <option value="USD">USD</option>
+                  <option value="CNY">CNY</option>
+                </select>
               </label>
             </div>
             <small class="pricing-note">{t('models.pricingNote')}</small>
@@ -476,7 +513,7 @@ export default function Models() {
       <Show when={editCard()}>{(card) => (
         <div class="modal-backdrop" onClick={() => setEditCard(null)}>
           <form class="modal-card form-stack" onSubmit={saveEdit} onClick={(e) => e.stopPropagation()}>
-            <div class="modal-title"><div><span class="eyebrow">Model</span><h3>{t('models.editModel')}</h3><p>{card().unified_model_id}</p></div><button type="button" onClick={() => setEditCard(null)}>×</button></div>
+            <div class="modal-title"><div><span class="eyebrow">{t('models.eyebrowModel')}</span><h3>{t('models.editModel')}</h3><p>{card().unified_model_id}</p></div><button type="button" onClick={() => setEditCard(null)}>×</button></div>
             <label>{t('models.displayName')}<input value={editName()} onInput={(e) => setEditName(e.currentTarget.value)} required /></label>
             <label>{t('common.status')}
               <select value={editStatus()} onChange={(e) => setEditStatus(e.currentTarget.value as 'active' | 'disabled')}>

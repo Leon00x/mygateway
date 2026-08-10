@@ -24,6 +24,7 @@ export interface ChannelModelRow {
   supports_stream_usage: 0 | 1;
   input_price_micros_per_million: number | null;
   output_price_micros_per_million: number | null;
+  cache_input_price_micros_per_million: number | null;
   currency: string | null;
   plan_tokens_total: number | null;
   plan_tokens_remaining: number | null;
@@ -127,9 +128,10 @@ export async function createChannelModel(
       `INSERT INTO channel_models (
         id, model_card_id, channel_id, channel_model_id, public_model_alias,
         sort_order, status, supports_stream_usage,
-        input_price_micros_per_million, output_price_micros_per_million, currency,
+        input_price_micros_per_million, output_price_micros_per_million,
+        cache_input_price_micros_per_million, currency,
         plan_tokens_total, plan_tokens_remaining, plan_expires_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       instance.id,
@@ -142,6 +144,7 @@ export async function createChannelModel(
       instance.supports_stream_usage,
       instance.input_price_micros_per_million,
       instance.output_price_micros_per_million,
+      instance.cache_input_price_micros_per_million,
       instance.currency,
       instance.plan_tokens_total,
       instance.plan_tokens_remaining,
@@ -219,6 +222,7 @@ export async function getCandidatesForModel(
         cm.supports_stream_usage,
         cm.input_price_micros_per_million,
         cm.output_price_micros_per_million,
+        cm.cache_input_price_micros_per_million,
         c.id AS channel_id,
         c.name AS channel_name,
         c.provider_type,
@@ -254,6 +258,7 @@ export interface CandidateRow {
   supports_stream_usage: 0 | 1;
   input_price_micros_per_million: number | null;
   output_price_micros_per_million: number | null;
+  cache_input_price_micros_per_million: number | null;
   channel_id: string;
   channel_name: string;
   provider_type: string;

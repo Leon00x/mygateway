@@ -117,7 +117,7 @@ export async function handleAdminApi(
     return handleChannelOverview(request, env);
   }
   if (path === '/admin/api/channels/preflight') {
-    return handleChannelPreflight(request, requestId);
+    return handleChannelPreflight(request, env, requestId);
   }
   if (path === '/admin/api/channels') {
     return handleChannelsCollection(request, env, requestId);
@@ -215,6 +215,20 @@ export async function handleAdminApi(
   }
   if (path === '/admin/api/usage' && request.method === 'DELETE') {
     return handleUsageClear(env, requestId);
+  }
+
+  // --- Model price baseline ---
+  if (path === '/admin/api/model-prices' && request.method === 'GET') {
+    const { handleModelPricesList } = await import('./prices.ts');
+    return handleModelPricesList(request, env, requestId);
+  }
+  if (path === '/admin/api/model-prices' && request.method === 'PUT') {
+    const { handleModelPricesUpsert } = await import('./prices.ts');
+    return handleModelPricesUpsert(request, env, requestId);
+  }
+  if (path.match(/^\/admin\/api\/model-prices\/[^/]+$/) && request.method === 'DELETE') {
+    const { handleModelPriceDelete } = await import('./prices.ts');
+    return handleModelPriceDelete(request, path.split('/').pop()!, env, requestId);
   }
 
   // --- System ---

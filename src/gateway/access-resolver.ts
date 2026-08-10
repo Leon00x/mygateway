@@ -79,6 +79,7 @@ const ROUTE_QUERY = `
     cm.supports_stream_usage,
     cm.input_price_micros_per_million,
     cm.output_price_micros_per_million,
+    cm.cache_input_price_micros_per_million,
     c.id AS channel_id,
     c.name AS channel_name,
     c.provider_type,

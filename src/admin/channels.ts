@@ -44,7 +44,12 @@ function normalizeBaseUrl(url: string): string {
   } catch {
     throw new Error('Invalid URL');
   }
-  if (parsed.protocol !== 'https:') throw new Error('Only HTTPS URLs are allowed');
+  // Localhost may be plain HTTP — used for local dev servers and integration
+  // tests; production gateways never see loopback addresses.
+  const isLoopback = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1' || parsed.hostname === '[::1]';
+  if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isLoopback)) {
+    throw new Error('Only HTTPS URLs are allowed');
+  }
   if (parsed.username || parsed.password) throw new Error('URL must not contain credentials');
   if (parsed.search) throw new Error('URL must not contain query parameters');
   if (parsed.hash) throw new Error('URL must not contain fragment');
@@ -135,6 +140,7 @@ function normalizeDetectedModels(input: unknown): DiscoveredProviderModel[] {
 /** POST /admin/api/channels/preflight — no D1 writes. */
 export async function handleChannelPreflight(
   request: Request,
+  env: Env,
   requestId: string,
 ): Promise<Response> {
   if (request.method !== 'POST') return gatewayErrorResponse('invalid_request', 'Method not allowed', requestId);
@@ -151,6 +157,10 @@ export async function handleChannelPreflight(
       preset_id: resolved.presetId,
       protocols: resolved.protocols,
     }, body.api_key!);
+    // Attach baseline prices from the editable price library so the console
+    // can prefill input/output/cache costs for each model.
+    const { getModelPrices } = await import('../db/model-prices.ts');
+    const baseline = await getModelPrices(env.DB, models.map((m) => m.id));
     return json({
       ok: true,
       resolved: {
@@ -160,11 +170,20 @@ export async function handleChannelPreflight(
         preset_id: resolved.presetId,
         protocols: resolved.protocols,
       },
-      models: models.map((model) => ({
-        provider_model_id: model.id,
-        display_name: model.displayName,
-        capabilities: model.capabilities,
-      })),
+      models: models.map((model) => {
+        const price = baseline.get(model.id);
+        return {
+          provider_model_id: model.id,
+          display_name: model.displayName,
+          capabilities: model.capabilities,
+          baseline_price: price ? {
+            input: price.input_price_micros_per_million,
+            output: price.output_price_micros_per_million,
+            cache: price.cache_input_price_micros_per_million,
+            currency: price.currency,
+          } : null,
+        };
+      }),
     });
   } catch (error) {
     const message = error instanceof Error && error.name === 'TimeoutError'
