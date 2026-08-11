@@ -52,7 +52,8 @@ export default function Dashboard() {
   const [balances, setBalances] = createSignal<ProviderBalance[]>([]);
   const [balanceBusy, setBalanceBusy] = createSignal(false);
   const [copied, setCopied] = createSignal('');
-  const baseUrl = () => `${window.location.origin}/v1`;
+  const [publicUrl, setPublicUrl] = createSignal(window.location.origin);
+  const baseUrl = () => `${publicUrl()}/v1`;
   const [protocolPath, setProtocolPath] = createSignal('/chat/completions');
   const [protocolOpen, setProtocolOpen] = createSignal(false);
   const endpointUrl = () => baseUrl() + protocolPath();
@@ -75,6 +76,7 @@ export default function Dashboard() {
       const responses = await Promise.all([
         fetch(`/admin/api/usage/overview?range=${range()}`), fetch('/admin/api/keys'),
         fetch('/admin/api/models'), fetch('/admin/api/channels'), fetch('/admin/api/channels/balances'),
+        fetch('/admin/api/system/public-url'),
       ]);
       if (responses[0].ok) setOverview(await responses[0].json());
       if (responses[1].ok) setKeys(await responses[1].json());
@@ -83,6 +85,10 @@ export default function Dashboard() {
       if (responses[4].ok) {
         const incoming = ((await responses[4].json()) as ProviderBalancesResponse).balances;
         setBalances(mergeProviderBalances(incoming));
+      }
+      if (responses[5].ok) {
+        const configured = (await responses[5].json()) as { public_url: string | null };
+        if (configured.public_url) setPublicUrl(configured.public_url);
       }
     } finally { setLoading(false); }
   };

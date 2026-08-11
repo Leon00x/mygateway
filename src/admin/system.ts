@@ -9,6 +9,27 @@ import { json } from './router.ts';
 import { getSetting, setSetting } from '../db/settings.ts';
 import { invalidateLogPolicyCache } from '../gateway/log-policy.ts';
 
+const PUBLIC_URL_SETTING = 'public_url';
+
+export function normalizePublicUrl(value: unknown): string {
+  if (typeof value !== 'string' || !value.trim() || value.length > 2_048) {
+    throw new Error('public_url must be a valid HTTP(S) origin');
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(value.trim());
+  } catch {
+    throw new Error('public_url must be a valid HTTP(S) origin');
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol)
+    || parsed.username || parsed.password
+    || (parsed.pathname !== '/' && parsed.pathname !== '')
+    || parsed.search || parsed.hash) {
+    throw new Error('public_url must contain only an HTTP(S) origin without path, query, or credentials');
+  }
+  return parsed.origin;
+}
+
 /**
  * GET /admin/api/system/presets
  */
@@ -39,7 +60,8 @@ export async function handleSystemSettings(
     try {
       const body = (await request.json()) as Record<string, string>;
       const now = Math.floor(Date.now() / 1000);
-      for (const [key, value] of Object.entries(body)) {
+      for (const [key, rawValue] of Object.entries(body)) {
+        const value = key === PUBLIC_URL_SETTING ? normalizePublicUrl(rawValue) : rawValue;
         await env.DB
           .prepare(
             'INSERT INTO system_settings (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = ?',
@@ -54,6 +76,28 @@ export async function handleSystemSettings(
   }
 
   return json({ error: 'Method not allowed' }, 405);
+}
+
+/** GET/PUT /admin/api/system/public-url */
+export async function handlePublicUrlSetting(
+  request: Request,
+  env: Env,
+  requestId: string,
+): Promise<Response> {
+  if (request.method === 'GET') {
+    return json({ public_url: await getSetting(env.DB, PUBLIC_URL_SETTING) });
+  }
+  if (request.method === 'PUT') {
+    try {
+      const body = await request.json() as { public_url?: unknown };
+      const publicUrl = normalizePublicUrl(body.public_url);
+      await setSetting(env.DB, PUBLIC_URL_SETTING, publicUrl);
+      return json({ public_url: publicUrl });
+    } catch (error) {
+      return gatewayErrorResponse('invalid_request', (error as Error).message, requestId);
+    }
+  }
+  return gatewayErrorResponse('invalid_request', 'Method not allowed', requestId);
 }
 
 /**

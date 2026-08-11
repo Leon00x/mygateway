@@ -35,11 +35,13 @@ test.afterAll(async ({ request }) => {
 test('discovery is public while protected routes reject missing and wrong key types', async ({ request }) => {
   const hostedSkills = await request.get('/skills/index.json');
   expect(hostedSkills.status()).toBe(200);
-  expect(await hostedSkills.json()).toMatchObject({ skills: [{ name: 'mygateway-admin', api_version: 'v1' }] });
+  expect(await hostedSkills.json()).toMatchObject({ skills: [{ name: 'mygateway-admin', version: '0.2.0', api_version: 'v1' }] });
   const hostedSkill = await request.get('/skill.md');
   expect(hostedSkill.status()).toBe(200);
   const hostedSkillText = await hostedSkill.text();
   expect(hostedSkillText).toContain('name: mygateway-admin');
+  expect(hostedSkillText).toContain('## Quick start');
+  expect(hostedSkillText).toContain('Before every use, fetch `$MYGATEWAY_URL/skill.json`');
   expect(hostedSkillText).toContain('No repository checkout, local helper script');
   expect(hostedSkillText).toContain('start=UNIX_SECONDS&end=UNIX_SECONDS');
   expect(hostedSkillText).not.toContain('from=UNIX_SECONDS&to=UNIX_SECONDS');

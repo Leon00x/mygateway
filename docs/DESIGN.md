@@ -27,6 +27,14 @@ Provider Key 不在协议记录中复制，避免同一供应商的多个协议�
 允许独立启用并修改 Base URL。危险确认与结果提示统一使用应用内 Dialog，不调用浏览器原生
 `alert` / `confirm`；新建渠道和新建自定义模型均使用模态表单，避免卡片网格发生布局跳动。
 
+### 1.1 规范网站访问地址
+
+System 页将“管理员账号”和“网站访问域名”放在同一层级的相邻卡片中。浏览器 Origin 只作为
+初始建议值，必须由管理员点击保存后才写入 `system_settings.public_url`。服务端将输入规范为
+纯 HTTP(S) Origin；控制台的首页 API 地址、curl 示例和 Management Skill 提示词共享该值，
+未配置或读取失败时各自回退到当前浏览器 Origin。此设置描述已有部署的公开入口，不创建 DNS、
+Worker Route 或 Custom Domain。
+
 ## 2. 协议候选选择
 
 对每个客户端请求，系统先解析统一模型或完整别名，再对候选渠道执行协议选择：
@@ -467,7 +475,10 @@ Secret 或 Dashboard DOM 绕过 Management API。
 `SKILL.md` 自包含认证规则、API 路径与 `curl` 示例，不引用本地脚本或额外参考文件。Dashboard
 构建会将其发布到网站根路径 `/skill.md`。System 页始终展示同源 Skill
 配置提示词：默认使用 `mgmt_YOUR_MANAGEMENT_KEY` 占位；创建后最多 1 小时替换为真实明文，
-到期、删除或本地缓存失效后自动恢复占位模板。
+到期、删除或本地缓存失效后自动恢复占位模板。提示词只要求 Agent 使用自身平台的标准方式安装
+Skill；每次使用前读取 `/skill.json`、发现新版本后重新安装 `/skill.md` 的规则封装在 Skill 内，
+不重复写入用户复制的提示词。构建生成的 `/skills/index.json` 同步发布同一个 manifest 版本，
+避免手工维护漂移。
 
 ## 11. 控制台 i18n
 

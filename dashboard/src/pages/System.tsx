@@ -90,6 +90,11 @@ export default function System() {
   const [settingsSaved, setSettingsSaved] = createSignal(false);
   const [clearLogsBusy, setClearLogsBusy] = createSignal(false);
   const [clearLogsResult, setClearLogsResult] = createSignal<{ kind: 'success' | 'error'; text: string } | null>(null);
+  const [publicUrl, setPublicUrl] = createSignal(location.origin);
+  const [savedPublicUrl, setSavedPublicUrl] = createSignal('');
+  const [publicUrlBusy, setPublicUrlBusy] = createSignal(false);
+  const [publicUrlError, setPublicUrlError] = createSignal('');
+  const [publicUrlSaved, setPublicUrlSaved] = createSignal(false);
   const [managementKeys, setManagementKeys] = createSignal<ManagementKeyRow[]>([]);
   const [managementName, setManagementName] = createSignal('Agent automation');
   const [managementPermission, setManagementPermission] = createSignal<'read' | 'write'>('write');
@@ -116,6 +121,7 @@ export default function System() {
     await loadPrices();
     await fetchSettings();
     await loadManagementKeys();
+    await loadPublicUrl();
   });
 
   const revealTimer = window.setInterval(() => {
@@ -204,9 +210,37 @@ export default function System() {
     finally { setManagementBusy(false); }
   };
 
+  const loadPublicUrl = async () => {
+    try {
+      const response = await fetch('/admin/api/system/public-url');
+      if (!response.ok) return;
+      const body = await response.json() as { public_url: string | null };
+      const configured = body.public_url ?? '';
+      setSavedPublicUrl(configured);
+      setPublicUrl(configured || location.origin);
+    } catch { /* current origin remains the safe default */ }
+  };
+
+  const savePublicUrl = async () => {
+    setPublicUrlBusy(true); setPublicUrlError(''); setPublicUrlSaved(false);
+    try {
+      const response = await fetch('/admin/api/system/public-url', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ public_url: publicUrl().trim() }),
+      });
+      const body = await response.json() as { public_url?: string; error?: { message?: string } };
+      if (!response.ok || !body.public_url) throw new Error(body.error?.message ?? t('system.publicUrlSaveFailed'));
+      setPublicUrl(body.public_url); setSavedPublicUrl(body.public_url); setPublicUrlSaved(true);
+    } catch (cause) {
+      setPublicUrlError(cause instanceof Error ? cause.message : t('system.publicUrlSaveFailed'));
+    } finally { setPublicUrlBusy(false); }
+  };
+
+  const effectivePublicUrl = () => savedPublicUrl() || location.origin;
+
   const agentPrompt = () => {
     const revealed = revealedManagementKey();
-    return `Read ${location.origin}/skill.md and follow the instructions to manage MyGateway.\nMYGATEWAY_URL=${location.origin}\nMYGATEWAY_MANAGEMENT_KEY=${revealed?.key ?? 'mgmt_YOUR_MANAGEMENT_KEY'}`;
+    return `Install the mygateway-admin skill from ${effectivePublicUrl()}/skill.md using your platform's skill installation method, then follow its instructions to manage MyGateway.\nMYGATEWAY_URL=${effectivePublicUrl()}\nMYGATEWAY_MANAGEMENT_KEY=${revealed?.key ?? 'mgmt_YOUR_MANAGEMENT_KEY'}`;
   };
 
   const copyAgentPrompt = async () => {
@@ -364,10 +398,23 @@ export default function System() {
 
   return (
     <div class="settings-grid">
-      <section class="panel settings-card wide">
+      <section class="panel settings-card account-settings-card">
         <div class="settings-icon violet">A</div>
         <div class="settings-copy"><span class="eyebrow">{t('system.eyebrowAccount')}</span><h2>{t('system.account')}</h2><p>{t('system.accountBody')}：<strong>{auth.username()}</strong>。</p></div>
         <A href="/change-password" class="secondary-button">{t('system.changeCredentials')}</A>
+      </section>
+
+      <section class="panel settings-card public-url-card">
+        <div class="settings-icon green">URL</div>
+        <div class="settings-copy">
+          <span class="eyebrow">{t('system.eyebrowAccess')}</span>
+          <h2>{t('system.publicUrl')}</h2>
+          <p>{t('system.publicUrlBody')}</p>
+          <label class="public-url-field"><span>{t('system.publicUrlLabel')}</span><input type="url" value={publicUrl()} placeholder="https://gateway.example.com" onInput={(event) => { setPublicUrl(event.currentTarget.value); setPublicUrlSaved(false); setPublicUrlError(''); }} /></label>
+          <div class="public-url-detected"><span>{t('system.detectedUrl')} <code>{location.origin}</code></span><button type="button" onClick={() => { setPublicUrl(location.origin); setPublicUrlSaved(false); setPublicUrlError(''); }}>{t('system.useDetectedUrl')}</button></div>
+          <Show when={publicUrlError()}><div class="form-error">{publicUrlError()}</div></Show>
+          <div class="public-url-actions"><Show when={publicUrlSaved()}><span class="price-saved" role="status">{t('common.saved')}</span></Show><button class="primary-button" disabled={publicUrlBusy() || !publicUrl().trim() || publicUrl() === savedPublicUrl()} onClick={savePublicUrl}>{publicUrlBusy() ? t('common.saving') : t('common.save')}</button></div>
+        </div>
       </section>
 
       <section class="panel settings-card wide log-settings-card">

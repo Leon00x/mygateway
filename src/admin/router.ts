@@ -251,6 +251,11 @@ export async function handleAdminApi(
     });
   }
 
+  if (path === '/admin/api/system/public-url') {
+    const { handlePublicUrlSetting } = await import('./system.ts');
+    return handlePublicUrlSetting(request, env, requestId);
+  }
+
   if (path === '/admin/api/system/settings') {
     const { handleSystemSettings } = await import('./system.ts');
     return handleSystemSettings(request, env, requestId);
