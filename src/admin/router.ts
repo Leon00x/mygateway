@@ -215,33 +215,6 @@ export async function handleAdminApi(
     return handleManagementKeyItem(request, path.split('/').pop()!, env, requestId);
   }
 
-  // --- Experimental ChatGPT/Codex subscription ---
-  if (path === '/admin/api/experimental/codex') {
-    const { handleCodexSubscriptionStatus } = await import('./codex-subscription.ts');
-    return handleCodexSubscriptionStatus(request, env);
-  }
-  if (path === '/admin/api/experimental/codex/device') {
-    const { handleCodexDeviceStart } = await import('./codex-subscription.ts');
-    return handleCodexDeviceStart(request, env);
-  }
-  if (path.match(/^\/admin\/api\/experimental\/codex\/device\/[^/]+\/poll$/)) {
-    const { handleCodexDevicePoll } = await import('./codex-subscription.ts');
-    const parts = path.split('/');
-    return handleCodexDevicePoll(request, parts[parts.length - 2], env);
-  }
-  if (path === '/admin/api/experimental/codex/models') {
-    const { handleCodexSubscriptionModels } = await import('./codex-subscription.ts');
-    return handleCodexSubscriptionModels(request, env);
-  }
-  if (path === '/admin/api/experimental/codex/usage') {
-    const { handleCodexSubscriptionUsage } = await import('./codex-subscription.ts');
-    return handleCodexSubscriptionUsage(request, env);
-  }
-  if (path === '/admin/api/experimental/codex/connection') {
-    const { handleCodexSubscriptionDisconnect } = await import('./codex-subscription.ts');
-    return handleCodexSubscriptionDisconnect(request, env);
-  }
-
   // --- Usage ---
   if (path === '/admin/api/usage/overview') {
     return handleUsageOverview(url, env, requestId);

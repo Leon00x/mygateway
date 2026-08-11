@@ -2,7 +2,6 @@ import { Show } from 'solid-js';
 import { PROVIDER_LOGO_GLYPHS } from '../provider-logos';
 
 const PROVIDER_MONOGRAMS: Record<string, { label: string; color: string; background: string }> = {
-  chatgpt_codex: { label: 'C', color: '#6B45D8', background: '#F1ECFF' },
   zai: { label: 'Z', color: '#155EEF', background: '#EEF4FF' },
   byteplus_modelark: { label: 'B+', color: '#5B21B6', background: '#F3EFFF' },
   groq: { label: 'G', color: '#F55036', background: '#FFF1EE' },

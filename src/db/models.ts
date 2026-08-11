@@ -227,8 +227,6 @@ export async function getCandidatesForModel(
         c.name AS channel_name,
         c.provider_type,
         c.base_url,
-        c.auth_type,
-        c.oauth_connection_id,
         (SELECT json_group_array(json_object(
           'protocol', cp.protocol,
           'base_url', cp.base_url,
@@ -269,8 +267,6 @@ export interface CandidateRow {
   api_key_ciphertext: string;
   api_key_iv: string;
   api_key_version: number;
-  auth_type?: 'api_key' | 'codex_oauth';
-  oauth_connection_id?: string | null;
 }
 
 export interface CandidateQueryRow extends Omit<CandidateRow, 'protocols'> {
@@ -280,8 +276,6 @@ export interface CandidateQueryRow extends Omit<CandidateRow, 'protocols'> {
 export function hydrateCandidate(row: CandidateQueryRow): CandidateRow {
   return {
     ...row,
-    auth_type: row.auth_type ?? 'api_key',
-    oauth_connection_id: row.oauth_connection_id ?? null,
     protocols: parseCandidateProtocols(row.protocols_json, row.base_url),
   };
 }

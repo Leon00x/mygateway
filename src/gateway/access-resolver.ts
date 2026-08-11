@@ -84,8 +84,6 @@ const ROUTE_QUERY = `
     c.name AS channel_name,
     c.provider_type,
     c.base_url,
-    c.auth_type,
-    c.oauth_connection_id,
     (SELECT json_group_array(json_object(
       'protocol', cp.protocol,
       'base_url', cp.base_url,

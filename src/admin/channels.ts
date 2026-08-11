@@ -26,9 +26,6 @@ import { invalidateProviderBalanceCache } from './provider-balances.ts';
 import { getPresetById, providerShortCode } from '../shared/provider-presets.ts';
 import { discoverProviderModels, persistDiscoveredProviderModels } from './model-discovery.ts';
 import type { DiscoveredProviderModel } from '../db/provider-models.ts';
-import { deleteCodexConnection } from '../db/codex-oauth.ts';
-import { ensureCodexCredential } from '../codex/credentials.ts';
-import { fetchCodexModels } from '../codex/client.ts';
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -276,9 +273,7 @@ export async function handleChannelsCollection(
         base_url: baseUrl,
         api_key_ciphertext: ciphertext,
         api_key_iv: iv,
-      api_key_version: 1,
-      auth_type: 'api_key',
-      oauth_connection_id: null,
+        api_key_version: 1,
         status: 'active',
         notes: body.notes ?? null,
         preset_id: presetId,
@@ -329,14 +324,6 @@ export async function handleChannelItem(
 
       const channel = await getChannel(env.DB, id);
       if (!channel) return gatewayErrorResponse('model_not_found', 'Channel not found', requestId);
-      if (channel.auth_type === 'codex_oauth'
-        && (body.api_key !== undefined || body.protocols !== undefined || body.base_url !== undefined)) {
-        return gatewayErrorResponse(
-          'invalid_request',
-          'The experimental Codex channel connection is managed through ChatGPT authorization',
-          requestId,
-        );
-      }
       const updates: Parameters<typeof updateChannel>[2] = {};
 
       if (body.name !== undefined) updates.name = body.name;
@@ -406,19 +393,13 @@ export async function handleChannelItem(
   }
 
   if (request.method === 'DELETE') {
-    const channel = await getChannel(env.DB, id);
-    if (!channel) return gatewayErrorResponse('model_not_found', 'Channel not found', requestId);
     const impact = await getChannelDeleteImpact(env.DB, id);
     await softDeleteInstancesByChannel(env.DB, id);
     await softDeleteOrphanModelCards(
       env.DB,
       impact.filter((item) => item.will_delete_model).map((item) => item.model_card_id),
     );
-    if (channel.auth_type === 'codex_oauth' && channel.oauth_connection_id) {
-      await deleteCodexConnection(env.DB, channel.oauth_connection_id);
-    } else {
-      await softDeleteChannel(env.DB, id);
-    }
+    await softDeleteChannel(env.DB, id);
     invalidateModelRouteCache();
     channelCircuitBreaker.reset(id);
     invalidateProviderBalanceCache(id);
@@ -459,23 +440,6 @@ export async function handleChannelTest(
 ): Promise<Response> {
   const channel = await getChannel(env.DB, channelId);
   if (!channel) return gatewayErrorResponse('model_not_found', 'Channel not found', requestId);
-
-  if (channel.auth_type === 'codex_oauth') {
-    const start = Date.now();
-    try {
-      if (!channel.oauth_connection_id) throw new Error('Codex OAuth connection is missing');
-      const credential = await ensureCodexCredential(env, channel.oauth_connection_id);
-      await fetchCodexModels(credential.accessToken, credential.accountId);
-      channelCircuitBreaker.recordSuccess(channelId);
-      return json({ ok: true, status: 200, elapsed_ms: Date.now() - start });
-    } catch (error) {
-      return json({
-        ok: false,
-        elapsed_ms: Date.now() - start,
-        error: error instanceof Error ? error.message : 'Codex connection test failed',
-      }, 502);
-    }
-  }
 
   // Decrypt provider key
   const { decryptProviderKey } = await import('../crypto/provider-key.ts');

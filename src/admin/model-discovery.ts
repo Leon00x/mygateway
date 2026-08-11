@@ -30,8 +30,6 @@ import {
 import { invalidateModelRouteCache } from '../gateway/access-resolver.ts';
 import { getModelPrices } from '../db/model-prices.ts';
 import type { ChannelProtocol } from '../gateway/protocols.ts';
-import { ensureCodexCredential } from '../codex/credentials.ts';
-import { fetchCodexModels } from '../codex/client.ts';
 
 const DISCOVERY_TIMEOUT_MS = 10_000;
 const MAX_RESPONSE_BYTES = 1024 * 1024;
@@ -108,7 +106,6 @@ export function parseProviderModelList(payload: unknown): {
     if (!item || typeof item !== 'object') continue;
     const model = item as Record<string, unknown>;
     const rawId = typeof model.id === 'string' ? model.id
-      : typeof model.slug === 'string' ? model.slug
       : typeof model.name === 'string' ? model.name.replace(/^models\//, '') : '';
     const id = rawId.trim();
     if (!id || id.length > 200 || seen.has(id)) continue;
@@ -234,19 +231,10 @@ export async function handleChannelModelRefresh(channelId: string, env: Env): Pr
   const channel = await getChannel(env.DB, channelId);
   if (!channel) return json({ error: { message: 'Channel not found' } }, 404);
   try {
-    let models: DiscoveredProviderModel[];
-    if (channel.auth_type === 'codex_oauth') {
-      if (!channel.oauth_connection_id) throw new Error('Codex OAuth connection is missing');
-      const credential = await ensureCodexCredential(env, channel.oauth_connection_id);
-      models = parseProviderModelList(await fetchCodexModels(
-        credential.accessToken, credential.accountId,
-      )).models;
-    } else {
-      const key = await decryptProviderKey(
-        channel.api_key_ciphertext, channel.api_key_iv, env.MASTER_KEY, channelId, channel.api_key_version,
-      );
-      models = await discoverProviderModels(channel, key);
-    }
+    const key = await decryptProviderKey(
+      channel.api_key_ciphertext, channel.api_key_iv, env.MASTER_KEY, channelId, channel.api_key_version,
+    );
+    const models = await discoverProviderModels(channel, key);
     await persistDiscoveredProviderModels(env.DB, channelId, models);
     return json({
       models: serializeInventory(await listProviderModels(env.DB, channelId)),

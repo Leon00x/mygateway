@@ -25,9 +25,6 @@ export function localizedChannelName(
   presetId: string | null | undefined,
   locale: ProviderLocale,
 ): string {
-  if (presetId === 'chatgpt_codex' && name === 'ChatGPT Codex Subscription') {
-    return locale === 'zh' ? 'ChatGPT Codex 订阅' : name;
-  }
   const preset = presetId ? PROVIDER_PRESETS.find((item) => item.id === presetId) : undefined;
   if (!preset) return name;
   const isPresetDefault = name === preset.name || (preset.name_zh !== undefined && name === preset.name_zh);

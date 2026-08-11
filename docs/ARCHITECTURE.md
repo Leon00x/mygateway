@@ -78,8 +78,6 @@ HTTP 路由调用领域模块，领域模块调用 `db/*` 和基础工具；数�
 | `analytics_minutes` | 5 分钟聚合桶：密钥、统一模型、最终渠道维度，含输入、缓存命中、输出 Token，以及 TTFT、延迟与回退样本 |
 | `model_prices` | 可编辑模型基准价库：30 个内置 USD 基线，输入 / 输出 / 缓存价（micros / 百万 Token）与币种 |
 | `system_settings` | 少量系统设置；`public_url` 保存控制台确认的规范 HTTP(S) Origin |
-| `codex_oauth_connections` | 实验性 Codex OAuth Token 密文、账户状态、版本与刷新租约 |
-| `codex_device_flows` | 短期设备授权状态；由后续授权操作惰性清理 |
 
 关键约束：
 
@@ -136,10 +134,6 @@ D1 中的 hash 比较。短 prefix 只用于控制台辨认。`expires_at` 使�
 
 Provider Key 使用 AES-256-GCM 加密。每次加密使用随机 IV，渠道 ID 和 key version 参与
 AAD。Key 只在即将调用 Provider 时于 Worker 内解密，不进入响应、D1 明文或日志。
-
-实验性 Codex OAuth 凭据与 Provider Key 分表保存。Access Token、Refresh Token 和临时 Device
-Auth ID 使用独立 AAD 加密；渠道只保存连接 ID，不保存 OAuth JSON。跨 isolate Token 刷新以 D1
-版本和短租约协调，不依赖 isolate 内存成为权威状态。
 
 ### Management Key
 
@@ -240,7 +234,6 @@ usage 写入失败只记录脱敏错误，不修改已经返回的模型响应�
 | `/admin/api/model-prices*` | 模型价格库（列表 / 批量 upsert / 单条删除） |
 | `/admin/api/system*` | 系统状态、设置和 Provider 预制 |
 | `/admin/api/management-keys*` | 仅管理员 Session 可用的 Management Key 生命周期 |
-| `/admin/api/experimental/codex*` | Device OAuth、连接状态、模型与订阅额度探测；仅管理员 Session |
 | `/management/v1/*` | Agent / 自动化使用的版本化 Management API；`read` / `write` Bearer 鉴权 |
 | `/health` | 最小健康检查 |
 

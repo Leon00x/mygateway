@@ -1,4 +1,4 @@
-import { createMemo, createSignal, onCleanup, onMount, For, Show } from 'solid-js';
+import { createMemo, createSignal, onMount, For, Show } from 'solid-js';
 import {
   PROVIDER_PRESETS,
   localizedChannelName,
@@ -44,22 +44,11 @@ interface Channel {
   provider_type: string;
   base_url: string;
   has_api_key: boolean;
-  auth_type: 'api_key' | 'codex_oauth';
-  oauth_connection_id: string | null;
-  auth_status: 'active' | 'reauth_required' | null;
   status: string;
   notes: string | null;
   preset_id: string | null;
   short_code: string | null;
   protocols: ChannelProtocol[];
-}
-
-interface CodexDeviceFlow {
-  flow_id: string;
-  user_code: string;
-  verification_url: string;
-  interval_seconds: number;
-  expires_at: number;
 }
 
 interface InventoryModel {
@@ -162,11 +151,6 @@ export default function Channels() {
   const [presetSelectedModels, setPresetSelectedModels] = createSignal<Set<string>>(new Set());
   const [presetPrices, setPresetPrices] = createSignal<Record<string, PriceInput>>({});
   const [presetProtocols, setPresetProtocols] = createSignal<ProtocolDraft[]>([]);
-  const [showCodexConnect, setShowCodexConnect] = createSignal(false);
-  const [codexFlow, setCodexFlow] = createSignal<CodexDeviceFlow | null>(null);
-  const [codexBusy, setCodexBusy] = createSignal(false);
-  const [codexError, setCodexError] = createSignal('');
-  let codexPollTimer: ReturnType<typeof setTimeout> | undefined;
 
   const [showCustom, setShowCustom] = createSignal(false);
   const [cName, setCName] = createSignal('');
@@ -210,7 +194,6 @@ export default function Channels() {
   };
 
   onMount(() => { void loadOverview(); });
-  onCleanup(() => { if (codexPollTimer) clearTimeout(codexPollTimer); });
 
   const supportsBalance = (channel: Channel) => channel.preset_id === 'deepseek'
     || (() => { try { return new URL(channel.base_url).hostname === 'api.deepseek.com'; } catch { return false; } })();
@@ -268,54 +251,6 @@ export default function Channels() {
   const chooseCustom = () => {
     setShowProviderPicker(false); setSelectedPreset(null); setShowCustom(true); setCErr(''); setCustomPreflight(null); setCustomSelectedModels(new Set<string>());
     setCProtocols(protocolDrafts().map((entry) => ({ ...entry, enabled: entry.protocol === 'openai_chat' })));
-  };
-
-  const closeCodexConnect = () => {
-    if (codexPollTimer) clearTimeout(codexPollTimer);
-    codexPollTimer = undefined;
-    setShowCodexConnect(false); setCodexFlow(null); setCodexError(''); setCodexBusy(false);
-  };
-
-  const pollCodex = async (flow: CodexDeviceFlow) => {
-    try {
-      const response = await fetch(`/admin/api/experimental/codex/device/${flow.flow_id}/poll`, { method: 'POST' });
-      const data = await response.json();
-      if (data.status === 'completed') {
-        setCodexBusy(false);
-        await loadOverview();
-        closeCodexConnect();
-        const channel = channels().find((item) => item.auth_type === 'codex_oauth');
-        if (channel) await openDetails(channel, { created: true });
-        return;
-      }
-      if (data.status !== 'pending') throw new Error(data.error?.message ?? t('channels.codexConnectFailed'));
-      codexPollTimer = setTimeout(
-        () => void pollCodex(flow),
-        Math.max(3, Number(data.retry_after) || flow.interval_seconds) * 1000,
-      );
-    } catch (error) {
-      setCodexBusy(false);
-      setCodexError((error as Error).message);
-    }
-  };
-
-  const startCodexConnect = async () => {
-    setCodexBusy(true); setCodexError('');
-    try {
-      const response = await fetch('/admin/api/experimental/codex/device', { method: 'POST' });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error?.message ?? t('channels.codexConnectFailed'));
-      const flow = data as CodexDeviceFlow;
-      setCodexFlow(flow);
-      codexPollTimer = setTimeout(() => void pollCodex(flow), flow.interval_seconds * 1000);
-    } catch (error) {
-      setCodexBusy(false);
-      setCodexError((error as Error).message);
-    }
-  };
-
-  const chooseCodex = () => {
-    setShowProviderPicker(false); setCodexFlow(null); setCodexError(''); setCodexBusy(false); setShowCodexConnect(true);
   };
 
   const applyInventory = (data: { models?: InventoryModel[]; discovery?: DiscoveryState }) => {
@@ -472,10 +407,6 @@ export default function Channels() {
   });
 
   const openEditor = (channel: Channel) => {
-    if (channel.auth_type === 'codex_oauth') {
-      void dialog.notice({ title: t('channels.codexSubscription'), message: t('channels.codexManagedConnection') });
-      return;
-    }
     setDetailChannel(null); setEditChannel(channel); setEditName(channelName(channel)); setEditKey('');
     setEditProtocols(protocolDrafts(channel.protocols, channel.base_url)); setEditError('');
   };
@@ -593,17 +524,11 @@ export default function Channels() {
         <div class="channel-card-section resource-add-preview" aria-hidden="true"><span /><span /><span /></div>
         <footer class="resource-add-footer"><span><b aria-hidden="true">+</b>{t('channels.addProvider')}</span></footer>
       </button>
-      <Show when={!channels().some((channel) => channel.auth_type === 'codex_oauth')}><button type="button" class="panel resource-add-card codex-add-card" aria-label={t('channels.codexSubscription')} onClick={chooseCodex}>
-        <header class="channel-card-head resource-add-head"><span class="resource-add-icon codex-mark" aria-hidden="true">C</span><div><strong>{t('channels.codexSubscription')}</strong><span>{t('channels.codexSubscriptionDesc')}</span></div><span class="experimental-chip">{t('channels.experimental')}</span></header>
-        <div class="channel-card-metrics resource-add-metrics" aria-hidden="true"><div><span>{t('channels.plan')}</span><strong>ChatGPT</strong></div><div><span>{t('channels.protocols')}</span><strong>Responses</strong></div></div>
-        <div class="channel-card-section resource-add-preview"><span>{t('channels.codexWarningShort')}</span></div>
-        <footer class="resource-add-footer"><span>{t('channels.connectChatGPT')}</span></footer>
-      </button></Show>
       <For each={channels()}>{(channel) => {
       const summary = () => summaries()[channel.id];
       return <article class="panel channel-card">
-        <header class="channel-card-head"><ProviderLogo presetId={channel.preset_id} name={channelName(channel)} /><div><strong>{channelName(channel)}</strong><span>{channel.auth_type === 'codex_oauth' ? t('channels.codexOAuth') : providerTypeLabel(channel.provider_type)}</span></div><span class={`badge ${channel.status === 'active' && channel.auth_status !== 'reauth_required' ? 'active' : 'disabled'}`}>{channel.auth_status === 'reauth_required' ? t('channels.codexReauth') : channel.status === 'active' ? t('common.active') : t('common.disabled')}</span></header>
-        <div class="channel-card-metrics"><div><span>{t('channels.balance')}</span><strong>{channel.auth_type === 'codex_oauth' ? t('channels.codexQuota') : balanceHeadline(channel)}</strong><Show when={supportsBalance(channel)}><button title={t('channels.refreshBalance')} disabled={balanceBusy()[channel.id]} onClick={() => refreshBalance(channel)}>↻</button></Show></div><div><span>{t('channels.plan')}</span><strong class="muted-value">{channel.auth_type === 'codex_oauth' ? 'ChatGPT' : t('channels.notIntegrated')}</strong></div></div>
+        <header class="channel-card-head"><ProviderLogo presetId={channel.preset_id} name={channelName(channel)} /><div><strong>{channelName(channel)}</strong><span>{providerTypeLabel(channel.provider_type)}</span></div><span class={`badge ${channel.status}`}>{channel.status === 'active' ? t('common.active') : t('common.disabled')}</span></header>
+        <div class="channel-card-metrics"><div><span>{t('channels.balance')}</span><strong>{balanceHeadline(channel)}</strong><Show when={supportsBalance(channel)}><button title={t('channels.refreshBalance')} disabled={balanceBusy()[channel.id]} onClick={() => refreshBalance(channel)}>↻</button></Show></div><div><span>{t('channels.plan')}</span><strong class="muted-value">{t('channels.notIntegrated')}</strong></div></div>
         <div class="channel-card-section"><span class="channel-card-label">{t('channels.protocols')}</span><div class="channel-protocol-list"><For each={channel.protocols}>{(protocol) => <div title={`${protocol.base_url}${protocolPath(protocol.protocol)}`}><span>{protocolLabel(protocol.protocol)}</span><code>{protocol.base_url}{protocolPath(protocol.protocol)}</code></div>}</For></div></div>
         <div class="channel-card-section channel-model-preview"><div class="channel-card-label"><span>{t('channels.models')}</span><strong>{summary()?.available_count ?? 0}</strong></div><div><Show when={(summary()?.preview.length ?? 0) > 0} fallback={<span class="empty-preview">{summary()?.discovery_status === 'error' ? t('channels.discoveryFailed') : t('channels.notDetected')}</span>}><For each={summary()?.preview}>{(model) => <code>{model.provider_model_id}</code>}</For><Show when={(summary()?.available_count ?? 0) > 3}><span class="more-models">+{(summary()?.available_count ?? 0) - 3}</span></Show></Show></div></div>
         <footer class="channel-card-actions"><button class="primary-button" onClick={() => openDetails(channel)}>{t('channels.edit')}</button><button class="secondary-button" onClick={() => test(channel.id)}>{t('channels.test')}</button><details class="channel-more"><summary aria-label={`${channelName(channel)} ${t('channels.more')}`}>•••</summary><div><button onClick={() => openDetails(channel, { refreshModels: true })}>{t('channels.refreshModels')}</button><Show when={supportsBalance(channel)}><button onClick={() => refreshBalance(channel)}>{t('channels.refreshBalance')}</button></Show><button onClick={() => toggleStatus(channel)}>{channel.status === 'active' ? t('channels.disable') : t('channels.enable')}</button><button class="danger-link" onClick={() => del(channel.id)}>{t('channels.delete')}</button></div></details></footer>
@@ -611,8 +536,6 @@ export default function Channels() {
     }}</For></div></Show>
 
     <Show when={showCustom()}><div class="modal-backdrop" onClick={() => setShowCustom(false)}><form onSubmit={submitCustom} class="modal-card form-stack channel-config-modal" onClick={(event) => event.stopPropagation()}><div class="modal-title"><div><span class="eyebrow">{t('channels.eyebrowConfigure')}</span><h3>{t('channels.customTitle')}</h3><p>{t('channels.customSub')}</p></div><button type="button" onClick={() => setShowCustom(false)}>×</button></div><div class="form-grid"><label>{t('channels.name')}<input placeholder="e.g. Internal Gateway" value={cName()} onInput={(event) => { setCName(event.currentTarget.value); setCustomPreflight(null); }} required /></label><label>{t('channels.type')}<select value={cType()} onChange={(event) => { setCType(event.currentTarget.value); setCustomPreflight(null); }}><option value="openai">OpenAI</option><option value="openai_compatible">OpenAI Compatible</option></select></label><label class="form-grid-wide">{t('channels.apiKey')}<input type="password" placeholder="API Key" value={cKey()} onInput={(event) => { setCKey(event.currentTarget.value); setCustomPreflight(null); }} required /></label></div><ProtocolEditor value={cProtocols()} onChange={(protocol, update) => updateProtocolDraft(setCProtocols, protocol, update)} /><Show when={customPreflight()}>{(result) => <div class={`preflight-result ${result().status}`}><div class="preflight-result-head"><strong>{result().status === 'ok' ? `${t('channels.detected')} · ${result().models.length}` : t('channels.detectFailed')}</strong><span>{result().status === 'ok' ? t('channels.notSaved') : result().error}</span></div><Show when={result().models.length}><><div class="preflight-select-toolbar"><span>{t('channels.selected')} {customSelectedModels().size} / {result().models.length}</span><button type="button" onClick={() => setCustomSelectedModels(new Set(result().models.map((model) => model.provider_model_id)))}>{t('channels.selectAll')}</button><button type="button" onClick={() => setCustomSelectedModels(new Set<string>())}>{t('channels.deselectAll')}</button></div><div class="preflight-model-list"><For each={result().models}>{(model) => <label><input type="checkbox" checked={customSelectedModels().has(model.provider_model_id)} onChange={(event) => togglePreflightModel(setCustomSelectedModels, model.provider_model_id, event.currentTarget.checked)} /><span><strong>{model.display_name}</strong><code>{model.provider_model_id}</code></span><Show when={customSelectedModels().has(model.provider_model_id)}><PriceFields value={customPrices()[model.provider_model_id] ?? emptyPrice()} onChange={(next) => setCustomPrices((cur) => ({ ...cur, [model.provider_model_id]: next }))} /></Show></label>}</For></div></></Show></div>}</Show><Show when={cError()}><div class="form-error">{cError()}</div></Show><div class="modal-actions"><button type="button" class="secondary-button" onClick={() => setShowCustom(false)}>{t('common.cancel')}</button><button type="button" onClick={detectCustom} disabled={cBusy() || !cName() || !cKey() || !enabledProtocols(cProtocols()).length} class="secondary-button">{cBusy() ? t('channels.detecting') : customPreflight() ? t('channels.redetect') : t('channels.detect')}</button><Show when={customPreflight()}>{(result) => <><button type="submit" data-action="save" disabled={cBusy()} class="secondary-button">{result().status === 'error' ? t('channels.saveAnyway') : t('channels.save')}</button><button type="submit" data-action="sync" disabled={cBusy() || result().status !== 'ok' || customSelectedModels().size === 0} class="primary-button">{t('channels.saveAndImport')} {customSelectedModels().size}</button></>}</Show></div></form></div></Show>
-
-    <Show when={showCodexConnect()}><div class="modal-backdrop" onClick={closeCodexConnect}><div class="modal-card codex-connect-modal" onClick={(event) => event.stopPropagation()}><div class="modal-title"><div><span class="eyebrow">{t('channels.experimental')}</span><h3>{t('channels.codexSubscription')}</h3><p>{t('channels.codexConnectSub')}</p></div><button onClick={closeCodexConnect}>×</button></div><Show when={codexFlow()} fallback={<div class="codex-connect-intro"><div class="codex-warning">{t('channels.codexWarning')}</div><button class="primary-button" disabled={codexBusy()} onClick={startCodexConnect}>{codexBusy() ? t('common.loading') : t('channels.connectChatGPT')}</button></div>}>{(flow) => <div class="codex-device-step"><span>{t('channels.codexOpenPage')}</span><a href={flow().verification_url} target="_blank" rel="noreferrer">{flow().verification_url} ↗</a><span>{t('channels.codexEnterCode')}</span><button class="codex-device-code" onClick={() => navigator.clipboard.writeText(flow().user_code)}>{flow().user_code}</button><small>{t('channels.codexWaiting')}</small></div>}</Show><Show when={codexError()}><div class="form-error">{codexError()}</div></Show><div class="modal-actions"><button class="secondary-button" onClick={closeCodexConnect}>{t('common.cancel')}</button></div></div></div></Show>
 
     <Show when={showProviderPicker()}><div class="modal-backdrop" onClick={() => setShowProviderPicker(false)}><div class="modal-card provider-picker-modal" onClick={(event) => event.stopPropagation()}><Show when={!selectedPreset()} fallback={<form onSubmit={submitPreset} class="form-stack"><button type="button" onClick={() => { setSelectedPreset(null); setPresetPreflight(null); setPresetSelectedModels(new Set<string>()); }} class="back-button">{t('channels.backToProviders')}</button><div class="modal-title"><div><span class="eyebrow">{t('channels.eyebrowConfigure')}</span><h3>+ {selectedPreset() ? presetName(selectedPreset()!) : ''}</h3><p>{selectedPreset()?.base_url}</p><a class="provider-doc-link" href={selectedPreset()?.docs_url} target="_blank">{t('channels.viewDocs')}</a></div></div><label>{t('channels.apiKey')}</label><input type="password" value={presetApiKey()} onInput={(event) => { setPresetApiKey(event.currentTarget.value); setPresetPreflight(null); setPresetSelectedModels(new Set<string>()); }} placeholder="sk-..." required /><ProtocolEditor value={presetProtocols()} onChange={(protocol, update) => { setPresetPreflight(null); setPresetProtocols((current) => current.map((entry) => entry.protocol === protocol ? { ...entry, ...update } : entry)); }} /><Show when={presetPreflight()}>{(result) => <div class={`preflight-result ${result().status}`}><div class="preflight-result-head"><strong>{result().status === 'ok' ? `${t('channels.detected')} · ${result().models.length}` : t('channels.detectFailed')}</strong><span>{result().status === 'ok' ? t('channels.selectModels') : result().error}</span></div><Show when={result().models.length}><><div class="preflight-select-toolbar"><span>{t('channels.selected')} {presetSelectedModels().size} / {result().models.length}</span><button type="button" onClick={() => setPresetSelectedModels(new Set(result().models.map((model) => model.provider_model_id)))}>{t('channels.selectAll')}</button><button type="button" onClick={() => setPresetSelectedModels(new Set<string>())}>{t('channels.deselectAll')}</button></div><div class="preflight-model-list"><For each={result().models}>{(model) => <label><input type="checkbox" checked={presetSelectedModels().has(model.provider_model_id)} onChange={(event) => togglePreflightModel(setPresetSelectedModels, model.provider_model_id, event.currentTarget.checked)} /><span><strong>{model.display_name}</strong><code>{model.provider_model_id}</code></span><Show when={presetSelectedModels().has(model.provider_model_id)}><PriceFields value={presetPrices()[model.provider_model_id] ?? emptyPrice()} onChange={(next) => setPresetPrices((cur) => ({ ...cur, [model.provider_model_id]: next }))} /></Show></label>}</For></div></></Show></div>}</Show><Show when={presetError()}><div class="form-error">{presetError()}</div></Show><div class="modal-actions"><button type="button" onClick={() => setShowProviderPicker(false)} class="secondary-button">{t('common.cancel')}</button><button type="button" onClick={detectPreset} disabled={presetBusy() || !presetApiKey()} class="secondary-button">{presetBusy() ? t('channels.detectingPreset') : presetPreflight() ? t('channels.redetectPreset') : t('channels.detectPreset')}</button><Show when={presetPreflight()}>{(result) => <><button type="submit" data-action="save" disabled={presetBusy()} class="secondary-button">{result().status === 'error' ? t('channels.saveAnyway') : t('channels.save')}</button><button type="submit" data-action="sync" disabled={presetBusy() || result().status !== 'ok' || presetSelectedModels().size === 0} class="primary-button">{t('channels.saveAndImport')} {presetSelectedModels().size}</button></>}</Show></div></form>}><div class="modal-title"><div><span class="eyebrow">{t('channels.eyebrowQuickConnect')}</span><h3>{t('channels.chooseProvider')}</h3><p>{t('channels.chooseProviderSub')}</p></div><button onClick={() => setShowProviderPicker(false)}>×</button></div><div class="provider-grid"><button onClick={chooseCustom} class="provider-option custom-provider-option"><div class="provider-option-top"><span class="provider-logo">+</span><div><strong>{t('channels.custom')}</strong><p>{t('channels.customDesc')}</p></div></div><div class="provider-models"><span>GET /models</span><span>{t('channels.manualAdd')}</span></div></button><For each={PROVIDER_PRESETS}>{(preset) => <button onClick={() => { setSelectedPreset(preset); setPresetApiKey(''); setPresetError(''); setPresetPreflight(null); setPresetSelectedModels(new Set<string>()); setPresetProtocols(protocolDrafts(preset.protocols, preset.base_url)); }} class="provider-option"><div class="provider-option-top"><ProviderLogo presetId={preset.id} name={presetName(preset)} /><div><strong>{presetName(preset)}</strong><p>{presetDescription(preset)}</p></div></div><div class="provider-models"><For each={preset.protocols}>{(protocol) => <span>{protocolLabel(protocol.protocol)}</span>}</For></div></button>}</For></div></Show></div></div></Show>
 

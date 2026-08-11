@@ -745,14 +745,6 @@ input:focus, select:focus { border-color: #9e82fa; box-shadow: 0 0 0 3px rgba(10
 .channel-card-actions{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 38px}
 .channel-more{min-width:0;max-width:38px}.channel-more>div{max-width:min(145px,calc(100vw - 44px))}
 
-/* Experimental ChatGPT/Codex subscription connection. */
-.codex-add-card{border-style:solid;background:linear-gradient(145deg,var(--color-surface),var(--color-primary-soft))}
-.codex-mark{font-size:18px;font-weight:800}.experimental-chip{flex:0 0 auto;padding:4px 7px;border:1px solid #d7cafd;border-radius:999px;color:#6942d2;background:#f5f0ff;font-size:9px;font-weight:750}
-.codex-connect-modal{width:min(100%,560px)}.codex-connect-intro{display:grid;gap:18px}.codex-warning{padding:14px 16px;border:1px solid #eadfb8;border-radius:12px;color:#705b18;background:#fffaf0;font-size:12px;line-height:1.7}
-.codex-device-step{display:grid;justify-items:start;gap:10px;padding:18px;border:1px solid var(--color-border);border-radius:14px;background:var(--color-surface-soft)}.codex-device-step>span,.codex-device-step>small{color:var(--color-muted);font-size:11px}.codex-device-step>a{color:var(--color-primary);font-size:13px;font-weight:700}
-.codex-device-code{min-width:190px;padding:15px 20px;border:1px solid #cfc0ff;border-radius:12px;color:var(--color-primary);background:var(--color-surface);font:800 25px/1 var(--font-mono);letter-spacing:4px}.resource-add-preview{color:var(--color-muted);font-size:11px;line-height:1.6}
-[data-theme="dark"] .experimental-chip{border-color:#514276;color:#c9baff;background:#2b2440}[data-theme="dark"] .codex-warning{border-color:#5b5030;color:#e6ce78;background:#2d291d}
-
 @media (max-width:620px){.protocol-editor-row{grid-template-columns:1fr;align-items:stretch}.form-grid-wide{grid-column:auto}.app-dialog{grid-template-columns:32px minmax(0,1fr)}.app-dialog-icon{width:32px;height:32px}}
 @media (max-width:1100px){.management-key-row{grid-template-columns:minmax(160px,1fr) 100px 1fr 1fr}.management-status,.management-actions{justify-self:start}.management-actions{grid-column:1/-1}.management-create{grid-template-columns:1fr 1fr}}
 @media (max-width:620px){.management-heading-row{align-items:flex-start;flex-direction:column}.management-heading-row>.primary-button{width:100%}.management-create,.management-key-row{grid-template-columns:1fr}.management-create-actions{justify-content:stretch}.management-create-actions button{flex:1}.management-reveal{grid-template-columns:1fr}.management-reveal .secondary-button{justify-self:start}.management-actions{grid-column:auto;flex-wrap:wrap}}
