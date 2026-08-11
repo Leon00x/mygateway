@@ -11,13 +11,45 @@ test.afterEach(async ({ page }) => {
   await resetState(page.request);
 });
 
+test('system page validates and applies the canonical website URL', async ({ page }) => {
+  await page.goto('/system');
+  const accountCard = page.locator('.account-settings-card');
+  const publicUrlCard = page.locator('.public-url-card');
+  await expect(publicUrlCard.getByRole('heading', { name: '网站访问域名' })).toBeVisible();
+
+  const [accountBox, publicUrlBox] = await Promise.all([accountCard.boundingBox(), publicUrlCard.boundingBox()]);
+  expect(accountBox).not.toBeNull();
+  expect(publicUrlBox).not.toBeNull();
+  expect(Math.abs(accountBox!.y - publicUrlBox!.y)).toBeLessThan(2);
+
+  const invalidResponse = await page.request.put('/admin/api/system/public-url', {
+    data: { public_url: 'https://gateway.example.test/admin' },
+  });
+  expect(invalidResponse.status()).toBe(400);
+
+  const input = publicUrlCard.getByRole('textbox', { name: '规范访问地址' });
+  await input.fill('https://Gateway.Example.test/');
+  await publicUrlCard.getByRole('button', { name: '保存' }).click();
+  await expect(publicUrlCard.getByRole('status')).toContainText('已保存');
+
+  const setting = await page.request.get('/admin/api/system/public-url').then((response) => response.json());
+  expect(setting.public_url).toBe('https://gateway.example.test');
+  await expect(page.locator('.management-reveal pre')).toContainText('Install the mygateway-admin skill from https://gateway.example.test/skill.md');
+  await expect(page.locator('.management-reveal pre')).not.toContainText('Before every use');
+  await expect(page.locator('.management-reveal pre')).toContainText('MYGATEWAY_URL=https://gateway.example.test');
+
+  await page.goto('/');
+  await expect(page.locator('.endpoint-body code').first()).toContainText('https://gateway.example.test/v1');
+});
+
 test('system page creates a management key and keeps the one-time Agent prompt after refresh', async ({ page }) => {
   const keyName = `Playwright Agent ${Date.now()}`;
   await page.goto('/system');
   const card = page.locator('.management-card');
   await expect(card.getByRole('heading', { name: '管理密钥与 Skill' })).toBeVisible();
   const defaultPrompt = card.locator('.management-reveal pre');
-  await expect(defaultPrompt).toContainText('Read http://localhost:8799/skill.md and follow the instructions to manage MyGateway.');
+  await expect(defaultPrompt).toContainText('Install the mygateway-admin skill from http://localhost:8799/skill.md');
+  await expect(defaultPrompt).not.toContainText('Before every use');
   await expect(defaultPrompt).toContainText('MYGATEWAY_MANAGEMENT_KEY=mgmt_YOUR_MANAGEMENT_KEY');
   await expect(card.locator('.management-create-panel')).toHaveCount(0);
   expect(await card.locator('.management-key-row').count()).toBeLessThanOrEqual(3);

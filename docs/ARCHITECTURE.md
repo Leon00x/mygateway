@@ -77,7 +77,7 @@ HTTP 路由调用领域模块，领域模块调用 `db/*` 和基础工具；数�
 | `request_logs` | 请求明细日志（可选），含脱敏错误与加密上下文预览 |
 | `analytics_minutes` | 5 分钟聚合桶：密钥、统一模型、最终渠道维度，含输入、缓存命中、输出 Token，以及 TTFT、延迟与回退样本 |
 | `model_prices` | 可编辑模型基准价库：30 个内置 USD 基线，输入 / 输出 / 缓存价（micros / 百万 Token）与币种 |
-| `system_settings` | 少量系统设置 |
+| `system_settings` | 少量系统设置；`public_url` 保存控制台确认的规范 HTTP(S) Origin |
 
 关键约束：
 
@@ -86,6 +86,10 @@ HTTP 路由调用领域模块，领域模块调用 `db/*` 和基础工具；数�
 - Gateway Key 只保存 hash；
 - usage 保存名称快照，配置删除后仍可显示历史统计；
 - migration 是 Schema 的权威来源，文档不复制完整 SQL。
+
+`public_url` 通过管理员会话保护的专用端点读写，服务端统一移除尾部 `/` 并拒绝路径、查询、
+锚点与凭据。Dashboard 在未配置时使用浏览器当前 Origin；配置后只将它用于展示、复制命令和
+Skill 引导，不参与请求路由，也不会自动配置 Cloudflare DNS。
 
 `analytics_minutes` 每个完成请求至少 UPSERT 一次。5 分钟聚合减少数据行数量，但不减少更新
 次数；新行还会写入索引，因此容量评估必须以 D1 的 `rows_written` 为准。`usage_minutes` 只保留

@@ -85,6 +85,13 @@ export async function loginViaApi(api: APIRequestContext): Promise<void> {
 export async function resetState(api: APIRequestContext): Promise<void> {
   await loginViaApi(api);
 
+  const sessionResponse = await api.get('/admin/api/auth/session');
+  const testOrigin = new URL(sessionResponse.url()).origin;
+  const publicUrlResponse = await api.put('/admin/api/system/public-url', {
+    data: { public_url: testOrigin },
+  });
+  expect(publicUrlResponse.ok()).toBeTruthy();
+
   const channels = await api.get('/admin/api/channels').then((r) => r.json());
   for (const ch of channels) {
     await api.delete(`/admin/api/channels/${ch.id}`);

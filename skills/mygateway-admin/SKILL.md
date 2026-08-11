@@ -9,6 +9,25 @@ Manage this MyGateway deployment through its HTTP Management API. This file is s
 directly with `curl` or an equivalent HTTP tool. No repository checkout, local helper script, or Cloudflare
 account credential is required.
 
+## Quick start
+
+1. Get the gateway URL and a `mgmt_` Management Key from the owner. Never ask for a Provider Key.
+2. Install this hosted file as the `mygateway-admin` skill using the agent platform's normal skill installation
+   method. Keep the adjacent `/skill.json` manifest so the installed version can be compared later.
+3. Before every use, fetch `$MYGATEWAY_URL/skill.json`. If its `version` is newer than the installed manifest,
+   update the skill from `$MYGATEWAY_URL/skill.md` before continuing. If versions cannot be compared, re-read
+   the hosted `skill.md` and use it as the current instructions.
+4. Read public capabilities, verify API compatibility, then perform the user's requested operation.
+
+For a first connection, start with read-only checks:
+
+```bash
+curl "$MYGATEWAY_URL/skill.json"
+curl "$MYGATEWAY_URL/management/v1/capabilities"
+curl "$MYGATEWAY_URL/management/v1/system/status" \
+  -H "Authorization: Bearer $MYGATEWAY_MANAGEMENT_KEY"
+```
+
 ## Connection
 
 The setup prompt provides:

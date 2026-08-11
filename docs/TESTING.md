@@ -140,8 +140,10 @@ E2E 会创建、修改和删除渠道、模型与 Gateway Key。不要指向包�
 Management Key 的到期、停用和删除。测试显式断言 Provider Key、hash 和 ciphertext 不会
 出现在响应中。
 
-`e2e/management-ui.spec.ts` 验证 System 页默认展示网站托管地址和安全占位符，创建后配置提示词
-包含一次性 Key，刷新仍可从同源 `localStorage` 恢复，并在 1 小时窗口失效或删除后恢复占位模板。
+`e2e/management-ui.spec.ts` 验证 System 页自动检测网站访问地址、拒绝非 Origin 输入，并将保存后
+的规范地址同步到首页端点与 Agent 提示词；提示词只包含 Skill 安装入口，manifest 版本检查规则
+由托管 `skill.md` 提供。同时验证默认展示安全占位符，创建后配置提示词包含一次性 Key，刷新仍可
+从同源 `localStorage` 恢复，并在 1 小时窗口失效或删除后恢复占位模板。
 API E2E 同时确认 `/skills/index.json`、`/skill.md` 和 `/skill.json` 可由部署网站直接读取，并断言
 入口文件不依赖本地 helper。Skill 可做无凭据发现 smoke test：
 

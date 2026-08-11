@@ -6,6 +6,12 @@
 
 ## 未发布：仓库整理与接续开发基线
 
+- System 页在管理员账号卡片旁新增网站访问域名设置：默认检测当前 Origin，显式保存规范
+  HTTP(S) 地址，并同步用于首页接入地址、curl 命令与 Agent Skill 提示词；服务端拒绝包含路径、
+  查询、锚点或凭据的输入，UI 与 API E2E 覆盖校验和传播行为。
+- `mygateway-admin` Skill 升级至 0.2.0，增加首次连接快速指引，并在 Skill 内要求每次使用前检查
+  `/skill.json`、发现新版本后先更新；System 提示词只保留托管 Skill 的安装入口。构建生成的
+  Skill 索引直接读取 manifest 版本，避免发布元数据漂移。
 - 新增 Agent 管理入口：独立 `mgmt_` Management Key（只读 / 可写、到期、停启、删除、
   最近使用时间）、版本化 `/management/v1` 能力发现与资源白名单，以及不记录请求体的操作审计。
   System 页可生成最多保留 1 小时的一键 Agent 配置提示词；官方 `mygateway-admin` Skill 覆盖渠道、
