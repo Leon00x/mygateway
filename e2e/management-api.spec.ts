@@ -35,13 +35,16 @@ test.afterAll(async ({ request }) => {
 test('discovery is public while protected routes reject missing and wrong key types', async ({ request }) => {
   const hostedSkills = await request.get('/skills/index.json');
   expect(hostedSkills.status()).toBe(200);
-  expect(await hostedSkills.json()).toMatchObject({ skills: [{ name: 'mygateway-admin', version: '0.2.0', api_version: 'v1' }] });
+  expect(await hostedSkills.json()).toMatchObject({ skills: [{ name: 'mygateway-admin', version: '0.3.0', api_version: 'v1' }] });
   const hostedSkill = await request.get('/skill.md');
   expect(hostedSkill.status()).toBe(200);
   const hostedSkillText = await hostedSkill.text();
   expect(hostedSkillText).toContain('name: mygateway-admin');
   expect(hostedSkillText).toContain('## Quick start');
-  expect(hostedSkillText).toContain('Before every use, fetch `$MYGATEWAY_URL/skill.json`');
+  expect(hostedSkillText).toContain('Before every use, load the persisted credentials');
+  expect(hostedSkillText).toContain('Do not rely on chat history or');
+  expect(hostedSkillText).toContain('mygateway/credentials.env');
+  expect(hostedSkillText).toContain('Keep the file mode at `0600`');
   expect(hostedSkillText).toContain('No repository checkout, local helper script');
   expect(hostedSkillText).toContain('start=UNIX_SECONDS&end=UNIX_SECONDS');
   expect(hostedSkillText).not.toContain('from=UNIX_SECONDS&to=UNIX_SECONDS');
@@ -61,6 +64,20 @@ test('discovery is public while protected routes reject missing and wrong key ty
   ]));
   expect(openApi.paths['/models'].get['x-required-permission']).toBe('read');
   expect(openApi.paths['/models'].post['x-required-permission']).toBe('write');
+  expect(openApi.paths['/channels'].post.requestBody.content['application/json'].schema.properties.api_key.writeOnly).toBe(true);
+  expect(openApi.paths['/analytics/usage'].get.parameters.map((parameter: any) => parameter.name)).toEqual(
+    expect.arrayContaining(['range', 'start', 'end', 'model_id', 'key_id', 'granularity']),
+  );
+  expect(openApi.paths['/api-docs'].get.security).toEqual([]);
+
+  const managementDocs = await request.get('/management/v1/api-docs');
+  expect(managementDocs.status()).toBe(200);
+  expect(await managementDocs.text()).toContain('/management/v1/openapi.json');
+  const combinedDocs = await request.get('/v1/api-docs');
+  expect(combinedDocs.status()).toBe(200);
+  const combinedDocsText = await combinedDocs.text();
+  expect(combinedDocsText).toContain('/v1/openapi.json');
+  expect(combinedDocsText).toContain('/management/v1/openapi.json');
 
   expect((await request.get('/management/v1/system/status')).status()).toBe(401);
   expect((await request.get('/management/v1/system/status', { headers: auth('sk-not-a-management-key') })).status()).toBe(401);

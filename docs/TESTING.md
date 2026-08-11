@@ -135,7 +135,7 @@ E2E 会创建、修改和删除渠道、模型与 Gateway Key。不要指向包�
 ## 6. Management API 与 Skill
 
 `e2e/management-api.spec.ts` 使用真实 Worker HTTP 和本地 D1，覆盖 Skill 中声明的只读查询与
-资源写操作、公开能力发现、无凭据拒绝、`read` / `write` 权限、渠道与模型实例创建、Gateway Key
+资源写操作、公开能力发现与双规范 API 文档、无凭据拒绝、`read` / `write` 权限、渠道与模型实例创建、Gateway Key
 一次性明文、余额/用量/日志查询，以及
 Management Key 的到期、停用和删除。测试显式断言 Provider Key、hash 和 ciphertext 不会
 出现在响应中。
@@ -144,12 +144,15 @@ Management Key 的到期、停用和删除。测试显式断言 Provider Key、h
 的规范地址同步到首页端点与 Agent 提示词；提示词只包含 Skill 安装入口，manifest 版本检查规则
 由托管 `skill.md` 提供。同时验证默认展示安全占位符，创建后配置提示词包含一次性 Key，刷新仍可
 从同源 `localStorage` 恢复，并在 1 小时窗口失效或删除后恢复占位模板。
-API E2E 同时确认 `/skills/index.json`、`/skill.md` 和 `/skill.json` 可由部署网站直接读取，并断言
-入口文件不依赖本地 helper。Skill 可做无凭据发现 smoke test：
+API E2E 同时确认 `/skills/index.json`、`/skill.md` 和 `/skill.json` 可由部署网站直接读取，断言
+入口文件不依赖本地 helper，并检查 Skill 明确要求安全持久化与后续加载 Management Key。公开文档
+测试还验证 `/v1/api-docs` 包含两份规范、`/management/v1/api-docs` 无需鉴权，以及 OpenAPI 的
+写入凭据标记、查询参数和权限声明。Skill 可做无凭据发现 smoke test：
 
 ```bash
 curl http://localhost:8799/skill.md
 curl http://localhost:8799/management/v1/capabilities
+curl http://localhost:8799/management/v1/api-docs
 python3 /home/leon/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/mygateway-admin
 ```
 

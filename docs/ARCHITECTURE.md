@@ -149,6 +149,8 @@ Worker 内存，并且渠道、日志和错误响应都会移除明文、hash、
 Skill 源码以根目录 `skills/mygateway-admin/SKILL.md` 为唯一权威；Vite `closeBundle` 阶段将其
 发布为 Dashboard 静态产物 `/skill.md` 与 `/skill.json`，并生成 `/skills/index.json`。因此每个部署实例都
 能从自己的同源网站分发 Skill，不需要依赖代码仓可用性，也不会把 Management Key 写入产物。
+Management Key 的跨会话保存由 Agent 平台凭据存储负责；仅当平台无此能力时，Skill 才允许使用
+仓库外、`0600` 权限的本地配置文件。该文件不属于 MyGateway 服务端状态，也不会随构建发布。
 
 ## 6. 模型与协议解析
 
@@ -240,7 +242,8 @@ usage 写入失败只记录脱敏错误，不修改已经返回的模型响应�
 Gateway 错误使用稳定 JSON envelope 并附带 Request ID。Provider 已返回明确响应时尽量保留
 其状态；网关自身的认证、路由、协议和超时错误使用统一错误码。
 
-`GET /management/v1/capabilities` 与 `/management/v1/openapi.json` 用于发现；其余 Management
+`GET /management/v1/capabilities`、`/management/v1/openapi.json` 与
+`/management/v1/api-docs` 用于公开发现；`/v1/api-docs` 也可在数据面与管理面规范间切换。其余 Management
 路由只开放渠道、余额、模型、Gateway Key、用量、脱敏日志和系统状态。日志详情始终移除加密
 上下文字段，即使管理员曾开启上下文记录。日志设置、清空日志、管理员账号和 Management Key
 签发不在机器 API 白名单内。

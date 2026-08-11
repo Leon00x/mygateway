@@ -12,12 +12,16 @@ account credential is required.
 ## Quick start
 
 1. Get the gateway URL and a `mgmt_` Management Key from the owner. Never ask for a Provider Key.
-2. Install this hosted file as the `mygateway-admin` skill using the agent platform's normal skill installation
+2. Persist both values once in the agent platform's encrypted credential store and expose them as
+   `MYGATEWAY_URL` and `MYGATEWAY_MANAGEMENT_KEY` in future sessions. If the platform has no durable secret
+   store, use the owner-only local file described in [Connection](#connection). Do not rely on chat history or
+   temporary agent memory: the skill must remain usable in a new session.
+3. Install this hosted file as the `mygateway-admin` skill using the agent platform's normal skill installation
    method. Keep the adjacent `/skill.json` manifest so the installed version can be compared later.
-3. Before every use, fetch `$MYGATEWAY_URL/skill.json`. If its `version` is newer than the installed manifest,
+4. Before every use, load the persisted credentials, then fetch `$MYGATEWAY_URL/skill.json`. If its `version` is newer than the installed manifest,
    update the skill from `$MYGATEWAY_URL/skill.md` before continuing. If versions cannot be compared, re-read
    the hosted `skill.md` and use it as the current instructions.
-4. Read public capabilities, verify API compatibility, then perform the user's requested operation.
+5. Read public capabilities, verify API compatibility, then perform the user's requested operation.
 
 For a first connection, start with read-only checks:
 
@@ -36,6 +40,35 @@ The setup prompt provides:
 MYGATEWAY_URL="https://your-gateway.example"
 MYGATEWAY_MANAGEMENT_KEY="mgmt_..."
 ```
+
+Save these values through the agent platform's persistent secret or credential mechanism whenever one is
+available. Store the URL as ordinary configuration and the Management Key as a secret. The platform must make
+both values available to later sessions without asking the owner to paste the key again.
+
+If no credential store exists and the agent has a persistent local filesystem, save them outside every source
+repository in an owner-only file. For Bash, first place the provided values in the two environment
+variables above, then run the following without printing their contents:
+
+```bash
+MYGATEWAY_CREDENTIAL_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/mygateway/credentials.env"
+install -d -m 700 "$(dirname "$MYGATEWAY_CREDENTIAL_FILE")"
+(umask 077; printf 'MYGATEWAY_URL=%q\nMYGATEWAY_MANAGEMENT_KEY=%q\n' \
+  "$MYGATEWAY_URL" "$MYGATEWAY_MANAGEMENT_KEY" > "$MYGATEWAY_CREDENTIAL_FILE")
+chmod 600 "$MYGATEWAY_CREDENTIAL_FILE"
+```
+
+Load it at the beginning of later sessions, before the version check:
+
+```bash
+MYGATEWAY_CREDENTIAL_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/mygateway/credentials.env"
+set -a
+. "$MYGATEWAY_CREDENTIAL_FILE"
+set +a
+```
+
+Keep the file mode at `0600`, never place it inside a repository or Skill package, and never print, commit,
+upload, or quote its contents. If neither a credential store nor a persistent local filesystem is available,
+tell the owner that durable reuse is unavailable and request a Management Key again only when needed.
 
 Use the exact `MYGATEWAY_URL` that hosted this file. Send the Management Key only to
 `$MYGATEWAY_URL/management/v1/*`:
@@ -64,7 +97,8 @@ curl "$MYGATEWAY_URL/management/v1/openapi.json"
 - A Provider Key may appear only in a channel create/update request. Never repeat it or send it elsewhere.
 - Provider Keys are encrypted by MyGateway and never returned by the API.
 - Gateway Keys returned by create/regenerate are one-time secrets. Show them once and do not log them.
-- Never send the Management Key to another host, include it in a URL, or store it in MyGateway resources.
+- Never send the Management Key to another host, include it in a URL, store it in MyGateway resources, or
+  place it in the Skill source. Persist it only through the credential rules in [Connection](#connection).
 - Do not bypass an API refusal by accessing D1, Worker Secrets, or `/admin/api/*`.
 
 ## Channels

@@ -465,10 +465,18 @@ TTFT 的历史桶；界面必须据样本数计算覆盖率。
 渠道输出继续走 `toPublicChannel`；日志详情额外强制删除上下文密文列并将上下文设为 `null`。
 审计记录不包含 query 和 body，防止 Provider Key 或其他一次性凭据进入审计表。
 
+`GET /management/v1/capabilities`、`/openapi.json` 与 `/api-docs` 是公开发现入口，不要求
+Management Key；文档公开不改变资源操作的鉴权。`/v1/api-docs` 使用 Scalar 的多规范入口，允许在
+Gateway API 与 Management API 间切换。Management OpenAPI 描述每个操作的 `read` / `write`
+要求、路径和查询参数、请求体、主要响应结构，以及 Provider Key 只写和日志上下文不可见约束。
+
 ### 11.3 Skill
 
-`skills/mygateway-admin/` 是仓库内官方 Skill。它通过环境变量读取地址和 Management Key，先查询
-capabilities，再用 `curl` 或 Agent 自带的等价 HTTP 工具直接调用 API。Skill 不依赖代码仓、Node
+`skills/mygateway-admin/` 是仓库内官方 Skill。首次连接时优先将地址和 Management Key 写入 Agent
+平台的持久化凭据存储；若平台不提供该能力但有持久化本地文件系统，则写入仓库外、目录权限
+`0700`、文件权限 `0600` 的配置文件。后续会话先加载为环境变量，再查询 capabilities 并用 `curl`
+或 Agent 自带的等价 HTTP 工具直接调用 API。密钥不得进入 Skill 源码、代码仓、聊天记忆或输出。
+Skill 不依赖代码仓、Node
 helper 或 Cloudflare 账号；在删除、凭据轮换或批量导入前要求确认，且不得通过 D1、Cloudflare
 Secret 或 Dashboard DOM 绕过 Management API。
 

@@ -6,6 +6,12 @@
 
 ## 未发布：仓库整理与接续开发基线
 
+- `/v1/api-docs` 现在可切换 Gateway API 与 Management API，新增公开的
+  `/management/v1/api-docs`，并为管理接口补齐权限、路径/查询参数、请求体、主要响应与脱敏约束；
+  资源操作仍要求 `mgmt_` Bearer 鉴权。`mygateway-admin` Skill 升级至 0.3.0，首次连接必须把网关
+  地址和 Management Key 保存到持久化凭据存储；无凭据存储时使用仓库外、仅所有者可读的本地文件。
+- 渠道卡片的接入协议只展示协议名称标签，不再重复请求 path 或完整 Base URL；更多操作改为固定尺寸
+  图标按钮，并将按钮和菜单约束在卡片边界内，覆盖桌面与移动端溢出回归。
 - README 改为英文默认入口并新增简体中文镜像，顶部提供语言切换；功能介绍按网关、渠道、
   模型与路由、密钥、Analytics、控制台、Agent 管理和安全分模块概述，不再展开实现细节。
   `docs/` 新增双语导航，并为部署、贡献和安全策略补齐中英文版本。
@@ -16,7 +22,7 @@
 - System 页在管理员账号卡片旁新增网站访问域名设置：默认检测当前 Origin，显式保存规范
   HTTP(S) 地址，并同步用于首页接入地址、curl 命令与 Agent Skill 提示词；服务端拒绝包含路径、
   查询、锚点或凭据的输入，UI 与 API E2E 覆盖校验和传播行为。
-- `mygateway-admin` Skill 升级至 0.2.0，增加首次连接快速指引，并在 Skill 内要求每次使用前检查
+- `mygateway-admin` Skill 在 0.2.0 增加首次连接快速指引，并在 Skill 内要求每次使用前检查
   `/skill.json`、发现新版本后先更新；System 提示词只保留托管 Skill 的安装入口。构建生成的
   Skill 索引直接读取 manifest 版本，避免发布元数据漂移。
 - 新增 Agent 管理入口：独立 `mgmt_` Management Key（只读 / 可写、到期、停启、删除、

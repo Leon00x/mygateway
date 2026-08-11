@@ -107,7 +107,10 @@ gatewayApp.doc31('/v1/openapi.json', {
 
 // --- Scalar docs page ---
 gatewayApp.get('/v1/api-docs', apiReference({
-  spec: { url: '/v1/openapi.json' },
+  sources: [
+    { title: 'Gateway API', slug: 'gateway', url: '/v1/openapi.json' },
+    { title: 'Management API', slug: 'management', url: '/management/v1/openapi.json' },
+  ],
   pageTitle: 'MyGateway API Docs',
 }));
 

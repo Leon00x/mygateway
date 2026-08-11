@@ -1,6 +1,6 @@
 import type { JSX } from 'solid-js';
 
-export type IconName = 'home' | 'channels' | 'models' | 'keys' | 'analytics' | 'analytics-folder' | 'requests' | 'system' | 'docs' | 'logout' | 'search' | 'menu' | 'close' | 'moon' | 'sun' | 'panel-collapse' | 'panel-expand' | 'copy' | 'sliders' | 'pause' | 'play' | 'trash' | 'plus' | 'calendar';
+export type IconName = 'home' | 'channels' | 'models' | 'keys' | 'analytics' | 'analytics-folder' | 'requests' | 'system' | 'docs' | 'logout' | 'search' | 'menu' | 'more-horizontal' | 'close' | 'moon' | 'sun' | 'panel-collapse' | 'panel-expand' | 'copy' | 'sliders' | 'pause' | 'play' | 'trash' | 'plus' | 'calendar';
 
 export default function Icon(props: { name: IconName; size?: number; class?: string }) {
   const size = () => props.size ?? 18;
@@ -17,6 +17,7 @@ export default function Icon(props: { name: IconName; size?: number; class?: str
     logout: <><path d="M10 5H5v14h5M14 8l4 4-4 4M8 12h10"/></>,
     search: <><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></>,
     menu: <><path d="M4 7h16M4 12h16M4 17h16"/></>,
+    'more-horizontal': <><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none"/></>,
     close: <><path d="m6 6 12 12M18 6 6 18"/></>,
     moon: <path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5 8.5 8.5 0 1 0 20.5 14.2Z"/>,
     sun: <><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42"/></>,
