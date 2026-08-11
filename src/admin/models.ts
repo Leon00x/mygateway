@@ -19,6 +19,7 @@ import {
   deleteIdentifier,
   ModelCardRow,
   ChannelModelRow,
+  getChannelModelForCardChannel,
 } from '../db/models.ts';
 import { invalidateModelRouteCache } from '../gateway/access-resolver.ts';
 import { getChannel } from '../db/channels.ts';
@@ -214,6 +215,15 @@ export async function handleModelInstances(
 
     if (!body.channel_id || !body.channel_model_id || !body.public_model_alias) {
       return gatewayErrorResponse('invalid_request', 'channel_id, channel_model_id, and public_model_alias are required', requestId);
+    }
+
+    const existingInstance = await getChannelModelForCardChannel(env.DB, modelId, body.channel_id);
+    if (existingInstance) {
+      return gatewayErrorResponse(
+        'resource_in_use',
+        'This channel is already bound to the unified model',
+        requestId,
+      );
     }
 
     // Check alias uniqueness

@@ -2,6 +2,7 @@ import { createSignal, onMount, Show, For } from 'solid-js';
 import { A } from '@solidjs/router';
 import { useAuth } from '../index';
 import { t } from '../i18n';
+import { useAppDialog } from '../components/AppDialog';
 
 interface ModelPriceRow {
   provider_model_id: string;
@@ -33,6 +34,7 @@ const toMicros = (v: string): number => {
 };
 
 export default function System() {
+  const dialog = useAppDialog();
   const auth = useAuth();
   const [status, setStatus] = createSignal<{ version: string; status: string } | null>(null);
   const [prices, setPrices] = createSignal<ModelPriceRow[]>([]);
@@ -53,6 +55,8 @@ export default function System() {
   const [settingsBusy, setSettingsBusy] = createSignal(false);
   const [settingsError, setSettingsError] = createSignal('');
   const [settingsSaved, setSettingsSaved] = createSignal(false);
+  const [clearLogsBusy, setClearLogsBusy] = createSignal(false);
+  const [clearLogsResult, setClearLogsResult] = createSignal<{ kind: 'success' | 'error'; text: string } | null>(null);
 
   const settingsDirty = () => JSON.stringify(settingsDraft()) !== JSON.stringify(settings());
   const patchDraft = (patch: Partial<AnalyticsSettings>) => {
@@ -113,6 +117,19 @@ export default function System() {
 
   const draftOn = () => settingsDraft().requestLogsEnabled;
   const draftContextOn = () => settingsDraft().logContext;
+
+  const clearAllLogs = async () => {
+    if (!await dialog.confirm({ title: t('logs.clearAll'), message: t('logs.clearConfirm'), danger: true })) return;
+    setClearLogsBusy(true); setClearLogsResult(null);
+    try {
+      const response = await fetch('/admin/api/analytics/logs', { method: 'DELETE' });
+      if (!response.ok) throw new Error(t('logs.clearFailed'));
+      const result = await response.json() as { deleted?: number };
+      setClearLogsResult({ kind: 'success', text: t('logs.cleared').replace('{count}', String(result.deleted ?? 0)) });
+    } catch (cause) {
+      setClearLogsResult({ kind: 'error', text: cause instanceof Error ? cause.message : t('logs.clearFailed') });
+    } finally { setClearLogsBusy(false); }
+  };
 
   const loadPrices = async () => {
     try {
@@ -229,9 +246,9 @@ export default function System() {
           </label>
           <label class="checkbox-label">
             <input type="checkbox" checked={draftContextOn()}
-              onChange={(e) => {
+              onChange={async (e) => {
                 const next = e.currentTarget.checked;
-                if (next && !draftContextOn() && !confirm(t('logs.contextConfirm'))) {
+                if (next && !draftContextOn() && !await dialog.confirm({ title: t('logs.contextTitle'), message: t('logs.contextConfirm'), danger: true })) {
                   e.currentTarget.checked = false;
                   return;
                 }
@@ -276,6 +293,7 @@ export default function System() {
             {settingsBusy() ? t('common.saving') : t('common.save')}
           </button>
         </div>
+        <div class="log-maintenance-row"><div><strong>{t('logs.maintenance')}</strong><small>{t('logs.clearHint')}</small><Show when={clearLogsResult()}>{(result) => <span role="status" class={result().kind}>{result().text}</span>}</Show></div><button class="danger-button" disabled={clearLogsBusy()} onClick={clearAllLogs}>{clearLogsBusy() ? t('logs.clearing') : t('logs.clear')}</button></div>
       </section>
 
       <section class="panel settings-card wide price-library-card">

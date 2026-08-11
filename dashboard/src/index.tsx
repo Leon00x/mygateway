@@ -14,6 +14,7 @@ import AnalyticsLogs from './pages/AnalyticsLogs';
 import System from './pages/System';
 import Icon, { IconName } from './components/Icon';
 import { t, locale, toggleLocale } from './i18n';
+import { DialogProvider } from './components/AppDialog';
 
 interface AuthState {
   authenticated: () => boolean;
@@ -282,7 +283,7 @@ function UserMenu(props: { username: string; onLogout: () => Promise<void> }) {
 }
 
 render(() => (
-  <AuthProvider>
+  <DialogProvider><AuthProvider>
     <Router root={AppLayout}>
       <Route path="/login" component={Login} />
       <Route path="/change-password" component={() => <RequireAuth><ChangeCredentials /></RequireAuth>} />
@@ -295,5 +296,5 @@ render(() => (
       <Route path="/analytics/logs" component={() => <RequireReady><AnalyticsLogs /></RequireReady>} />
       <Route path="/system" component={() => <RequireReady><System /></RequireReady>} />
     </Router>
-  </AuthProvider>
+  </AuthProvider></DialogProvider>
 ), document.getElementById('root')!);

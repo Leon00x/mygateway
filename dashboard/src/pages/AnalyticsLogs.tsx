@@ -75,7 +75,6 @@ export default function AnalyticsLogs() {
   const [requestIdFilter, setRequestIdFilter] = createSignal('');
   const [timeRange, setTimeRange] = createSignal<TimeRange>({ preset: '1w', ...resolvePreset('1w') });
   const [limit, setLimit] = createSignal(50);
-  const [clearBusy, setClearBusy] = createSignal(false);
 
   // Cursor pagination
   const [nextCursor, setNextCursor] = createSignal<{ timestamp: number; id: string } | null>(null);
@@ -167,20 +166,6 @@ export default function AnalyticsLogs() {
     }
   };
 
-  const clearAllLogs = async () => {
-    if (!confirm(t('logs.clearConfirm'))) return;
-    setClearBusy(true);
-    try {
-      const response = await fetch('/admin/api/analytics/logs', { method: 'DELETE' });
-      if (!response.ok) throw new Error(t('logs.clearFailed'));
-      setLogs([]);
-      setNextCursor(null);
-      setHasMore(false);
-    } catch (cause) {
-      setLogsError(cause instanceof Error ? cause.message : t('logs.clearFailed'));
-    } finally { setClearBusy(false); }
-  };
-
   const fetchFilterOptions = async () => {
     try {
       const [modelsRes, keysRes, channelsRes] = await Promise.all([
@@ -218,9 +203,6 @@ export default function AnalyticsLogs() {
         <div class="analytics-log-actions">
           <button class="ghost-button" onClick={exportCsv}>
             {t('logs.export')}
-          </button>
-          <button class="ghost-button danger-link" disabled={clearBusy()} onClick={clearAllLogs}>
-            {clearBusy() ? t('logs.clearing') : t('logs.clear')}
           </button>
           <button class="primary-button" disabled={refreshing()} onClick={() => applyFilters()}>
             {refreshing() ? t('common.refreshing') : t('common.refresh')}

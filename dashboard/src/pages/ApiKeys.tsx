@@ -1,6 +1,7 @@
 import { createSignal, onMount, For, Show } from 'solid-js';
 import { t } from '../i18n';
 import Icon from '../components/Icon';
+import { useAppDialog } from '../components/AppDialog';
 
 interface ApiKey {
   id: string;
@@ -64,6 +65,7 @@ function limitsSummary(key: ApiKey): string {
 }
 
 export default function ApiKeys() {
+  const dialog = useAppDialog();
   const [keys, setKeys] = createSignal<ApiKey[]>([]);
   const [loading, setLoading] = createSignal(true);
   const [revealedKey, setRevealedKey] = createSignal('');
@@ -160,7 +162,7 @@ export default function ApiKeys() {
     void fetchKeys();
   };
   const deleteKey = async (id: string) => {
-    if (!confirm(t('keys.deleteConfirm'))) return;
+    if (!await dialog.confirm({ title: t('common.delete'), message: t('keys.deleteConfirm'), danger: true })) return;
     await fetch(`/admin/api/keys/${id}`, { method: 'DELETE' });
     void fetchKeys();
   };

@@ -18,7 +18,7 @@ import {
   ChannelRow,
   replaceChannelProtocols,
 } from '../db/channels.ts';
-import { encryptProviderKey } from '../crypto/provider-key.ts';
+import { decryptProviderKey, encryptProviderKey } from '../crypto/provider-key.ts';
 import { invalidateModelRouteCache } from '../gateway/access-resolver.ts';
 import { channelCircuitBreaker } from '../gateway/passive-circuit-breaker.ts';
 import { isGatewayProtocol, type ChannelProtocol, type GatewayProtocol } from '../gateway/protocols.ts';
@@ -101,7 +101,7 @@ function resolveChannelInput(body: ChannelInput) {
   if (!body.api_key) throw new Error('api_key is required');
   const name = body.name?.trim() || preset?.name || '';
   const providerType = preset?.provider_type ?? body.provider_type;
-  const requestedBaseUrl = preset?.base_url ?? body.base_url;
+  const requestedBaseUrl = body.base_url ?? preset?.base_url;
   if (!name || !providerType || !requestedBaseUrl) {
     throw new Error('name, provider_type, and base_url are required');
   }
@@ -109,13 +109,47 @@ function resolveChannelInput(body: ChannelInput) {
     throw new Error('provider_type must be openai or openai_compatible');
   }
   const baseUrl = normalizeBaseUrl(requestedBaseUrl);
+  const protocols = normalizeProtocols(body.protocols ?? preset?.protocols, baseUrl);
   return {
     presetId,
     name,
     providerType,
-    baseUrl,
-    protocols: normalizeProtocols(preset?.protocols ?? body.protocols, baseUrl),
+    baseUrl: protocols[0]?.base_url ?? baseUrl,
+    protocols,
   };
+}
+
+function protocolSignature(protocols: ChannelProtocol[]): string {
+  return [...protocols]
+    .sort((a, b) => a.protocol.localeCompare(b.protocol))
+    .map((entry) => `${entry.protocol}|${entry.base_url}`)
+    .join('\n');
+}
+
+async function findDuplicateChannel(
+  env: Env,
+  input: { presetId: string | null; protocols: ChannelProtocol[]; apiKey: string; excludeId?: string },
+) {
+  const candidates = (await listChannels(env.DB)).filter((channel) => {
+    if (channel.id === input.excludeId) return false;
+    if (input.presetId) return channel.preset_id === input.presetId;
+    return !channel.preset_id && protocolSignature(channel.protocols) === protocolSignature(input.protocols);
+  });
+  for (const channel of candidates) {
+    try {
+      const key = await decryptProviderKey(
+        channel.api_key_ciphertext,
+        channel.api_key_iv,
+        env.MASTER_KEY,
+        channel.id,
+        channel.api_key_version,
+      );
+      if (key === input.apiKey) return channel;
+    } catch {
+      // A damaged existing secret must not prevent creation of a valid channel.
+    }
+  }
+  return null;
 }
 
 function normalizeDetectedModels(input: unknown): DiscoveredProviderModel[] {
@@ -211,6 +245,19 @@ export async function handleChannelsCollection(
       const { presetId, name, providerType, baseUrl, protocols } = resolveChannelInput(body);
       const detectedModels = normalizeDetectedModels(body.detected_models);
 
+      const duplicate = await findDuplicateChannel(env, {
+        presetId,
+        protocols,
+        apiKey: body.api_key!,
+      });
+      if (duplicate) {
+        return gatewayErrorResponse(
+          'resource_in_use',
+          `This provider key is already configured for channel '${duplicate.name}'`,
+          requestId,
+        );
+      }
+
       const id = generateId();
       const { ciphertext, iv } = await encryptProviderKey(
         body.api_key!,
@@ -277,14 +324,6 @@ export async function handleChannelItem(
 
       const channel = await getChannel(env.DB, id);
       if (!channel) return gatewayErrorResponse('model_not_found', 'Channel not found', requestId);
-      if (channel.preset_id && (body.base_url !== undefined || body.protocols !== undefined)) {
-        return gatewayErrorResponse(
-          'invalid_request',
-          'Preset protocol endpoints are managed by the server; create a custom channel to change them',
-          requestId,
-        );
-      }
-
       const updates: Parameters<typeof updateChannel>[2] = {};
 
       if (body.name !== undefined) updates.name = body.name;
@@ -302,6 +341,31 @@ export async function handleChannelItem(
           return gatewayErrorResponse('invalid_request', (e as Error).message, requestId);
         }
       }
+      const normalizedProtocols = body.protocols !== undefined
+        ? normalizeProtocols(body.protocols, updates.base_url ?? channel.base_url)
+        : channel.protocols;
+      if (body.api_key !== undefined || body.protocols !== undefined || body.base_url !== undefined) {
+        const candidateKey = body.api_key ?? await decryptProviderKey(
+          channel.api_key_ciphertext,
+          channel.api_key_iv,
+          env.MASTER_KEY,
+          id,
+          channel.api_key_version,
+        );
+        const duplicate = await findDuplicateChannel(env, {
+          presetId: channel.preset_id,
+          protocols: normalizedProtocols,
+          apiKey: candidateKey,
+          excludeId: id,
+        });
+        if (duplicate) {
+          return gatewayErrorResponse(
+            'resource_in_use',
+            `This provider key is already configured for channel '${duplicate.name}'`,
+            requestId,
+          );
+        }
+      }
       if (body.api_key !== undefined) {
         const { ciphertext, iv } = await encryptProviderKey(
           body.api_key,
@@ -313,14 +377,11 @@ export async function handleChannelItem(
         updates.api_key_iv = iv;
       }
 
-      await updateChannel(env.DB, id, updates);
       if (body.protocols !== undefined) {
-        await replaceChannelProtocols(
-          env.DB,
-          id,
-          normalizeProtocols(body.protocols, updates.base_url ?? channel.base_url),
-        );
+        updates.base_url = normalizedProtocols[0].base_url;
       }
+      await updateChannel(env.DB, id, updates);
+      if (body.protocols !== undefined) await replaceChannelProtocols(env.DB, id, normalizedProtocols);
       invalidateModelRouteCache();
       channelCircuitBreaker.reset(id);
       invalidateProviderBalanceCache(id);

@@ -103,6 +103,22 @@ test('4. add channel via preset modal', async ({ page }) => {
     'anthropic_messages', 'openai_chat',
   ]);
   expect(channelOverview.summaries.find((summary: any) => summary.channel_id === createdChannel.id)?.available_count).toBe(1);
+
+  // Creating the same preset with the same provider key is rejected before it
+  // can duplicate the channel or auto-import another model instance.
+  const duplicateResponse = await page.request.post('/admin/api/channels', {
+    data: {
+      preset_id: 'deepseek',
+      api_key: 'sk-e2e-dummy-123456',
+      protocols: createdChannel.protocols,
+    },
+  });
+  expect(duplicateResponse.status()).toBe(409);
+  expect((await duplicateResponse.json()).error?.code).toBe('resource_in_use');
+  const channelsAfterDuplicate = await page.request.get('/admin/api/channels').then((response) => response.json());
+  expect(channelsAfterDuplicate.filter((channel: any) => channel.preset_id === 'deepseek')).toHaveLength(1);
+  const modelsAfterDuplicate = await page.request.get('/admin/api/models').then((response) => response.json());
+  expect(modelsAfterDuplicate.find((model: any) => model.unified_model_id === catalogModelId)?.instances).toHaveLength(1);
   await page.getByRole('button', { name: '关闭', exact: true }).click();
 
   // List should show the channel (created from the DeepSeek preset)
@@ -110,14 +126,15 @@ test('4. add channel via preset modal', async ({ page }) => {
   const channelCard = page.locator('.channel-card', { hasText: channelName });
   await expect(channelCard.getByText('账户余额')).toBeVisible();
   await expect(channelCard.getByText('查询失败')).toBeVisible();
-  await expect(channelCard.getByRole('button', { name: '编辑' })).toBeVisible();
-  await channelCard.getByRole('button', { name: '编辑' }).click();
+  await expect(channelCard.getByRole('button', { name: '管理' })).toBeVisible();
+  await channelCard.getByRole('button', { name: '管理' }).click();
   await page.locator('.channel-detail-modal').getByRole('button', { name: '连接配置', exact: true }).click();
   const editModal = page.locator('.modal-card', { hasText: '连接配置' });
   await expect(editModal.getByText('Chat', { exact: true })).toBeVisible();
   await expect(editModal.getByText('Messages', { exact: true })).toBeVisible();
-  await expect(editModal.getByText('https://api.deepseek.com/v1', { exact: true })).toBeVisible();
-  await expect(editModal.getByText('https://api.deepseek.com/anthropic', { exact: true })).toBeVisible();
+  await expect(editModal.locator('.protocol-url input').nth(0)).toHaveValue('https://api.deepseek.com/v1');
+  await expect(editModal.locator('.protocol-url input').nth(2)).toHaveValue('https://api.deepseek.com/anthropic');
+  await expect(editModal.getByText('/responses', { exact: true })).toBeVisible();
   await editModal.getByRole('button', { name: '×' }).click();
 });
 
@@ -163,6 +180,16 @@ test('5. create model card + add instance via UI', async ({ page, request }) => 
   expect(created).toBeTruthy();
   expect(created.instances.length).toBe(1);
   expect(created.instances[0].public_model_alias).toBe(channelAlias);
+
+  const duplicateInstance = await request.post(`/admin/api/models/${created.id}/instances`, {
+    data: {
+      channel_id: ch.id,
+      channel_model_id: 'another-upstream-id',
+      public_model_alias: uniq('duplicate-'),
+    },
+  });
+  expect(duplicateInstance.status()).toBe(409);
+  expect((await duplicateInstance.json()).error?.code).toBe('resource_in_use');
 
   // The create form can also bind a channel model in one operation.
   await page.getByRole('button', { name: '创建模型' }).click();
@@ -312,17 +339,13 @@ test('10. delete channel reports impact and removes orphan models', async ({ pag
   await page.locator('.sidebar').getByRole('link', { name: /渠道/ }).click();
   const channelCard = page.locator('.channel-card', { hasText: channelName });
   await channelCard.locator('summary').click();
-  const dialogMessagePromise = new Promise<string>((resolve) => {
-    page.once('dialog', async (dialog) => {
-      resolve(dialog.message());
-      await dialog.accept();
-    });
-  });
   await channelCard.getByRole('button', { name: '删除渠道' }).click();
-  const dialogMessage = await dialogMessagePromise;
-  expect(dialogMessage).toContain('关联 3 个实例');
-  expect(dialogMessage).toContain('2 个模型将失去最后渠道并一并删除');
-  expect(dialogMessage).toContain('其他仍有渠道的模型只移除当前实例');
+  const confirmDialog = page.getByRole('alertdialog');
+  await expect(confirmDialog).toBeVisible();
+  await expect(confirmDialog).toContainText('关联 3 个实例');
+  await expect(confirmDialog).toContainText('2 个模型将失去最后渠道并一并删除');
+  await expect(confirmDialog).toContainText('其他仍有渠道的模型只移除当前实例');
+  await confirmDialog.getByRole('button', { name: '删除渠道' }).click();
   await expect(channelCard).toHaveCount(0);
 
   const remainingModels = await page.request.get('/admin/api/models').then((response) => response.json());
@@ -451,11 +474,17 @@ test('11b. analytics logs page shows log table, settings live in system page', a
   await expect(page.getByLabel('密钥', { exact: true })).toBeVisible();
   await expect(page.getByLabel('渠道', { exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { level: 1, name: '请求日志' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '清空日志' })).toHaveCount(0);
   // Settings moved to the system page
   await page.locator('.sidebar').getByRole('link', { name: /系统设置/ }).click();
   await expect(page.getByRole('heading', { level: 1, name: '系统设置' })).toBeVisible();
   await expect(page.getByText('请求日志总开关')).toBeVisible();
   await expect(page.getByText('记录上下文')).toBeVisible();
+  await expect(page.getByText('日志维护', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '清空日志' })).toBeVisible();
+  await page.getByRole('button', { name: '清空日志' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: '确定' }).click();
+  await expect(page.getByRole('status')).toContainText(/已清空 \d+ 条日志/);
   // Legacy /requests should redirect
   await page.goto('/requests');
   await expect(page).toHaveURL(/\/analytics\/logs/);
