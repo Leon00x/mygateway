@@ -1,5 +1,7 @@
 # Contributing to MyGateway
 
+[English](CONTRIBUTING.md) · [简体中文](CONTRIBUTING.zh-CN.md)
+
 Thanks for your interest in MyGateway. The project is small by design: it runs
 on the Cloudflare free tier, prefers D1 + isolate memory over shared state, and
 prioritizes "simple to run and understand" over enterprise features.

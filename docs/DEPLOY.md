@@ -1,5 +1,7 @@
 # MyGateway 部署指南
 
+[English](DEPLOY.en.md) · [简体中文](DEPLOY.md)
+
 本文只说明部署、升级、回滚和排障。产品介绍见 [README](../README.md)，
 系统结构见[架构文档](ARCHITECTURE.md)，验证方法见[测试指南](TESTING.md)。
 

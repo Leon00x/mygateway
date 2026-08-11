@@ -1,5 +1,7 @@
 # Security Policy
 
+[English](SECURITY.md) · [简体中文](SECURITY.zh-CN.md)
+
 ## Reporting a vulnerability
 
 Please do not publish credentials, prompts, responses, database exports, exploit details, or production

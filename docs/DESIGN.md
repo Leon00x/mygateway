@@ -443,9 +443,9 @@ TTFT 的历史桶；界面必须据样本数计算覆盖率。
 - System 页价格库卡片：行内编辑输入 / 输出 / 缓存 / 币种，批量保存；删除行同步调用 DELETE，
   失败时回滚并重新加载。
 
-## 12. Agent Management API
+## 11. Agent Management API
 
-### 12.1 身份与生命周期
+### 11.1 身份与生命周期
 
 - migration `0012_management_keys.sql` 新增 `management_keys` 与 `management_audit_logs`；已发布
   migration 不回写。
@@ -456,7 +456,7 @@ TTFT 的历史桶；界面必须据样本数计算覆盖率。
   均按无效机器身份处理。
 - System 页支持创建、停启和删除；明文配置提示词最多在当前浏览器保存 1 小时。
 
-### 12.2 API 白名单
+### 11.2 API 白名单
 
 `/management/v1` 复用 Admin handler 的输入校验、重复检测与数据库逻辑，但路由采用独立显式
 白名单，不复用管理员 Session。开放渠道、余额、模型、Gateway Key、Usage、日志元数据和系统
@@ -465,7 +465,7 @@ TTFT 的历史桶；界面必须据样本数计算覆盖率。
 渠道输出继续走 `toPublicChannel`；日志详情额外强制删除上下文密文列并将上下文设为 `null`。
 审计记录不包含 query 和 body，防止 Provider Key 或其他一次性凭据进入审计表。
 
-### 12.3 Skill
+### 11.3 Skill
 
 `skills/mygateway-admin/` 是仓库内官方 Skill。它通过环境变量读取地址和 Management Key，先查询
 capabilities，再用 `curl` 或 Agent 自带的等价 HTTP 工具直接调用 API。Skill 不依赖代码仓、Node
@@ -480,7 +480,7 @@ Skill；每次使用前读取 `/skill.json`、发现新版本后重新安装 `/s
 不重复写入用户复制的提示词。构建生成的 `/skills/index.json` 同步发布同一个 manifest 版本，
 避免手工维护漂移。
 
-## 11. 控制台 i18n
+## 12. 控制台 i18n
 
 - 中英双语字典以模块级 Solid signal `locale` 提供，`t(key)` 返回 `entry[locale()] ?? entry.zh ?? key`。
 - 默认中文；顶部语言开关切换并持久化到 `localStorage`（`mygateway.locale`）；`<html lang>` 随
