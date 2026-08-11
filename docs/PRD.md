@@ -54,6 +54,7 @@
 | 渠道 | 编辑 / 测试 / 启停 / 删除（含影响提示） | ✅ 已实现 |
 | 渠道 | Provider 余额查询 | 🚧 仅 DeepSeek，其余占位 |
 | 渠道 | 套餐余量展示 | 🚧 占位（"暂未接入"） |
+| 实验渠道 | ChatGPT Plus / Pro 的 Codex OAuth 订阅渠道（仅 Responses） | 🧪 实验分支 |
 | 模型 | 库存导入、模板 / 自由创建、别名直达 | ✅ 已实现 |
 | 模型 | 实例定价（每百万 Token，USD / CNY 元数据） | 🚧 聚合未按币种拆分 |
 | 价格库 | 30 个主流模型 USD 基准价，导入预填、实例价优先 | ✅ 已实现 |
@@ -193,6 +194,24 @@
   约定只在当前浏览器保留至到期。
 - 控制台需要登录；日志不记录任何密钥凭证；默认不存对话内容。
 
+### 3.10 实验性 ChatGPT Codex 订阅渠道
+
+- **目标**：允许个人部署通过 ChatGPT Device OAuth 绑定 Plus / Pro 账户，并将该账户可用的 Codex
+  Responses 能力接入现有统一模型路由。它不是 OpenAI 公共 API，也不承诺兼容普通 ChatGPT
+  网页会话。
+- **范围**：第一阶段只提供单账户、原生 `/v1/responses`、模型发现、订阅额度原始查询、自动
+  Token 刷新、重新授权与删除。Chat / Messages 转换、多账户额度路由和团队共享不在本阶段。
+- **交互**：Channels 页面提供带“实验性”标识的订阅卡片。用户取得设备码后前往 OpenAI 授权页；
+  Dashboard 按服务端建议间隔轮询，授权完成后自动创建 Codex 渠道，随后由用户选择并导入模型。
+- **安全**：Access Token、Refresh Token 和临时 Device Auth ID 使用 `MASTER_KEY` + AES-GCM
+  分别加密；管理接口只返回脱敏账户信息和状态。Refresh Token 可能轮换，跨 isolate 刷新通过
+  D1 版本号与短租约串行化，401 最多强制刷新并重试一次。
+- **Free Tier**：授权状态、Token 和刷新租约只使用 D1；不增加 Cron、KV、R2、Queue 或 Durable
+  Object。过期设备授权在后续授权操作中惰性清理。
+- **稳定性边界**：ChatGPT Codex 后端不是公开 API，端点、请求字段和风控均可能变化。功能默认
+  标记实验性；正式合入前必须从真实 Cloudflare Worker 出口完成 Device Flow、模型、额度以及
+  流式/非流式 Responses 验证。若 Cloudflare 出口或 TLS 指纹被拒绝，不引入外部中继来规避。
+
 ## 4. 已实现：Agent 管理入口
 
 ### 4.1 总体目标
@@ -256,7 +275,7 @@ Codex 等 AI Agent 通过标准管理 API 完成日常运维。该能力由两�
 - Gemini 原生协议、Embeddings、Images、Audio、Realtime、Batch 和 Files；
 - 同渠道自动重试、流输出后的 Fallback；
 - 动态价格路由、自动套餐扣减和精确账单；
-- OAuth Provider、多用户、RBAC、Team/Project；
+- 面向普通 Provider 的通用 OAuth、多用户、RBAC、Team/Project；
 - Prompt/Response 存储或语义缓存；
 - 跨 isolate 强一致的熔断、限流或预算状态（RPM 为 per-isolate 尽力窗口，每日预算以 D1 为准）。
 

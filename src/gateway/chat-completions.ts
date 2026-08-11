@@ -33,6 +33,12 @@ import {
   UnsupportedProtocolFeatureError,
 } from './protocol-conversion.ts';
 import { ProtocolSseTransformer } from './protocol-stream.ts';
+import { ensureCodexCredential, refreshRejectedCodexCredential } from '../codex/credentials.ts';
+import {
+  codexHeaders,
+  codexSseToJson,
+  normalizeCodexResponsesRequest,
+} from '../codex/client.ts';
 
 interface RequestPerformance {
   requestStartedAt: number;
@@ -355,6 +361,17 @@ async function handleProtocolCompletion(
     try {
       upstreamBody = convertRequest(body, requestedProtocol, candidate.upstreamProtocol);
       upstreamBody.model = candidate.channel_model_id;
+      if (candidate.auth_type === 'codex_oauth') {
+        if (candidate.upstreamProtocol !== 'openai_responses') {
+          return timed(gatewayErrorResponse(
+            'protocol_unavailable',
+            'The experimental ChatGPT subscription channel only supports Responses',
+            requestId,
+            'model',
+          ));
+        }
+        upstreamBody = normalizeCodexResponsesRequest(upstreamBody);
+      }
       if (isStream && candidate.upstreamProtocol === 'openai_chat' && candidate.supports_stream_usage === 1) {
         upstreamBody.stream_options = {
           ...(typeof upstreamBody.stream_options === 'object' && upstreamBody.stream_options ? upstreamBody.stream_options : {}),
@@ -377,16 +394,26 @@ async function handleProtocolCompletion(
       throw error;
     }
 
-    // Decrypt provider key
-    let providerKey: string;
+    // Resolve ordinary Provider API key or the experimental Codex OAuth token.
+    let providerKey = '';
+    let codexAccountId: string | null = null;
+    let codexTokenVersion: number | null = null;
     try {
-      providerKey = await decryptProviderKey(
-        candidate.api_key_ciphertext,
-        candidate.api_key_iv,
-        env.MASTER_KEY,
-        candidate.channel_id,
-        candidate.api_key_version,
-      );
+      if (candidate.auth_type === 'codex_oauth') {
+        if (!candidate.oauth_connection_id) throw new Error('Codex OAuth connection is missing');
+        const credential = await ensureCodexCredential(env, candidate.oauth_connection_id);
+        providerKey = credential.accessToken;
+        codexAccountId = credential.accountId;
+        codexTokenVersion = credential.connection.token_version;
+      } else {
+        providerKey = await decryptProviderKey(
+          candidate.api_key_ciphertext,
+          candidate.api_key_iv,
+          env.MASTER_KEY,
+          candidate.channel_id,
+          candidate.api_key_version,
+        );
+      }
     } catch {
       // Key decryption failure — treat as retryable
       recordCircuitFailure(candidate, 'key_decryption');
@@ -411,14 +438,16 @@ async function handleProtocolCompletion(
     const upstreamUrl = `${candidate.protocolConfig.base_url}${protocolPath(candidate.upstreamProtocol)}`;
 
     // Build upstream headers
-    const upstreamHeaders = buildUpstreamHeaders({
-      providerApiKey: providerKey,
-      requestId,
-      isStream,
-      appVersion: config.appVersion,
-      authScheme: candidate.protocolConfig.auth_scheme,
-      apiVersion: candidate.protocolConfig.api_version,
-    });
+    const upstreamHeaders = candidate.auth_type === 'codex_oauth'
+      ? codexHeaders(providerKey, codexAccountId!, requestId)
+      : buildUpstreamHeaders({
+          providerApiKey: providerKey,
+          requestId,
+          isStream,
+          appVersion: config.appVersion,
+          authScheme: candidate.protocolConfig.auth_scheme,
+          apiVersion: candidate.protocolConfig.api_version,
+        });
 
     // Send upstream request with timeout
     const abortController = new AbortController();
@@ -437,8 +466,26 @@ async function handleProtocolCompletion(
         body: JSON.stringify(upstreamBody),
         signal: abortController.signal,
       });
+      if (upstreamResponse.status === 401 && candidate.auth_type === 'codex_oauth'
+        && candidate.oauth_connection_id && codexTokenVersion !== null) {
+        await upstreamResponse.body?.cancel();
+        const refreshed = await refreshRejectedCodexCredential(
+          env, candidate.oauth_connection_id, codexTokenVersion,
+        );
+        providerKey = refreshed.accessToken;
+        codexAccountId = refreshed.accountId;
+        upstreamResponse = await fetch(upstreamUrl, {
+          method: 'POST',
+          headers: codexHeaders(providerKey, codexAccountId, requestId),
+          body: JSON.stringify(upstreamBody),
+          signal: abortController.signal,
+        });
+      }
       upstreamTtfbMs = elapsedMs(upstreamStartedAt);
       clearTimeout(timeoutId);
+      if (upstreamResponse.ok && candidate.auth_type === 'codex_oauth' && !isStream) {
+        upstreamResponse = await codexSseToJson(upstreamResponse);
+      }
     } catch (e) {
       clearTimeout(timeoutId);
       upstreamTtfbMs = elapsedMs(upstreamStartedAt);
@@ -508,9 +555,21 @@ async function handleProtocolCompletion(
       // Not retryable or last attempt — return the error
       recordUpstreamError(
         candidate, attempt + 1, false,
-        `upstream_http_${upstreamResponse.status}: ${truncate(errorBody, 400)}`,
+        candidate.auth_type === 'codex_oauth'
+          ? `experimental_codex_http_${upstreamResponse.status}`
+          : `upstream_http_${upstreamResponse.status}: ${truncate(errorBody, 400)}`,
       );
       const respHeaders = gatewayResponseHeaders(requestId);
+      if (candidate.auth_type === 'codex_oauth') {
+        return timed(new Response(JSON.stringify(gatewayError(
+          'upstream_error',
+          `Experimental Codex upstream returned HTTP ${upstreamResponse.status}`,
+          null,
+        )), {
+          status: upstreamResponse.status,
+          headers: respHeaders,
+        }), upstreamTtfbMs);
+      }
       return timed(new Response(errorBody, {
         status: upstreamResponse.status,
         headers: respHeaders,

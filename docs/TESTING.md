@@ -43,6 +43,7 @@
 | `ttl-lru.test.ts` | TTL、LRU 和容量淘汰 |
 | `usage.test.ts` | 时区、统计范围、Token 校验和终态幂等 |
 | `analytics.test.ts` | 5 分钟桶、上下文 AES-GCM 与 4 KiB 截断、三协议 SSE 有效内容检测 |
+| `codex-client.test.ts` | Device Flow、Token 轮换、账户 Header、请求规范化、SSE 聚合与 OAuth 加密 |
 
 运行：
 
@@ -52,6 +53,9 @@ npm run typecheck
 ```
 
 单元测试不得依赖真实 Provider、生产 D1 或 Cloudflare 账号。
+
+实验性 Codex 测试使用受控 HTTP fixture，不读取本机 `~/.codex/auth.json`，也不允许真实 OAuth
+Token 进入测试快照、日志或 CI Artifact。
 
 ## 3. E2E 环境
 
@@ -186,7 +190,24 @@ E2E_UPSTREAM_TIMEOUT_MS=300 npm run test:e2e:upstream
 这里的短超时只用于测试，不应照搬到生产配置。假 Provider 对慢请求最长等待 5 秒，避免使用默认
 30 秒超时拖慢常规测试。
 
-## 8. 真实 DeepSeek 集成
+## 8. 实验性 Codex 真实出口验证
+
+该验证必须部署到隔离的 Cloudflare Worker 和测试 D1，不得只以本地 Wrangler 结果代替。使用专门
+的个人测试账户，在 Channels 页面完成设备授权后依次验证：
+
+1. 模型刷新能读取 Codex catalog；
+2. 实验额度端点能返回当前套餐窗口；
+3. 导入一个模型并创建专用 Gateway Key；
+4. `/v1/responses` 流式请求收到合法 SSE 和完成事件；
+5. 非流式请求能从上游 SSE 聚合为单个 Response JSON；
+6. Access Token 过期或一次 401 后只刷新、重试一次，Refresh Token 轮换后旧密文不再使用；
+7. 删除渠道同时删除 OAuth 连接，任何管理响应和日志都不含 Token、密文或 Device Auth ID。
+
+若模型、额度或 Responses 从真实 Worker 出口返回 403 / Cloudflare 风控错误，应记录状态与
+Request ID 并停止转正；本项目不通过额外中继绕过该限制。真实账户测试属于手工 opt-in，不进入
+默认 CI。
+
+## 9. 真实 DeepSeek 集成
 
 `e2e/realtime.spec.ts` 在缺少 `DEEPSEEK_TEST_KEY` 时整套跳过。当前 10 个串行用例：
 
@@ -210,7 +231,7 @@ E2E_UPSTREAM_TIMEOUT_MS=300 npm run test:e2e:upstream
 npx playwright test e2e/realtime.spec.ts
 ```
 
-## 9. SSE Fixture 要求
+## 10. SSE Fixture 要求
 
 协议或流式逻辑变化时至少覆盖：
 

@@ -487,3 +487,50 @@ Skill；每次使用前读取 `/skill.json`、发现新版本后重新安装 `/s
   语言同步。
 - 预置供应商名称通过 `localizedPresetName` / `localizedChannelName` 切换语言；自定义名称不翻译。
 - 新页面文案必须同时提供 zh / en 条目；缺失时回退中文，不阻断渲染。
+
+## 13. 实验性 Codex 订阅适配器
+
+### 13.1 授权状态机
+
+```text
+POST device/usercode
+  → D1 pending flow（15 分钟）
+  → Dashboard 定时 POST poll
+  → deviceauth/token 返回 authorization_code + PKCE verifier
+  → oauth/token 换取 access / refresh / id token
+  → 分字段 AES-GCM 加密
+  → 创建 codex_oauth channel
+```
+
+Worker 不保持长轮询请求。`codex_device_flows.last_polled_at` 与上游返回的 interval 共同限制轮询
+频率；403 / 404 表示仍待用户授权，而不是连接失败。设备认证 ID 加密存放，完成和失败状态不会
+包含 OAuth Token。
+
+### 13.2 Token 轮换
+
+数据面在 Access Token 距离过期不足 60 秒时尝试取得 30 秒 D1 刷新租约。租约条件同时检查连接
+状态和 `token_version`；获胜请求使用当前 Refresh Token 换取新 Token，并用比较更新一次性写入
+新密文、过期时间和递增版本。未获租约的请求只重新读取，不得拿旧 Refresh Token 并发刷新。
+
+上游对尚未到期的 Access Token 返回 401 时，网关只将当前版本标记过期，刷新后重试同一请求
+一次。永久刷新错误将连接标记为 `reauth_required`；其他故障释放租约，允许后续请求重试。
+
+### 13.3 Responses 适配
+
+Codex 渠道只声明 `openai_responses`。适配器将统一模型替换为渠道模型，强制 `stream=true`、
+`store=false`，缺失时补空 `instructions`，并移除当前 Codex 后端不接受的会话复用和流配置字段。
+上游 Header 使用 OAuth Bearer Token、`Chatgpt-Account-Id` 和独立 Originator，不转发 Gateway Key。
+
+流式客户端直接接收 SSE；非流式客户端读取强制 SSE，要求出现 `response.completed` 或
+`response.incomplete`，再返回其中的 Response 对象。任何已提交字节后的错误仍不得 Fallback。
+
+模型来自 Codex model catalog 的 `models[].slug`；额度接口的原始结构由实验管理端点返回，待真实
+Cloudflare 验证稳定字段后再定义长期 UI Schema。
+
+### 13.4 开源参考与实现边界
+
+Device Flow 与 Token 声明以 Apache-2.0 的
+[OpenAI Codex](https://github.com/openai/codex/tree/main/codex-rs/login) 客户端为基准；请求规范化、
+Token 轮换和强制 SSE 行为交叉参考 MIT 的
+[CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)。无许可证项目只用于验证互操作现象，不复制代码。
+由于 Worker `fetch()` 不能自定义 TLS 指纹，真实 Cloudflare 出口可用性是转正前的硬性门槛。

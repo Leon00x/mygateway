@@ -65,6 +65,14 @@ test('4. add channel via preset modal', async ({ page }) => {
   await page.locator('.sidebar').getByRole('link', { name: /渠道/ }).click();
   await expect(page).toHaveURL(/\/channels/);
 
+  // The subscription-backed Codex experiment is a distinct OAuth entry, not
+  // another API-key preset. Opening the explanation must not start OAuth yet.
+  await page.getByRole('button', { name: 'ChatGPT Codex 订阅' }).click();
+  const codexModal = page.locator('.codex-connect-modal');
+  await expect(codexModal.getByText('并非公开 OpenAI API')).toBeVisible();
+  await expect(codexModal.getByRole('button', { name: '连接 ChatGPT' })).toBeVisible();
+  await codexModal.getByRole('button', { name: '取消' }).click();
+
   // Preset names follow the UI locale. This also covers legacy channel rows:
   // the pure helper suite verifies old Chinese defaults map back to English.
   await page.getByRole('button', { name: 'Switch language' }).click();

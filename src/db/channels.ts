@@ -10,6 +10,9 @@ export interface ChannelRow {
   api_key_ciphertext: string;
   api_key_iv: string;
   api_key_version: number;
+  auth_type: 'api_key' | 'codex_oauth';
+  oauth_connection_id: string | null;
+  oauth_status?: 'active' | 'reauth_required' | null;
   status: 'active' | 'disabled';
   notes: string | null;
   preset_id: string | null;
@@ -25,6 +28,9 @@ export interface ChannelPublic {
   provider_type: 'openai' | 'openai_compatible';
   base_url: string;
   has_api_key: boolean;
+  auth_type: 'api_key' | 'codex_oauth';
+  oauth_connection_id: string | null;
+  auth_status: 'active' | 'reauth_required' | null;
   status: 'active' | 'disabled';
   notes: string | null;
   preset_id: string | null;
@@ -44,7 +50,10 @@ export function toPublicChannel(row: ChannelWithProtocols): ChannelPublic {
     name: row.name,
     provider_type: row.provider_type,
     base_url: row.base_url,
-    has_api_key: true,
+    has_api_key: row.auth_type === 'api_key' && Boolean(row.api_key_ciphertext),
+    auth_type: row.auth_type,
+    oauth_connection_id: row.oauth_connection_id,
+    auth_status: row.auth_type === 'codex_oauth' ? (row.oauth_status ?? 'reauth_required') : null,
     status: row.status,
     notes: row.notes,
     preset_id: row.preset_id,
@@ -79,7 +88,9 @@ async function getProtocolMap(db: D1Database, channelIds: string[]): Promise<Map
 
 export async function listChannels(db: D1Database): Promise<ChannelWithProtocols[]> {
   const result = await db
-    .prepare('SELECT * FROM channels WHERE deleted_at IS NULL ORDER BY created_at DESC')
+    .prepare(`SELECT c.*, co.status AS oauth_status FROM channels c
+      LEFT JOIN codex_oauth_connections co ON co.id = c.oauth_connection_id
+      WHERE c.deleted_at IS NULL ORDER BY c.created_at DESC`)
     .all<ChannelRow>();
   const protocolMap = await getProtocolMap(db, result.results.map((row) => row.id));
   return result.results.map((row) => ({ ...row, protocols: protocolMap.get(row.id) ?? [] }));
@@ -87,7 +98,9 @@ export async function listChannels(db: D1Database): Promise<ChannelWithProtocols
 
 export async function getChannel(db: D1Database, id: string): Promise<ChannelWithProtocols | null> {
   const row = await db
-    .prepare('SELECT * FROM channels WHERE id = ? AND deleted_at IS NULL')
+    .prepare(`SELECT c.*, co.status AS oauth_status FROM channels c
+      LEFT JOIN codex_oauth_connections co ON co.id = c.oauth_connection_id
+      WHERE c.id = ? AND c.deleted_at IS NULL`)
     .bind(id)
     .first<ChannelRow>();
   if (!row) return null;
@@ -101,8 +114,9 @@ export async function createChannel(
 ): Promise<void> {
   await db
     .prepare(
-      `INSERT INTO channels (id, name, provider_type, base_url, api_key_ciphertext, api_key_iv, api_key_version, status, notes, preset_id, short_code)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO channels (id, name, provider_type, base_url, api_key_ciphertext, api_key_iv, api_key_version,
+         auth_type, oauth_connection_id, status, notes, preset_id, short_code)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       channel.id,
@@ -112,6 +126,8 @@ export async function createChannel(
       channel.api_key_ciphertext,
       channel.api_key_iv,
       channel.api_key_version,
+      channel.auth_type,
+      channel.oauth_connection_id,
       channel.status,
       channel.notes,
       channel.preset_id,
@@ -154,6 +170,8 @@ export async function updateChannel(
     notes?: string | null;
     preset_id?: string | null;
     short_code?: string | null;
+    auth_type?: 'api_key' | 'codex_oauth';
+    oauth_connection_id?: string | null;
   },
 ): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
@@ -191,6 +209,14 @@ export async function updateChannel(
   if (updates.short_code !== undefined) {
     fields.push('short_code = ?');
     values.push(updates.short_code);
+  }
+  if (updates.auth_type !== undefined) {
+    fields.push('auth_type = ?');
+    values.push(updates.auth_type);
+  }
+  if (updates.oauth_connection_id !== undefined) {
+    fields.push('oauth_connection_id = ?');
+    values.push(updates.oauth_connection_id);
   }
 
   values.push(id);
