@@ -9,6 +9,7 @@ import { gatewayErrorResponse } from './http/errors.ts';
 import { logConfigError, logEvent } from './shared/log.ts';
 import { handleAdminApi } from './admin/router.ts';
 import { handleGatewayHono } from './gateway/hono.ts';
+import { handleManagementApi } from './management/router.ts';
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -55,6 +56,11 @@ export default {
       return handleAdminApi(request, url, env);
     }
 
+    // --- Versioned Management API for scoped machine credentials ---
+    if (path.startsWith('/management/v1/')) {
+      return handleManagementApi(request, url, env, ctx);
+    }
+
     // --- Static assets (management dashboard) ---
     if (['GET', 'HEAD'].includes(request.method)) {
       try {
@@ -75,6 +81,7 @@ export default {
     const { cleanupOldUsage } = await import('./db/usage.ts');
     const { cleanupRequestLogs, cleanupKeyDailyUsage } = await import('./db/requests.ts');
     const { cleanupAnalytics, cleanupContext, readAnalyticsSettings } = await import('./db/analytics.ts');
+    const { cleanupManagementAudit } = await import('./db/management-keys.ts');
 
     const settings = await readAnalyticsSettings(env.DB);
     const deletedRows = await cleanupOldUsage(env.DB, config.usageRetentionDays);
@@ -82,6 +89,7 @@ export default {
     const deletedLogs = await cleanupRequestLogs(env.DB, settings.requestLogRetentionDays);
     const deletedKeyUsage = await cleanupKeyDailyUsage(env.DB, config.usageRetentionDays);
     const deletedContext = await cleanupContext(env.DB, settings.contextRetentionHours);
+    const deletedManagementAudit = await cleanupManagementAudit(env.DB, config.usageRetentionDays);
 
     logEvent({
       event: 'cron_cleanup_completed',
@@ -91,6 +99,7 @@ export default {
       deleted_logs: deletedLogs,
       deleted_key_usage: deletedKeyUsage,
       deleted_context: deletedContext,
+      deleted_management_audit: deletedManagementAudit,
       retention_days: config.usageRetentionDays,
       request_log_retention_days: settings.requestLogRetentionDays,
       context_retention_hours: settings.contextRetentionHours,

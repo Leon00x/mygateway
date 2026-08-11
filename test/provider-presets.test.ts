@@ -30,9 +30,9 @@ describe('provider presets', () => {
       .map((id) => getPresetById(id)?.name)).toEqual([
         'DeepSeek',
         'Z.AI',
-        '华为云（中国）',
-        '阿里云国际',
-        '火山国际（BytePlus）',
+        'Huawei Cloud (China)',
+        'Alibaba Cloud International',
+        'BytePlus ModelArk',
       ]);
   });
 
@@ -41,7 +41,7 @@ describe('provider presets', () => {
       .map((id) => getPresetById(id)?.name)).toEqual([
         'Google Gemini',
         'Groq',
-        'MiniMax 国际',
+        'MiniMax International',
         'xAI',
         'Mistral AI',
       ]);

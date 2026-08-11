@@ -15,6 +15,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "test:e2e:upstream": "playwright test e2e/controlled-upstream.spec.ts",
     "test:e2e:headed": "playwright test --headed",
     "typecheck": "tsc --noEmit && tsc --project tsconfig.dashboard.json --noEmit"
   },

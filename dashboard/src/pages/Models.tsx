@@ -2,6 +2,7 @@ import { createSignal, onMount, For, Show } from 'solid-js';
 import { COMMON_MODEL_TEMPLATES } from '../presets';
 import { ProviderLogo } from '../components/ProviderLogo';
 import { t } from '../i18n';
+import { useAppDialog } from '../components/AppDialog';
 
 const dollarsToMicros = (value: string): number | null => {
   if (!value.trim()) return null;
@@ -51,6 +52,7 @@ interface ModelCard {
 }
 
 export default function Models() {
+  const dialog = useAppDialog();
   const [cards, setCards] = createSignal<ModelCard[]>([]);
   const [channels, setChannels] = createSignal<Channel[]>([]);
   const [loading, setLoading] = createSignal(true);
@@ -273,9 +275,9 @@ export default function Models() {
 
   // --- Delete card ---
   const deleteCard = async (id: string) => {
-    if (!confirm(t('models.deleteConfirm'))) return;
+    if (!await dialog.confirm({ title: t('common.delete'), message: t('models.deleteConfirm'), danger: true })) return;
     const resp = await fetch(`/admin/api/models/${id}`, { method: 'DELETE' });
-    if (!resp.ok) alert(t('models.deleteFailed'));
+    if (!resp.ok) await dialog.notice({ title: t('common.error'), message: t('models.deleteFailed'), danger: true });
     fetchAll();
   };
 
@@ -326,8 +328,8 @@ export default function Models() {
     <div class="resource-page model-page">
       {/* Create card form */}
       <Show when={showCreate()}>
-        <form onSubmit={submitCreate} class="panel inline-form form-stack">
-          <div class="inline-form-title"><div><h3>{t('models.createTitle')}</h3><p>{t('models.createSub')}</p></div><button type="button" onClick={() => setShowCreate(false)}>×</button></div>
+        <div class="modal-backdrop" onClick={() => setShowCreate(false)}><form onSubmit={submitCreate} class="modal-card form-stack" onClick={(event) => event.stopPropagation()}>
+          <div class="modal-title"><div><span class="eyebrow">{t('models.eyebrowModel')}</span><h3>{t('models.createTitle')}</h3><p>{t('models.createSub')}</p></div><button type="button" onClick={() => setShowCreate(false)}>×</button></div>
           <input
             placeholder={t('models.unifiedId')}
             list="common-model-templates"
@@ -365,15 +367,15 @@ export default function Models() {
             </label></Show>
           </div>
           <Show when={createError()}><div class="form-error">{createError()}</div></Show>
-          <div class="inline-form-actions"><button type="submit" disabled={creating()} class="primary-button">
+          <div class="modal-actions"><button type="button" class="secondary-button" onClick={() => setShowCreate(false)}>{t('common.cancel')}</button><button type="submit" disabled={creating()} class="primary-button">
             {creating() ? t('common.loading') : t('models.createButton')}
           </button></div>
-        </form>
+        </form></div>
       </Show>
 
       {loading() && <p class="empty-state">Loading...</p>}
       <Show when={!loading()}><div class="channel-card-grid model-card-grid">
-        <button type="button" class="panel resource-add-card" aria-label={t('models.create')} aria-expanded={showCreate()} onClick={() => setShowCreate(!showCreate())}>
+        <button type="button" class="panel resource-add-card" aria-label={t('models.create')} aria-expanded={showCreate()} onClick={() => setShowCreate(true)}>
           <header class="channel-card-head resource-add-head"><span class="resource-add-icon" aria-hidden="true">+</span><div><strong>{t('models.create')}</strong><span>{t('models.createHint')}</span></div></header>
           <div class="channel-card-metrics resource-add-metrics" aria-hidden="true"><div><span>{t('models.instances')}</span><strong>—</strong></div><div><span>{t('channels.available')}</span><strong>—</strong></div></div>
           <div class="channel-card-section resource-add-preview" aria-hidden="true"><span /><span /><span /></div>

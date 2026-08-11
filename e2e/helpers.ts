@@ -99,6 +99,11 @@ export async function resetState(api: APIRequestContext): Promise<void> {
   for (const m of models) {
     await api.delete(`/admin/api/models/${m.id}`);
   }
+
+  const managementKeys = await api.get('/admin/api/management-keys').then((r) => r.json());
+  for (const key of managementKeys) {
+    await api.delete(`/admin/api/management-keys/${key.id}`);
+  }
 }
 
 /**

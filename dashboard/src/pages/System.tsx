@@ -1,7 +1,8 @@
-import { createSignal, onMount, Show, For } from 'solid-js';
+import { createSignal, onCleanup, onMount, Show, For } from 'solid-js';
 import { A } from '@solidjs/router';
 import { useAuth } from '../index';
 import { t } from '../i18n';
+import { useAppDialog } from '../components/AppDialog';
 
 interface ModelPriceRow {
   provider_model_id: string;
@@ -26,6 +27,39 @@ interface AnalyticsSettings {
   requestLogRetentionDays: number;
 }
 
+interface ManagementKeyRow {
+  id: string;
+  name: string;
+  key_prefix: string;
+  permission: 'read' | 'write';
+  status: 'active' | 'disabled';
+  expires_at: number | null;
+  last_used_at: number | null;
+}
+
+interface RevealedManagementKey {
+  id: string;
+  key: string;
+  expires_at: number | null;
+  show_until: number;
+}
+
+const MANAGEMENT_KEY_STORAGE = 'mygateway.management-key.reveal.v1';
+
+function readRevealedManagementKey(): RevealedManagementKey | null {
+  try {
+    const value = JSON.parse(localStorage.getItem(MANAGEMENT_KEY_STORAGE) ?? 'null') as RevealedManagementKey | null;
+    if (!value || !value.key?.startsWith('mgmt_') || value.show_until <= Date.now() || (value.expires_at !== null && value.expires_at * 1000 <= Date.now())) {
+      localStorage.removeItem(MANAGEMENT_KEY_STORAGE);
+      return null;
+    }
+    return value;
+  } catch {
+    localStorage.removeItem(MANAGEMENT_KEY_STORAGE);
+    return null;
+  }
+}
+
 const fmt = (v: number | null) => (v === null || v === 0 ? '' : String(v / 1_000_000));
 const toMicros = (v: string): number => {
   const n = Number(v);
@@ -33,6 +67,7 @@ const toMicros = (v: string): number => {
 };
 
 export default function System() {
+  const dialog = useAppDialog();
   const auth = useAuth();
   const [status, setStatus] = createSignal<{ version: string; status: string } | null>(null);
   const [prices, setPrices] = createSignal<ModelPriceRow[]>([]);
@@ -53,6 +88,18 @@ export default function System() {
   const [settingsBusy, setSettingsBusy] = createSignal(false);
   const [settingsError, setSettingsError] = createSignal('');
   const [settingsSaved, setSettingsSaved] = createSignal(false);
+  const [clearLogsBusy, setClearLogsBusy] = createSignal(false);
+  const [clearLogsResult, setClearLogsResult] = createSignal<{ kind: 'success' | 'error'; text: string } | null>(null);
+  const [managementKeys, setManagementKeys] = createSignal<ManagementKeyRow[]>([]);
+  const [managementName, setManagementName] = createSignal('Agent automation');
+  const [managementPermission, setManagementPermission] = createSignal<'read' | 'write'>('write');
+  const [managementExpiry, setManagementExpiry] = createSignal('7');
+  const [managementCreateOpen, setManagementCreateOpen] = createSignal(false);
+  const [managementExpanded, setManagementExpanded] = createSignal(false);
+  const [managementBusy, setManagementBusy] = createSignal(false);
+  const [managementError, setManagementError] = createSignal('');
+  const [revealedManagementKey, setRevealedManagementKey] = createSignal<RevealedManagementKey | null>(null);
+  const [copied, setCopied] = createSignal(false);
 
   const settingsDirty = () => JSON.stringify(settingsDraft()) !== JSON.stringify(settings());
   const patchDraft = (patch: Partial<AnalyticsSettings>) => {
@@ -61,13 +108,118 @@ export default function System() {
   };
 
   onMount(async () => {
+    setRevealedManagementKey(readRevealedManagementKey());
     try {
       const response = await fetch('/admin/api/system/status');
       if (response.ok) setStatus(await response.json());
     } catch {}
     await loadPrices();
     await fetchSettings();
+    await loadManagementKeys();
   });
+
+  const revealTimer = window.setInterval(() => {
+    const value = revealedManagementKey();
+    if (value && (value.show_until <= Date.now() || (value.expires_at !== null && value.expires_at * 1000 <= Date.now()))) {
+      localStorage.removeItem(MANAGEMENT_KEY_STORAGE);
+      setRevealedManagementKey(null);
+    }
+  }, 15_000);
+  onCleanup(() => window.clearInterval(revealTimer));
+
+  const loadManagementKeys = async () => {
+    try {
+      const response = await fetch('/admin/api/management-keys');
+      if (response.ok) {
+        const rows = await response.json() as ManagementKeyRow[];
+        setManagementKeys(rows);
+        const revealed = revealedManagementKey();
+        if (revealed && !rows.some((row) => row.id === revealed.id)) {
+          localStorage.removeItem(MANAGEMENT_KEY_STORAGE);
+          setRevealedManagementKey(null);
+        }
+      }
+    } catch { /* non-critical */ }
+  };
+
+  const rememberManagementKey = (row: ManagementKeyRow & { key: string }) => {
+    const value: RevealedManagementKey = {
+      id: row.id,
+      key: row.key,
+      expires_at: row.expires_at,
+      show_until: row.expires_at === null
+        ? Date.now() + 3_600_000
+        : Math.min(Date.now() + 3_600_000, row.expires_at * 1000),
+    };
+    localStorage.setItem(MANAGEMENT_KEY_STORAGE, JSON.stringify(value));
+    setRevealedManagementKey(value);
+  };
+
+  const createManagementKey = async () => {
+    setManagementBusy(true); setManagementError(''); setCopied(false);
+    try {
+      const response = await fetch('/admin/api/management-keys', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: managementName().trim(), permission: managementPermission(),
+          expires_at: managementExpiry() === 'permanent'
+            ? null
+            : Math.floor(Date.now() / 1000) + Number(managementExpiry()) * 86_400,
+        }),
+      });
+      const body = await response.json() as ManagementKeyRow & { key?: string; error?: { message?: string } };
+      if (!response.ok || !body.key) throw new Error(body.error?.message ?? t('management.createFailed'));
+      rememberManagementKey(body as ManagementKeyRow & { key: string });
+      setManagementCreateOpen(false);
+      await loadManagementKeys();
+    } catch (cause) {
+      setManagementError(cause instanceof Error ? cause.message : t('management.createFailed'));
+    } finally { setManagementBusy(false); }
+  };
+
+  const updateManagementKeyStatus = async (row: ManagementKeyRow) => {
+    setManagementBusy(true); setManagementError('');
+    try {
+      const response = await fetch(`/admin/api/management-keys/${encodeURIComponent(row.id)}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: row.status === 'active' ? 'disabled' : 'active' }),
+      });
+      if (!response.ok) throw new Error(t('management.updateFailed'));
+      await loadManagementKeys();
+    } catch (cause) { setManagementError(cause instanceof Error ? cause.message : t('management.updateFailed')); }
+    finally { setManagementBusy(false); }
+  };
+
+  const deleteManagementKey = async (row: ManagementKeyRow) => {
+    if (!await dialog.confirm({ title: t('management.delete'), message: t('management.deleteConfirm'), danger: true })) return;
+    setManagementBusy(true); setManagementError('');
+    try {
+      const response = await fetch(`/admin/api/management-keys/${encodeURIComponent(row.id)}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error(t('management.updateFailed'));
+      if (revealedManagementKey()?.id === row.id) {
+        localStorage.removeItem(MANAGEMENT_KEY_STORAGE); setRevealedManagementKey(null);
+      }
+      await loadManagementKeys();
+    } catch (cause) { setManagementError(cause instanceof Error ? cause.message : t('management.updateFailed')); }
+    finally { setManagementBusy(false); }
+  };
+
+  const agentPrompt = () => {
+    const revealed = revealedManagementKey();
+    return `Read ${location.origin}/skill.md and follow the instructions to manage MyGateway.\nMYGATEWAY_URL=${location.origin}\nMYGATEWAY_MANAGEMENT_KEY=${revealed?.key ?? 'mgmt_YOUR_MANAGEMENT_KEY'}`;
+  };
+
+  const copyAgentPrompt = async () => {
+    await navigator.clipboard.writeText(agentPrompt());
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1800);
+  };
+
+  const formatTimestamp = (value: number | null) => value
+    ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(value * 1000)
+    : t('management.never');
+  const formatExpiry = (value: number | null) => value === null ? t('management.permanent') : formatTimestamp(value);
+  const visibleManagementKeys = () => managementExpanded() ? managementKeys() : managementKeys().slice(0, 3);
 
   const fetchSettings = async () => {
     try {
@@ -113,6 +265,19 @@ export default function System() {
 
   const draftOn = () => settingsDraft().requestLogsEnabled;
   const draftContextOn = () => settingsDraft().logContext;
+
+  const clearAllLogs = async () => {
+    if (!await dialog.confirm({ title: t('logs.clearAll'), message: t('logs.clearConfirm'), danger: true })) return;
+    setClearLogsBusy(true); setClearLogsResult(null);
+    try {
+      const response = await fetch('/admin/api/analytics/logs', { method: 'DELETE' });
+      if (!response.ok) throw new Error(t('logs.clearFailed'));
+      const result = await response.json() as { deleted?: number };
+      setClearLogsResult({ kind: 'success', text: t('logs.cleared').replace('{count}', String(result.deleted ?? 0)) });
+    } catch (cause) {
+      setClearLogsResult({ kind: 'error', text: cause instanceof Error ? cause.message : t('logs.clearFailed') });
+    } finally { setClearLogsBusy(false); }
+  };
 
   const loadPrices = async () => {
     try {
@@ -229,9 +394,9 @@ export default function System() {
           </label>
           <label class="checkbox-label">
             <input type="checkbox" checked={draftContextOn()}
-              onChange={(e) => {
+              onChange={async (e) => {
                 const next = e.currentTarget.checked;
-                if (next && !draftContextOn() && !confirm(t('logs.contextConfirm'))) {
+                if (next && !draftContextOn() && !await dialog.confirm({ title: t('logs.contextTitle'), message: t('logs.contextConfirm'), danger: true })) {
                   e.currentTarget.checked = false;
                   return;
                 }
@@ -276,6 +441,45 @@ export default function System() {
             {settingsBusy() ? t('common.saving') : t('common.save')}
           </button>
         </div>
+        <div class="log-maintenance-row"><div><strong>{t('logs.maintenance')}</strong><small>{t('logs.clearHint')}</small><Show when={clearLogsResult()}>{(result) => <span role="status" class={result().kind}>{result().text}</span>}</Show></div><button class="danger-button" disabled={clearLogsBusy()} onClick={clearAllLogs}>{clearLogsBusy() ? t('logs.clearing') : t('logs.clear')}</button></div>
+      </section>
+
+      <section class="panel settings-card wide management-card">
+        <div class="management-heading-row">
+          <div class="settings-copy management-heading">
+            <span class="eyebrow">{t('management.eyebrow')}</span>
+            <h2>{t('management.title')}</h2>
+            <p>{t('management.body')}</p>
+          </div>
+          <Show when={!managementCreateOpen()}><button class="primary-button" onClick={() => setManagementCreateOpen(true)}>{t('management.create')}</button></Show>
+        </div>
+        <Show when={managementCreateOpen()}><div class="management-create-panel">
+          <div class="management-create">
+            <label><span>{t('management.name')}</span><input value={managementName()} onInput={(event) => setManagementName(event.currentTarget.value)} /></label>
+            <label><span>{t('management.permission')}</span><select value={managementPermission()} onChange={(event) => setManagementPermission(event.currentTarget.value as 'read' | 'write')}><option value="read">{t('management.read')}</option><option value="write">{t('management.write')}</option></select></label>
+            <label><span>{t('management.expiry')}</span><select value={managementExpiry()} onChange={(event) => setManagementExpiry(event.currentTarget.value)}><option value="1">1 {t('usage.days')}</option><option value="7">7 {t('usage.days')}</option><option value="30">30 {t('usage.days')}</option><option value="90">90 {t('usage.days')}</option><option value="permanent">{t('management.permanent')}</option></select></label>
+          </div>
+          <div class="management-create-actions"><button class="ghost-button" disabled={managementBusy()} onClick={() => setManagementCreateOpen(false)}>{t('common.cancel')}</button><button class="primary-button" disabled={managementBusy() || !managementName().trim()} onClick={createManagementKey}>{managementBusy() ? t('common.saving') : t('management.create')}</button></div>
+        </div></Show>
+        <Show when={managementError()}><div class="form-error">{managementError()}</div></Show>
+        <div class="management-reveal" classList={{ active: Boolean(revealedManagementKey()) }}>
+            <div><strong>{t('management.agentPrompt')}</strong><small>{revealedManagementKey() ? t('management.revealHint') : t('management.defaultPromptHint')}</small></div>
+            <pre>{agentPrompt()}</pre>
+            <button class="secondary-button" onClick={copyAgentPrompt}>{copied() ? t('management.copied') : t('management.copyPrompt')}</button>
+        </div>
+        <div class="management-list">
+          <For each={visibleManagementKeys()} fallback={<div class="management-empty">{t('management.empty')}</div>}>{(row) => (
+            <article class="management-key-row">
+              <div class="management-key-main"><strong>{row.name}</strong><code>{row.key_prefix}••••••••</code></div>
+              <div><small>{t('management.permission')}</small><span>{row.permission === 'write' ? t('management.write') : t('management.read')}</span></div>
+              <div><small>{t('management.expiry')}</small><span>{formatExpiry(row.expires_at)}</span></div>
+              <div><small>{t('management.lastUsed')}</small><span>{formatTimestamp(row.last_used_at)}</span></div>
+              <span class={`management-status ${row.status}`}><i aria-hidden="true" />{row.status === 'active' ? t('common.active') : t('common.disabled')}</span>
+              <div class="management-actions"><button class="ghost-button" disabled={managementBusy()} onClick={() => updateManagementKeyStatus(row)}>{row.status === 'active' ? t('management.disable') : t('management.enable')}</button><button class="danger-button" disabled={managementBusy()} onClick={() => deleteManagementKey(row)}>{t('management.delete')}</button></div>
+            </article>
+          )}</For>
+        </div>
+        <Show when={managementKeys().length > 3}><button class="management-list-toggle" onClick={() => setManagementExpanded(!managementExpanded())}>{managementExpanded() ? t('management.collapse') : t('management.showAll').replace('{count}', String(managementKeys().length))}</button></Show>
       </section>
 
       <section class="panel settings-card wide price-library-card">

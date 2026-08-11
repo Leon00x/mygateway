@@ -23,7 +23,7 @@ fork-specific modifications are not maintained by this repository.
 - Keep Provider Keys and Gateway Keys out of Issues, logs, screenshots, traces, and test artifacts.
 - Context logging is off by default. Enable it only when needed and use the shortest practical retention.
 - The management login currently has no shared, durable brute-force limiter; do not advertise the console URL
-  unnecessarily, and track the hardening item in [PRD](docs/PRD.md).
+  unnecessarily, and track the hardening item in [PRD](PRD.md).
 
 The implemented key storage, session, logging, and consistency boundaries are documented in
-[ARCHITECTURE](docs/ARCHITECTURE.md).
+[ARCHITECTURE](ARCHITECTURE.md).

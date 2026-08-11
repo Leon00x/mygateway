@@ -11,6 +11,10 @@
 | 前端构建 | `npm run build:dashboard` | SolidJS 生产构建 |
 | Worker dry-run | `npm run build` | 前端构建和 Wrangler 打包 |
 | UI E2E | `npx playwright test e2e/journey.spec.ts` | 浏览器管理闭环和 Gateway HTTP |
+| Admin API E2E | `npx playwright test e2e/admin-api.spec.ts` | 渠道、库存、模型、实例和调用错误矩阵 |
+| Management API E2E | `npx playwright test e2e/management-api.spec.ts` | Agent 权限、生命周期、资源管理与凭据不泄漏 |
+| Management UI E2E | `npx playwright test e2e/management-ui.spec.ts` | 管理密钥创建、1 小时恢复与删除 |
+| 可控上游 E2E | `npm run test:e2e:upstream` | 真实 Worker 路由、Fallback、流中断与取消传播 |
 | 真实集成 | `npx playwright test e2e/realtime.spec.ts` | 使用真实 DeepSeek Key 验证上游协议 |
 
 ## 2. 单元测试
@@ -31,6 +35,7 @@
 | `protocol-conversion.test.ts` | Chat / Messages 请求与非流式响应 |
 | `protocol-routing.test.ts` | 原生优先、转换候选和协议不匹配 |
 | `protocol-stream.test.ts` | Chat / Messages SSE 转换 |
+| `provider-localization.test.ts` | 中英文预置名、历史默认名兼容和自定义渠道名保留 |
 | `provider-presets.test.ts` | 预制唯一性、端点和协议能力 |
 | `provider-balance-ui.test.ts` | 跨 isolate `not_queried` 不覆盖浏览器刷新结果 |
 | `server-timing.test.ts` | 稳定计时响应头 |
@@ -94,23 +99,92 @@ E2E 会创建、修改和删除渠道、模型与 Gateway Key。不要指向包�
 1. 未登录访问跳转登录页；
 2. 错误管理员凭据显示错误；
 3. 正确登录，并验证侧边栏收缩、暗黑模式和主题持久化；
-4. 通过预制弹窗添加 DeepSeek 渠道，验证保存前必须预检、失败降级保存、完成动效、自动余额
-   查询、手工库存、勾选导入、批量摘要和竖向渠道卡片；
-5. 创建统一模型和渠道实例；
+4. 通过预制弹窗添加 DeepSeek 渠道，验证三协议 path/Base URL 编辑器、保存前必须预检、失败
+   降级保存、完成动效、自动余额查询、手工库存、勾选导入、批量摘要和竖向渠道卡片；并通过
+   Admin API 验证相同供应商 + Provider Key 再次创建返回 `409 resource_in_use` 且不会重复导入；
+5. 通过模态表单创建统一模型和渠道实例，并验证同一模型重复绑定相同渠道返回 409；
 6. 创建带精确到期时间的 Gateway Key，验证明文只展示一次，并拒绝创建已过期密钥；
 7. 调用 `/v1/models` 和 Chat 接口，验证认证、错误和 timing Header；
 8. 无 Gateway Key 返回 401；
-9. Dashboard 显示渠道、模型和 Provider Balance；创建 1 小时临时密钥，验证刷新后从
-   `localStorage` 恢复，并在本地到期后自动清除；
+9. Dashboard 显示渠道、首个已创建模型和 Provider Balance；创建服务端标记的 1 小时临时
+   密钥，验证固定到期时间、不可续期 / 重新生成、刷新后从 `localStorage` 恢复，并在本地到期
+   后自动清除；单元测试同时约束列表隐藏与创建 / 删除时的惰性清理 SQL；
 10. 删除渠道显示关联影响，清理失去最后实例的统一模型，并保留仍有备用渠道的模型；
 11. Analytics Usage 页面展示指标卡、模型表和筛选切换；
-12. Analytics Logs 页面展示日志表、游标分页和详情抽屉，日志设置区在系统设置页；
+12. Analytics Logs 页面展示日志表、游标分页和详情抽屉；日志策略与清空日志仅在系统设置页；
 13. 退出登录回到登录页。
 
 该套件不需要有效 Provider Key，但 Chat 错误透传用例会用 dummy key 请求 DeepSeek 并期待
 401，因此运行环境需要能够访问其 API。
 
-## 5. 真实 DeepSeek 集成
+## 5. Admin API 与调用边界
+
+`e2e/admin-api.spec.ts` 不使用真实 Provider Key，当前 5 组串行用例：
+
+1. 创建自定义三协议渠道，验证空协议、重复协议、非 HTTPS 地址、重复 Provider Key；保存名称、
+   协议 Base URL 和启停状态，并验证编辑阶段的重复 Key 冲突；
+2. 手工渠道模型库存的添加、重复添加幂等、列表、删除与非法参数；
+3. 统一模型创建、重复 ID、渠道实例添加、同渠道重复实例、Alias 冲突、实例定价、币种校验、
+   负价格、回退顺序、模型编辑、删除后使用相同 ID 重建；
+4. 从库存导入模型、重复导入幂等、库存缺失和超过 100 个模型的批量限制；
+5. Gateway HTTP 验证模型白名单、停用 Key、未知模型、协议不可用及渠道停用后的模型不可用。
+
+该套件只使用本地 D1 和不会实际访问的 Provider 地址，适合常规 CI。它不替代下述可控上游与
+真实 Provider 测试。
+
+## 6. Management API 与 Skill
+
+`e2e/management-api.spec.ts` 使用真实 Worker HTTP 和本地 D1，覆盖 Skill 中声明的只读查询与
+资源写操作、公开能力发现、无凭据拒绝、`read` / `write` 权限、渠道与模型实例创建、Gateway Key
+一次性明文、余额/用量/日志查询，以及
+Management Key 的到期、停用和删除。测试显式断言 Provider Key、hash 和 ciphertext 不会
+出现在响应中。
+
+`e2e/management-ui.spec.ts` 验证 System 页默认展示网站托管地址和安全占位符，创建后配置提示词
+包含一次性 Key，刷新仍可从同源 `localStorage` 恢复，并在 1 小时窗口失效或删除后恢复占位模板。
+API E2E 同时确认 `/skills/index.json`、`/skill.md` 和 `/skill.json` 可由部署网站直接读取，并断言
+入口文件不依赖本地 helper。Skill 可做无凭据发现 smoke test：
+
+```bash
+curl http://localhost:8799/skill.md
+curl http://localhost:8799/management/v1/capabilities
+python3 /home/leon/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/mygateway-admin
+```
+
+## 7. 可控上游集成
+
+`e2e/controlled-upstream.spec.ts` 会由 Playwright 进程在随机 loopback 端口启动本地假 Provider，
+不读取或发送真实 Provider Key。请求仍经过正在运行的 Worker、D1 路由和真实 HTTP fetch，当前覆盖：
+
+1. 上游 `503`、`429` 和连接断开后按优先级切换到备用渠道；
+2. 上游 `401` 属于不可重试错误，不错误切换渠道；
+3. Provider 鉴权头使用解密后的渠道 Key，请求模型被替换为渠道模型 ID；
+4. 响应已提交后流式上游中断，不跨渠道续接内容；
+5. 客户端取消流式响应时，取消传播至当前上游连接；
+6. 上游响应头超时后切换备用渠道（使用短超时测试模式）。
+
+常规运行会执行除超时外的用例：
+
+```bash
+npm run test:e2e:upstream
+```
+
+超时用例需要 Worker 与测试使用相同的短超时值。先停止普通开发服务器，然后启动：
+
+```bash
+npx wrangler dev --port 8799 --var UPSTREAM_HEADER_TIMEOUT_MS:300
+```
+
+另一个终端运行：
+
+```bash
+E2E_UPSTREAM_TIMEOUT_MS=300 npm run test:e2e:upstream
+```
+
+这里的短超时只用于测试，不应照搬到生产配置。假 Provider 对慢请求最长等待 5 秒，避免使用默认
+30 秒超时拖慢常规测试。
+
+## 8. 真实 DeepSeek 集成
 
 `e2e/realtime.spec.ts` 在缺少 `DEEPSEEK_TEST_KEY` 时整套跳过。当前 10 个串行用例：
 
@@ -134,7 +208,7 @@ E2E 会创建、修改和删除渠道、模型与 Gateway Key。不要指向包�
 npx playwright test e2e/realtime.spec.ts
 ```
 
-## 6. SSE Fixture 要求
+## 9. SSE Fixture 要求
 
 协议或流式逻辑变化时至少覆盖：
 
@@ -148,13 +222,16 @@ npx playwright test e2e/realtime.spec.ts
 - finalizer 最多写入一次；
 - 工具参数跨多个增量事件。
 
-## 7. 发布前检查
+## 10. 发布前检查
 
 ```bash
 npm test
 npm run typecheck
 npm run build
 npx playwright test e2e/journey.spec.ts
+npx playwright test e2e/admin-api.spec.ts
+npx playwright test e2e/management-api.spec.ts e2e/management-ui.spec.ts
+npm run test:e2e:upstream
 npx playwright test e2e/realtime.spec.ts  # 有真实测试 Key 时
 git diff --check
 ```
@@ -167,7 +244,7 @@ git diff --check
 - 日志、trace 和失败报告不含 Key、Prompt 或 Response；
 - 生产 smoke test 只读取健康页和公开资源，除非明确授权使用生产凭据。
 
-## 8. 尚未自动化的验证
+## 11. 尚未自动化的验证
 
 - 1KB、100KB、1MB 非流式响应的 CPU 基线；
 - 长 SSE 和慢客户端压力测试；

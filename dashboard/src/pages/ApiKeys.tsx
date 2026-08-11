@@ -1,6 +1,7 @@
 import { createSignal, onMount, For, Show } from 'solid-js';
 import { t } from '../i18n';
 import Icon from '../components/Icon';
+import { useAppDialog } from '../components/AppDialog';
 
 interface ApiKey {
   id: string;
@@ -13,6 +14,7 @@ interface ApiKey {
   daily_token_limit: number | null;
   expires_at: number | null;
   model_allowlist: string[];
+  is_temporary: boolean;
 }
 
 interface KeyForm {
@@ -55,6 +57,7 @@ const intOrNull = (value: string) => (value.trim() === '' ? null : Number(value.
 
 function limitsSummary(key: ApiKey): string {
   const parts: string[] = [];
+  if (key.is_temporary) parts.push(t('keys.temporaryOneHour'));
   if (key.rpm_limit) parts.push(`≤${key.rpm_limit} ${t('keys.perMinute')}`);
   if (key.daily_request_limit) parts.push(`≤${key.daily_request_limit} ${t('keys.perDay')}`);
   if (key.daily_token_limit) parts.push(`≤${(key.daily_token_limit / 1_000_000).toLocaleString()}M ${t('keys.tokensPerDay')}`);
@@ -64,10 +67,12 @@ function limitsSummary(key: ApiKey): string {
 }
 
 export default function ApiKeys() {
+  const dialog = useAppDialog();
   const [keys, setKeys] = createSignal<ApiKey[]>([]);
   const [loading, setLoading] = createSignal(true);
   const [revealedKey, setRevealedKey] = createSignal('');
   const [showLimits, setShowLimits] = createSignal(false);
+  const [createExpiry, setCreateExpiry] = createSignal('30');
   const [createForm, setCreateForm] = createSignal<KeyForm>(emptyForm());
   const [createError, setCreateError] = createSignal('');
   const [editKey, setEditKey] = createSignal<ApiKey | null>(null);
@@ -87,12 +92,9 @@ export default function ApiKeys() {
     event.preventDefault();
     setBusy(true); setCreateError('');
     const form = createForm();
-    const expiresAt = fromDateTimeLocal(form.expiresAt);
-    if (expiresAt !== null && expiresAt * 1000 <= Date.now()) {
-      setCreateError(t('keys.expiryFuture'));
-      setBusy(false);
-      return;
-    }
+    const expiresAt = createExpiry() === 'permanent'
+      ? null
+      : Math.floor(Date.now() / 1000) + Number(createExpiry()) * 86_400;
     const body = {
       name: form.name.trim(),
       rpm_limit: intOrNull(form.rpm),
@@ -109,7 +111,7 @@ export default function ApiKeys() {
     if (response.ok) {
       const data = await response.json();
       setRevealedKey(data.key);
-      setCreateForm(emptyForm()); setShowLimits(false);
+      setCreateForm(emptyForm()); setCreateExpiry('30'); setShowLimits(false);
       void fetchKeys();
     } else {
       const data = await response.json();
@@ -160,7 +162,7 @@ export default function ApiKeys() {
     void fetchKeys();
   };
   const deleteKey = async (id: string) => {
-    if (!confirm(t('keys.deleteConfirm'))) return;
+    if (!await dialog.confirm({ title: t('common.delete'), message: t('keys.deleteConfirm'), danger: true })) return;
     await fetch(`/admin/api/keys/${id}`, { method: 'DELETE' });
     void fetchKeys();
   };
@@ -199,12 +201,19 @@ export default function ApiKeys() {
   return (
     <div class="resource-page">
       <form onSubmit={createKey} class="panel key-create key-create-form">
-        <div><h3>{t('keys.createTitle')}</h3><p>{t('keys.createSub')}</p></div>
-        <input placeholder={t('keys.name')} value={createForm().name}
-          onInput={(e) => setCreateForm({ ...createForm(), name: e.currentTarget.value })} required />
+        <div class="key-create-heading"><h3>{t('keys.createTitle')}</h3><p>{t('keys.createSub')}</p></div>
+        <label class="key-create-field"><span>{t('keys.nameLabel')}</span>
+          <input placeholder={t('keys.name')} value={createForm().name}
+            onInput={(e) => setCreateForm({ ...createForm(), name: e.currentTarget.value })} required />
+        </label>
         <label class="key-expiry-field"><span><Icon name="calendar" size={14} />{t('keys.expires')}</span>
-          <input type="datetime-local" min={minExpiry()} value={createForm().expiresAt}
-            onInput={(e) => setCreateForm({ ...createForm(), expiresAt: e.currentTarget.value })} />
+          <select value={createExpiry()} onChange={(e) => setCreateExpiry(e.currentTarget.value)}>
+            <option value="1">{t('keys.expiry1d')}</option>
+            <option value="7">{t('keys.expiry7d')}</option>
+            <option value="30">{t('keys.expiry30d')}</option>
+            <option value="90">{t('keys.expiry90d')}</option>
+            <option value="permanent">{t('keys.expiryPermanent')}</option>
+          </select>
         </label>
         <div class="key-create-actions">
           <button type="button" class="secondary-button" onClick={() => setShowLimits(!showLimits())}>
@@ -234,7 +243,7 @@ export default function ApiKeys() {
             </div>
             <div class="row-actions">
               <span class={`badge ${isExpired(key) ? 'expired' : key.status}`}>{isExpired(key) ? t('keys.expired') : key.status === 'active' ? t('keys.valid') : t('common.disabled')}</span>
-              <button onClick={() => openEdit(key)}><Icon name="sliders" size={14} />{isExpired(key) ? t('keys.renew') : t('keys.editLimits')}</button>
+              <Show when={!key.is_temporary}><button onClick={() => openEdit(key)}><Icon name="sliders" size={14} />{isExpired(key) ? t('keys.renew') : t('keys.editLimits')}</button></Show>
               <Show when={!isExpired(key)}><button onClick={() => toggleKey(key)}><Icon name={key.status === 'active' ? 'pause' : 'play'} size={14} />{key.status === 'active' ? t('keys.disable') : t('keys.enable')}</button></Show>
               <button class="danger-link" onClick={() => deleteKey(key.id)}><Icon name="trash" size={14} />{t('common.delete')}</button>
             </div>

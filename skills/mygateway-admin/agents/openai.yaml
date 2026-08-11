@@ -1,0 +1,4 @@
+interface:
+  display_name: "MyGateway Admin"
+  short_description: "Manage MyGateway resources and diagnostics"
+  default_prompt: "Use $mygateway-admin with the configured MyGateway URL and Management Key to inspect or manage gateway resources."

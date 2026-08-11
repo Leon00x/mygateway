@@ -1,4 +1,4 @@
-# Contributing
+# Contributing to MyGateway
 
 Thanks for your interest in MyGateway. The project is small by design: it runs
 on the Cloudflare free tier, prefers D1 + isolate memory over shared state, and
@@ -25,7 +25,7 @@ npm run dev              # wrangler dev on http://localhost:8787
 ```
 
 Admin login on first run uses the bootstrap credentials documented in
-[README.md](README.md) (change them after login).
+[README.md](../README.md) (change them after login).
 
 ## Development loop
 

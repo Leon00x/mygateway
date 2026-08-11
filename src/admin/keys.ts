@@ -14,6 +14,8 @@ import {
   updateGatewayKeyLimits,
   revokeGatewayKey,
   deleteGatewayKey,
+  cleanupExpiredTemporaryGatewayKeys,
+  getGatewayKey,
   serializeModelAllowlist,
   toPublicKey,
 } from '../db/keys.ts';
@@ -74,6 +76,7 @@ export async function handleKeysCollection(
 
   if (request.method === 'POST') {
     try {
+      await cleanupExpiredTemporaryGatewayKeys(env.DB);
       const body = (await request.json()) as {
         name?: string;
         rpm_limit?: unknown;
@@ -81,6 +84,7 @@ export async function handleKeysCollection(
         daily_token_limit?: unknown;
         expires_at?: unknown;
         model_allowlist?: unknown;
+        temporary?: unknown;
       };
       if (!body.name) {
         return gatewayErrorResponse('invalid_request', 'name is required', requestId);
@@ -90,17 +94,19 @@ export async function handleKeysCollection(
       const keyHash = await hashGatewayKey(rawKey);
       const prefix = gatewayKeyPrefix(rawKey);
       const id = generateId();
+      const isTemporary = body.temporary === true;
 
       await createGatewayKey(env.DB, {
         id,
         name: body.name,
         key_prefix: prefix,
         key_hash: keyHash,
-        rpm_limit: parseOptionalInt(body.rpm_limit),
-        daily_request_limit: parseOptionalInt(body.daily_request_limit),
-        daily_token_limit: parseOptionalInt(body.daily_token_limit),
-        expires_at: parseOptionalExpiry(body.expires_at),
-        model_allowlist: serializeModelAllowlist(parseModelAllowlistInput(body.model_allowlist)),
+        rpm_limit: isTemporary ? null : parseOptionalInt(body.rpm_limit),
+        daily_request_limit: isTemporary ? null : parseOptionalInt(body.daily_request_limit),
+        daily_token_limit: isTemporary ? null : parseOptionalInt(body.daily_token_limit),
+        expires_at: isTemporary ? Math.floor(Date.now() / 1000) + 3600 : parseOptionalExpiry(body.expires_at),
+        model_allowlist: isTemporary ? null : serializeModelAllowlist(parseModelAllowlistInput(body.model_allowlist)),
+        is_temporary: isTemporary,
       });
       invalidateGatewayKeyCache();
 
@@ -127,6 +133,8 @@ export async function handleKeyItem(
 ): Promise<Response> {
   if (request.method === 'PUT') {
     try {
+      const current = await getGatewayKey(env.DB, id);
+      if (!current) return gatewayErrorResponse('model_not_found', 'Key not found', requestId);
       const body = (await request.json()) as {
         name?: string;
         status?: string;
@@ -136,6 +144,19 @@ export async function handleKeyItem(
         expires_at?: unknown;
         model_allowlist?: unknown;
       };
+      if (current.is_temporary === 1 && [
+        body.rpm_limit,
+        body.daily_request_limit,
+        body.daily_token_limit,
+        body.expires_at,
+        body.model_allowlist,
+      ].some((value) => value !== undefined)) {
+        return gatewayErrorResponse(
+          'invalid_request',
+          'Temporary key expiration and access limits are fixed and cannot be renewed',
+          requestId,
+        );
+      }
 
       const limitUpdates: Parameters<typeof updateGatewayKeyLimits>[2] = {};
       if (body.rpm_limit !== undefined) limitUpdates.rpm_limit = parseOptionalInt(body.rpm_limit);
@@ -177,6 +198,7 @@ export async function handleKeyItem(
   }
 
   if (request.method === 'DELETE') {
+    await cleanupExpiredTemporaryGatewayKeys(env.DB);
     await deleteGatewayKey(env.DB, id);
     invalidateGatewayKeyCache();
     return new Response(null, { status: 204 });
@@ -195,13 +217,16 @@ export async function handleKeyRegenerate(
   requestId: string,
 ): Promise<Response> {
   try {
+    const current = await getGatewayKey(env.DB, id);
+    if (!current) return gatewayErrorResponse('model_not_found', 'Key not found', requestId);
+    if (current.is_temporary === 1) {
+      return gatewayErrorResponse('invalid_request', 'Temporary keys cannot be regenerated or renewed', requestId);
+    }
     // Revoke old key
     await revokeGatewayKey(env.DB, id);
 
     // Create new key with same name
-    const keys = await listGatewayKeys(env.DB);
-    const old = keys.find((k) => k.id === id);
-    const name = old?.name ?? 'regenerated';
+    const name = current.name;
 
     const rawKey = generateGatewayKeyValue();
     const keyHash = await hashGatewayKey(rawKey);

@@ -12,9 +12,9 @@ import {
 } from '../provider-balances';
 
 interface UsageOverview { requests: number; successes: number; errors: number; input_tokens: number; cache_input_tokens: number; output_tokens: number; usage_unknown: number; fallbacks?: number; cost_micros?: number; }
-interface ApiKey { id: string; name: string; key_prefix: string; status: string; expires_at: number | null; }
+interface ApiKey { id: string; name: string; key_prefix: string; status: string; expires_at: number | null; is_temporary: boolean; }
 interface Channel { id: string; name: string; provider_type: string; base_url: string; status: string; }
-interface ModelItem { id: string; unified_model_id: string; display_name: string; status: string; }
+interface ModelItem { id: string; unified_model_id: string; display_name: string; status: string; created_at: number; }
 
 const shortcuts: { href: string; label: string; note: string; icon: IconName }[] = [
   { href: '/channels', label: t('dash.addChannel'), note: t('dash.connectProvider'), icon: 'channels' },
@@ -124,7 +124,7 @@ export default function Dashboard() {
 
   const copyTempCommand = async (key = tempKey()) => {
     try {
-      await navigator.clipboard.writeText(curlExample(baseUrl(), activeModels()[0]?.unified_model_id, key));
+      await navigator.clipboard.writeText(curlExample(baseUrl(), quickstartModel(), key));
       setTempCopied(true);
       setTimeout(() => setTempCopied(false), 2000);
     } catch {
@@ -140,13 +140,12 @@ export default function Dashboard() {
     setTempBusy(true);
     setTempError('');
     try {
-      const requestedExpiry = Math.floor(Date.now() / 1000) + 3600;
       const response = await fetch('/admin/api/keys', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: t('dash.tempKeyName'),
-          expires_at: requestedExpiry,
+          temporary: true,
         }),
       });
       if (!response.ok) {
@@ -155,9 +154,12 @@ export default function Dashboard() {
         return;
       }
       const data = (await response.json()) as { key: string; expires_at: number | null };
-      keepTempKeyUntilExpiry(data.key, data.expires_at ?? requestedExpiry);
+      if (!data.expires_at) throw new Error('Temporary key expiry missing');
+      keepTempKeyUntilExpiry(data.key, data.expires_at);
       await copyTempCommand(data.key);
       void refreshKeys();
+    } catch {
+      setTempError(t('dash.tempKeyFailed'));
     } finally {
       setTempBusy(false);
     }
@@ -183,6 +185,8 @@ export default function Dashboard() {
   };
   const activeKeys = () => keys().filter((item) => item.status === 'active' && (!item.expires_at || item.expires_at * 1000 > Date.now()));
   const activeModels = () => models().filter((item) => item.status === 'active');
+  const quickstartModel = () => [...activeModels()]
+    .sort((a, b) => a.created_at - b.created_at)[0]?.unified_model_id;
   const activeChannels = () => channels().filter((item) => item.status === 'active');
   const visibleBalances = () => {
     const activeIds = new Set(activeChannels().map((item) => item.id));
@@ -318,7 +322,7 @@ export default function Dashboard() {
         <div class="panel-header">
           <div><h2>{t('dash.quickstart')}</h2><p>{t('dash.quickstartSub')}</p></div>
           <div class="action-row">
-            <button class="secondary-button" onClick={() => copy(curlExample(baseUrl(), activeModels()[0]?.unified_model_id, tempKey() || 'YOUR_GATEWAY_KEY'), 'curl')}><Icon name="copy" size={15} />{copied() === 'curl' ? t('dash.copied') : t('dash.copyCmd')}</button>
+            <button class="secondary-button" onClick={() => copy(curlExample(baseUrl(), quickstartModel(), tempKey() || 'YOUR_GATEWAY_KEY'), 'curl')}><Icon name="copy" size={15} />{copied() === 'curl' ? t('dash.copied') : t('dash.copyCmd')}</button>
             <button class="primary-button" disabled={tempBusy()} onClick={createTempKey}><Icon name={tempKey() ? 'copy' : 'keys'} size={15} />{tempBusy() ? t('dash.creatingTempKey') : tempCopied() ? t('dash.tempKeyCopied') : tempKey() ? t('dash.copyTempKey') : t('dash.createTempKey')}</button>
           </div>
         </div>
@@ -326,7 +330,7 @@ export default function Dashboard() {
           <small class="quickstart-hint">{t('dash.tempKeyStoredUntil')} {new Date(tempKeyExpiresAt()).toLocaleString()}</small>
         </Show>
         <Show when={tempError()}><div class="form-error quickstart-error">{tempError()}</div></Show>
-        <pre>{curlExample(baseUrl(), activeModels()[0]?.unified_model_id, tempKey() || 'YOUR_GATEWAY_KEY')}</pre>
+        <pre>{curlExample(baseUrl(), quickstartModel(), tempKey() || 'YOUR_GATEWAY_KEY')}</pre>
       </section>
     </div>
   );

@@ -2,7 +2,12 @@ import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { computeCostMicros, formatUsdMicros } from '../src/shared/cost.ts';
 import { checkDailyQuota, checkRpm, configureKeyQuota, keyIsExpired, resetKeyQuota } from '../src/gateway/key-quota.ts';
 import type { GatewayKeyIdentity } from '../src/gateway/access-resolver.ts';
-import { parseModelAllowlist, serializeModelAllowlist } from '../src/db/keys.ts';
+import {
+  cleanupExpiredTemporaryGatewayKeys,
+  listGatewayKeys,
+  parseModelAllowlist,
+  serializeModelAllowlist,
+} from '../src/db/keys.ts';
 
 const key = (overrides: Partial<GatewayKeyIdentity> = {}): GatewayKeyIdentity => ({
   id: 'key-1',
@@ -154,5 +159,35 @@ describe('model allowlist parsing', () => {
     expect(serializeModelAllowlist(undefined)).toBeNull();
     expect(parseModelAllowlist(null)).toEqual([]);
     expect(parseModelAllowlist('not-json')).toEqual([]);
+  });
+});
+
+describe('temporary gateway key persistence', () => {
+  test('list query hides expired temporary keys without deleting regular keys', async () => {
+    let statement = '';
+    const db = {
+      prepare: (sql: string) => {
+        statement = sql;
+        return { all: async () => ({ results: [] }) };
+      },
+    } as unknown as D1Database;
+
+    await listGatewayKeys(db);
+    expect(statement).toContain('is_temporary = 0');
+    expect(statement).toContain('expires_at > unixepoch()');
+  });
+
+  test('lazy cleanup only deletes expired server-marked temporary keys', async () => {
+    let statement = '';
+    const db = {
+      prepare: (sql: string) => {
+        statement = sql;
+        return { run: async () => ({ meta: { changes: 2 } }) };
+      },
+    } as unknown as D1Database;
+
+    expect(await cleanupExpiredTemporaryGatewayKeys(db)).toBe(2);
+    expect(statement).toContain('is_temporary = 1');
+    expect(statement).toContain('expires_at <= unixepoch()');
   });
 });
