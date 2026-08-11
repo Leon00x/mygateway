@@ -13,6 +13,8 @@ export interface ProviderPreset {
   id: string;
   /** Display name */
   name: string;
+  /** Optional Chinese display name; `name` remains the canonical English name. */
+  name_zh?: string;
   /** Provider type for the channel */
   provider_type: 'openai' | 'openai_compatible';
   /** Default base URL */
@@ -78,7 +80,8 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
   },
   {
     id: 'huawei_cloud_cn',
-    name: '华为云（中国）',
+    name: 'Huawei Cloud (China)',
+    name_zh: '华为云（中国）',
     provider_type: 'openai_compatible',
     base_url: 'https://api.modelarts-maas.com/openai/v1',
     docs_url: 'https://support.huaweicloud.com/model-call-maas/model-call-021.html',
@@ -101,7 +104,8 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
   },
   {
     id: 'alibaba_cloud_intl',
-    name: '阿里云国际',
+    name: 'Alibaba Cloud International',
+    name_zh: '阿里云国际',
     provider_type: 'openai_compatible',
     base_url: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
     docs_url: 'https://www.alibabacloud.com/help/en/model-studio/base-url',
@@ -124,7 +128,8 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
   },
   {
     id: 'byteplus_modelark',
-    name: '火山国际（BytePlus）',
+    name: 'BytePlus ModelArk',
+    name_zh: '火山国际（BytePlus）',
     provider_type: 'openai_compatible',
     base_url: 'https://ark.ap-southeast.bytepluses.com/api/v3',
     docs_url: 'https://docs.byteplus.com/en/docs/ModelArk/1330626',
@@ -183,7 +188,8 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
   },
   {
     id: 'minimax_intl',
-    name: 'MiniMax 国际',
+    name: 'MiniMax International',
+    name_zh: 'MiniMax 国际',
     provider_type: 'openai_compatible',
     base_url: 'https://api.minimax.io/v1',
     docs_url: 'https://platform.minimax.io/docs/api-reference/text-anthropic-api',
@@ -279,7 +285,8 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
   },
   {
     id: 'zhipu',
-    name: '智谱（中国）',
+    name: 'Zhipu AI (China)',
+    name_zh: '智谱（中国）',
     provider_type: 'openai_compatible',
     base_url: 'https://open.bigmodel.cn/api/paas/v4',
     docs_url: 'https://open.bigmodel.cn/dev/api/thirdparty-frame/openai-sdk',

@@ -39,6 +39,10 @@ import {
   handleChannelProviderModels,
 } from './model-discovery.ts';
 import { handleChannelOverview } from './channel-overview.ts';
+import {
+  handleManagementKeyItem,
+  handleManagementKeysCollection,
+} from './management-keys.ts';
 
 /** JSON response helper. */
 export function json(data: unknown, status = 200, headers?: Record<string, string>): Response {
@@ -201,6 +205,14 @@ export async function handleAdminApi(
   if (path.match(/^\/admin\/api\/keys\/[^/]+$/)) {
     const id = path.split('/').pop()!;
     return handleKeyItem(request, id, env, requestId);
+  }
+
+  // --- Management Keys (administrator session only) ---
+  if (path === '/admin/api/management-keys') {
+    return handleManagementKeysCollection(request, env, requestId);
+  }
+  if (path.match(/^\/admin\/api\/management-keys\/[^/]+$/)) {
+    return handleManagementKeyItem(request, path.split('/').pop()!, env, requestId);
   }
 
   // --- Usage ---

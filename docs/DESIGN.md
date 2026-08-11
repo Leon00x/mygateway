@@ -125,6 +125,10 @@ Messages → Chat 生成标准 `chat.completion.chunk`，并以 `data: [DONE]` �
 Worker 与 Dashboard 共用 `src/shared/provider-presets.ts`。该文件是供应商名称、Base URL、
 文档链接和协议端点的代码权威来源；本文只记录能力概览。
 
+预置的 `name` 是写入新渠道的英文规范名，`name_zh` 是可选中文展示名。Dashboard 只在渠道名
+仍等于英文或中文预置默认值时按当前语言本地化；已被管理员修改的名称不翻译。这样无需 migration
+即可兼容历史 D1 中保存的中文默认名。
+
 | 供应商 | 预制原生协议 |
 |---|---|
 | OpenAI | Chat、Responses |
@@ -269,7 +273,7 @@ Provider adapter 扩展点；尚未实现的供应商显示“暂未接入”，
 6. 是否引入新的 Cloudflare 组件、读写或共享状态；
 7. 单元测试和真实集成测试覆盖。
 
-已发布变化记录在 [CHANGELOG](../CHANGELOG.md)，产品特性与未来方向见
+已发布变化记录在 [CHANGELOG](CHANGELOG.md)，产品特性与未来方向见
 [PRD](PRD.md)（含 Roadmap）。
 
 ## 9. Analytics（Usage / Logs）重构
@@ -431,9 +435,44 @@ TTFT 的历史桶；界面必须据样本数计算覆盖率。
 - System 页价格库卡片：行内编辑输入 / 输出 / 缓存 / 币种，批量保存；删除行同步调用 DELETE，
   失败时回滚并重新加载。
 
+## 12. Agent Management API
+
+### 12.1 身份与生命周期
+
+- migration `0012_management_keys.sql` 新增 `management_keys` 与 `management_audit_logs`；已发布
+  migration 不回写。
+- Management Key 使用 `mgmt_` + 32 随机字节，服务端只保存 SHA-256 hash；`expires_at: null`
+  表示永久，内部映射为 Unix 秒上限哨兵值；短期 isolate 缓存
+  正命中最多 30 秒、负命中 5 秒，并受密钥到期时间约束。
+- 权限为 `read` / `write`。非 GET/HEAD 请求统一要求 `write`；停用、删除、到期或 hash 不匹配
+  均按无效机器身份处理。
+- System 页支持创建、停启和删除；明文配置提示词最多在当前浏览器保存 1 小时。
+
+### 12.2 API 白名单
+
+`/management/v1` 复用 Admin handler 的输入校验、重复检测与数据库逻辑，但路由采用独立显式
+白名单，不复用管理员 Session。开放渠道、余额、模型、Gateway Key、Usage、日志元数据和系统
+状态；不开放账号、日志策略、清空日志、价格库或 Management Key 的签发。
+
+渠道输出继续走 `toPublicChannel`；日志详情额外强制删除上下文密文列并将上下文设为 `null`。
+审计记录不包含 query 和 body，防止 Provider Key 或其他一次性凭据进入审计表。
+
+### 12.3 Skill
+
+`skills/mygateway-admin/` 是仓库内官方 Skill。它通过环境变量读取地址和 Management Key，先查询
+capabilities，再用 `curl` 或 Agent 自带的等价 HTTP 工具直接调用 API。Skill 不依赖代码仓、Node
+helper 或 Cloudflare 账号；在删除、凭据轮换或批量导入前要求确认，且不得通过 D1、Cloudflare
+Secret 或 Dashboard DOM 绕过 Management API。
+
+`SKILL.md` 自包含认证规则、API 路径与 `curl` 示例，不引用本地脚本或额外参考文件。Dashboard
+构建会将其发布到网站根路径 `/skill.md`。System 页始终展示同源 Skill
+配置提示词：默认使用 `mgmt_YOUR_MANAGEMENT_KEY` 占位；创建后最多 1 小时替换为真实明文，
+到期、删除或本地缓存失效后自动恢复占位模板。
+
 ## 11. 控制台 i18n
 
 - 中英双语字典以模块级 Solid signal `locale` 提供，`t(key)` 返回 `entry[locale()] ?? entry.zh ?? key`。
 - 默认中文；顶部语言开关切换并持久化到 `localStorage`（`mygateway.locale`）；`<html lang>` 随
   语言同步。
+- 预置供应商名称通过 `localizedPresetName` / `localizedChannelName` 切换语言；自定义名称不翻译。
 - 新页面文案必须同时提供 zh / en 条目；缺失时回退中文，不阻断渲染。

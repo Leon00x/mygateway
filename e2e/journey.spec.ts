@@ -65,6 +65,19 @@ test('4. add channel via preset modal', async ({ page }) => {
   await page.locator('.sidebar').getByRole('link', { name: /渠道/ }).click();
   await expect(page).toHaveURL(/\/channels/);
 
+  // Preset names follow the UI locale. This also covers legacy channel rows:
+  // the pure helper suite verifies old Chinese defaults map back to English.
+  await page.getByRole('button', { name: 'Switch language' }).click();
+  await page.getByRole('button', { name: 'Add Channel' }).click();
+  const providerPicker = page.locator('.provider-picker-modal');
+  await expect(providerPicker.getByText('Huawei Cloud (China)', { exact: true })).toBeVisible();
+  await expect(providerPicker.getByText('Alibaba Cloud International', { exact: true })).toBeVisible();
+  await expect(providerPicker.getByText('BytePlus ModelArk', { exact: true })).toBeVisible();
+  await expect(providerPicker.getByText('MiniMax International', { exact: true })).toBeVisible();
+  await expect(providerPicker.getByText('Zhipu AI (China)', { exact: true })).toBeVisible();
+  await providerPicker.getByRole('button', { name: '×' }).click();
+  await page.getByRole('button', { name: 'Switch language' }).click();
+
   await page.getByRole('button', { name: '添加渠道' }).click();
   await page.getByRole('button', { name: /DeepSeek/ }).first().click();
   await page.getByPlaceholder('sk-...').fill('sk-e2e-dummy-123456');
@@ -212,11 +225,22 @@ test('6. create gateway key with expiration → plaintext shown once', async ({ 
   await expect(page).toHaveURL(/\/keys/);
 
   const keyName = uniq('e2e-key');
-  const expiresAt = new Date(Date.now() + 86_400_000);
-  const localExpiry = new Date(expiresAt.getTime() - expiresAt.getTimezoneOffset() * 60_000)
-    .toISOString().slice(0, 16);
   await page.getByPlaceholder('密钥名称').fill(keyName);
-  await page.getByLabel('到期时间').fill(localExpiry);
+  const expirySelect = page.getByLabel('到期时间');
+  await expect(expirySelect.locator('option')).toHaveText(['1 天', '7 天', '30 天', '90 天', '永久']);
+  const [nameBox, expiryBox, createButtonBox] = await Promise.all([
+    page.getByPlaceholder('密钥名称').boundingBox(),
+    expirySelect.boundingBox(),
+    page.getByRole('button', { name: /创建密钥/ }).boundingBox(),
+  ]);
+  expect(nameBox).not.toBeNull();
+  expect(expiryBox).not.toBeNull();
+  expect(createButtonBox).not.toBeNull();
+  expect(nameBox!.height).toBe(40);
+  expect(expiryBox!.height).toBe(40);
+  expect(Math.abs((nameBox!.y + nameBox!.height) - (expiryBox!.y + expiryBox!.height))).toBeLessThan(2);
+  expect(Math.abs((nameBox!.y + nameBox!.height) - (createButtonBox!.y + createButtonBox!.height))).toBeLessThan(2);
+  await expirySelect.selectOption('1');
   await page.getByRole('button', { name: /创建密钥/ }).click();
 
   const reveal = page.locator('.secret-reveal');
@@ -228,8 +252,9 @@ test('6. create gateway key with expiration → plaintext shown once', async ({ 
   await expect(page.getByText(/gw_/).first()).toBeVisible();
   const keys = await page.request.get('/admin/api/keys').then((response) => response.json());
   const created = keys.find((key: any) => key.name === keyName);
-  expect(created.expires_at).toBeGreaterThan(Math.floor(Date.now() / 1000));
-  expect(created.expires_at).toBeLessThanOrEqual(Math.floor(expiresAt.getTime() / 1000) + 60);
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  expect(created.expires_at).toBeGreaterThan(nowSeconds + 86_300);
+  expect(created.expires_at).toBeLessThanOrEqual(nowSeconds + 86_400);
 
   const invalidExpiry = await page.request.post('/admin/api/keys', {
     data: { name: 'expired-e2e', expires_at: Math.floor(Date.now() / 1000) - 60 },
@@ -292,12 +317,34 @@ test('9. dashboard shows channel and model', async ({ page }) => {
   await expect(page.getByText('供应商余额')).toBeVisible();
   await expect(page.getByText('点击刷新后查询')).toBeVisible();
 
+  const activeModels = (await page.request.get('/admin/api/models').then((response) => response.json()))
+    .filter((model: any) => model.status === 'active')
+    .sort((a: any, b: any) => a.created_at - b.created_at);
+  await expect(page.locator('.quickstart-panel pre')).toContainText(`\"model\":\"${activeModels[0].unified_model_id}\"`);
+
   await page.getByRole('button', { name: '创建临时密钥并复制命令' }).click();
   await expect(page.getByText(/临时密钥仅保存在此浏览器/)).toBeVisible();
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('mygateway.quickstartTempKey') ?? 'null'));
   expect(stored.key).toMatch(/^gw_[A-Za-z0-9_-]{20,}/);
   expect(stored.expiresAt).toBeGreaterThan(Date.now());
   await expect(page.locator('.quickstart-panel pre')).toContainText(stored.key);
+
+  const listedKeys = await page.request.get('/admin/api/keys').then((response) => response.json());
+  const temporary = listedKeys.find((key: any) => key.key_prefix === stored.key.slice(0, 11));
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  expect(temporary).toMatchObject({ is_temporary: true, rpm_limit: null, daily_request_limit: null, daily_token_limit: null });
+  expect(temporary.expires_at).toBeGreaterThan(nowSeconds + 3_500);
+  expect(temporary.expires_at).toBeLessThanOrEqual(nowSeconds + 3_600);
+  expect((await page.request.put(`/admin/api/keys/${temporary.id}`, {
+    data: { expires_at: nowSeconds + 86_400 },
+  })).status()).toBe(400);
+  expect((await page.request.post(`/admin/api/keys/${temporary.id}/regenerate`)).status()).toBe(400);
+
+  await page.locator('.sidebar').getByRole('link', { name: /密钥/ }).click();
+  const temporaryRow = page.locator('.key-row', { hasText: temporary.key_prefix });
+  await expect(temporaryRow.getByText('首页临时密钥 · 固定 1 小时 · 不可续期')).toBeVisible();
+  await expect(temporaryRow.getByRole('button', { name: /续期|编辑限额/ })).toHaveCount(0);
+  await page.goto('/');
 
   await page.reload();
   await expect(page.locator('.quickstart-panel pre')).toContainText(stored.key);

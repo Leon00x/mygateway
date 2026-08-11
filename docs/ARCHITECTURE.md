@@ -119,15 +119,32 @@ Gateway Key 以 `gw_` 开头，明文只在创建或重新生成时返回一次�
 D1 中的 hash 比较。短 prefix 只用于控制台辨认。`expires_at` 使用 Unix 秒存入 D1；数据面在
 执行 RPM 与每日预算检查前判断到期时间，过期请求返回 401，控制台也会将其排除出有效密钥计数。
 
-首页快速调用是唯一的明文暂存例外：用户主动创建 1 小时临时密钥后，控制台将 `{ key,
-expiresAt }` 写入同源 `localStorage`，刷新时只恢复尚未到期的值，并用定时器在到期后清除。
-该机制不增加服务端明文存储，也不会通过管理 API 找回已创建密钥；共享浏览器或高 XSS 风险环境
-不应使用这一便利功能。
+首页快速调用是唯一的明文暂存例外：用户主动创建临时密钥后，服务端设置
+`is_temporary = 1` 并强制 `expires_at = now + 1h`，不接受续期、限额修改或重新生成。列表查询
+直接排除已过期的临时密钥；后续创建或删除任意 Gateway Key 时，顺带删除已过期临时记录，
+不增加 Cron 任务。控制台将 `{ key, expiresAt }` 写入同源 `localStorage`，刷新时只恢复尚未到期
+的值，并用定时器在到期后清除。该机制不增加服务端明文存储，也不会通过管理 API 找回已创建
+密钥；共享浏览器或高 XSS 风险环境不应使用这一便利功能。
 
 ### Provider Key
 
 Provider Key 使用 AES-256-GCM 加密。每次加密使用随机 IV，渠道 ID 和 key version 参与
 AAD。Key 只在即将调用 Provider 时于 Worker 内解密，不进入响应、D1 明文或日志。
+
+### Management Key
+
+Management Key 以 `mgmt_` 开头，D1 只保存 SHA-256 hash、短前缀、`read` / `write` 权限、状态与
+到期时间；永久密钥在数据库使用 Unix 秒上限哨兵值，对外表示为 `expires_at: null`。控制台创建
+时只返回一次明文；为方便配置 Agent，当前浏览器可在同源
+`localStorage` 中保留最多 1 小时，到期、删除或主动清除后无法从服务端找回。
+
+Management API 审计只写 Key ID、HTTP 方法、路径、状态和 Request ID，不保存查询字符串、请求体
+或响应体，并由现有单个每日 Cron 按 Usage 保留天数清理。Provider Key 仍只在渠道写请求进入
+Worker 内存，并且渠道、日志和错误响应都会移除明文、hash、IV、tag 与 ciphertext。
+
+Skill 源码以根目录 `skills/mygateway-admin/SKILL.md` 为唯一权威；Vite `closeBundle` 阶段将其
+发布为 Dashboard 静态产物 `/skill.md` 与 `/skill.json`，并生成 `/skills/index.json`。因此每个部署实例都
+能从自己的同源网站分发 Skill，不需要依赖代码仓可用性，也不会把 Management Key 写入产物。
 
 ## 6. 模型与协议解析
 
@@ -212,10 +229,17 @@ usage 写入失败只记录脱敏错误，不修改已经返回的模型响应�
 | `/admin/api/usage*` | 首页用量概览与维度统计 |
 | `/admin/api/model-prices*` | 模型价格库（列表 / 批量 upsert / 单条删除） |
 | `/admin/api/system*` | 系统状态、设置和 Provider 预制 |
+| `/admin/api/management-keys*` | 仅管理员 Session 可用的 Management Key 生命周期 |
+| `/management/v1/*` | Agent / 自动化使用的版本化 Management API；`read` / `write` Bearer 鉴权 |
 | `/health` | 最小健康检查 |
 
 Gateway 错误使用稳定 JSON envelope 并附带 Request ID。Provider 已返回明确响应时尽量保留
 其状态；网关自身的认证、路由、协议和超时错误使用统一错误码。
+
+`GET /management/v1/capabilities` 与 `/management/v1/openapi.json` 用于发现；其余 Management
+路由只开放渠道、余额、模型、Gateway Key、用量、脱敏日志和系统状态。日志详情始终移除加密
+上下文字段，即使管理员曾开启上下文记录。日志设置、清空日志、管理员账号和 Management Key
+签发不在机器 API 白名单内。
 
 渠道卡片使用 `GET /admin/api/channels/overview`：一次返回脱敏渠道、当前 isolate 的余额缓存，
 以及通过单条索引查询得到的模型数量和最多 3 个预览，避免前端按渠道产生 N+1 请求。

@@ -97,6 +97,16 @@ curl https://your-gateway.workers.dev/v1/chat/completions \
 Anthropic SDK 可将 Base URL 指向 `https://your-gateway.workers.dev`，并把 Gateway Key 作为
 `x-api-key` 传入 `/v1/messages`。Responses 当前只走供应商原生 Responses 端点，不做协议转换。
 
+## 让 Agent 管理网关
+
+在“系统设置 → 管理密钥与 Skill”创建独立的只读或可写 Management Key，然后把页面生成的配置
+提示词交给 Codex 等 Agent。每个部署网站会在 `/skill.md` 同源托管自包含的官方
+Skill；其[源码](skills/mygateway-admin/SKILL.md)可审查、可二次开发，并通过 `/management/v1`
+管理渠道、模型、Gateway Key，以及查询余额、用量、日志和健康状态。
+
+Management Key 与模型调用使用的 Gateway Key 相互隔离。Provider Key 以 AES-256-GCM 加密保存，
+不会通过 Management API、日志详情或错误响应返回。
+
 ## 供应商预制
 
 当前内置 15 个预制：OpenAI、Anthropic、DeepSeek、Z.AI、华为云（中国）、阿里云国际、
@@ -124,11 +134,14 @@ Moonshot（Kimi）和智谱（中国）。也可以添加自定义 OpenAI-compat
 | [供应商与模型](docs/PROVIDERS.md) | 核对重点预制、30 个价格基线和余额 / 套餐接入边界 |
 | [部署](docs/DEPLOY.md) | 一键部署、升级、回滚、Free Tier 和排障 |
 | [测试](docs/TESTING.md) | 单测、UI E2E、真实 Provider 集成和发布检查 |
+| [贡献指南](docs/CONTRIBUTING.md) | 本地开发、改动原则、测试和 Pull Request 要求 |
+| [安全策略](docs/SECURITY.md) | 私密报告漏洞并了解部署方的安全责任 |
+| [更新日志](docs/CHANGELOG.md) | 查看已发布和待发布变化 |
 | [AGENTS.md](AGENTS.md) | AI Agent 接续开发时必须遵守的仓库约束 |
 
 ## 参与项目
 
-欢迎提交 Issue 和 Pull Request。开始前请阅读 [CONTRIBUTING](CONTRIBUTING.md)；安全问题请按
-[SECURITY](SECURITY.md) 私下报告。版本变化见 [CHANGELOG](CHANGELOG.md)。
+欢迎提交 Issue 和 Pull Request。开始前请阅读 [贡献指南](docs/CONTRIBUTING.md)；安全问题请按
+[安全策略](docs/SECURITY.md) 私下报告。版本变化见 [更新日志](docs/CHANGELOG.md)。
 
 MyGateway 使用 [MIT License](LICENSE) 开源。

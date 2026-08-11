@@ -16,6 +16,7 @@ export interface GatewayKeyRow {
   created_at: number;
   updated_at: number;
   revoked_at: number | null;
+  is_temporary: 0 | 1;
 }
 
 export interface GatewayKeyLimits {
@@ -39,6 +40,7 @@ export interface GatewayKeyPublic {
   model_allowlist: string[];
   created_at: number;
   updated_at: number;
+  is_temporary: boolean;
 }
 
 export function toPublicKey(row: GatewayKeyRow): GatewayKeyPublic {
@@ -54,6 +56,7 @@ export function toPublicKey(row: GatewayKeyRow): GatewayKeyPublic {
     model_allowlist: parseModelAllowlist(row.model_allowlist),
     created_at: row.created_at,
     updated_at: row.updated_at,
+    is_temporary: row.is_temporary === 1,
   };
 }
 
@@ -77,7 +80,9 @@ export function serializeModelAllowlist(models: string[] | undefined): string | 
 
 export async function listGatewayKeys(db: D1Database): Promise<GatewayKeyRow[]> {
   const result = await db
-    .prepare('SELECT * FROM gateway_api_keys ORDER BY created_at DESC')
+    .prepare(`SELECT * FROM gateway_api_keys
+      WHERE is_temporary = 0 OR expires_at IS NULL OR expires_at > unixepoch()
+      ORDER BY created_at DESC`)
     .all<GatewayKeyRow>();
   return result.results;
 }
@@ -94,13 +99,15 @@ export async function createGatewayKey(
     daily_token_limit?: number | null;
     expires_at?: number | null;
     model_allowlist?: string | null;
+    is_temporary?: boolean;
   },
 ): Promise<void> {
   await db
     .prepare(
       `INSERT INTO gateway_api_keys
-        (id, name, key_prefix, key_hash, rpm_limit, daily_request_limit, daily_token_limit, expires_at, model_allowlist)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (id, name, key_prefix, key_hash, rpm_limit, daily_request_limit, daily_token_limit,
+         expires_at, model_allowlist, is_temporary)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       key.id,
@@ -112,8 +119,20 @@ export async function createGatewayKey(
       key.daily_token_limit ?? null,
       key.expires_at ?? null,
       key.model_allowlist ?? null,
+      key.is_temporary ? 1 : 0,
     )
     .run();
+}
+
+export async function getGatewayKey(db: D1Database, id: string): Promise<GatewayKeyRow | null> {
+  return db.prepare('SELECT * FROM gateway_api_keys WHERE id = ? LIMIT 1').bind(id).first<GatewayKeyRow>();
+}
+
+export async function cleanupExpiredTemporaryGatewayKeys(db: D1Database): Promise<number> {
+  const result = await db.prepare(
+    'DELETE FROM gateway_api_keys WHERE is_temporary = 1 AND expires_at <= unixepoch()',
+  ).run();
+  return result.meta.changes ?? 0;
 }
 
 /**

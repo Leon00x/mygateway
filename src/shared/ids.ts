@@ -14,6 +14,13 @@ export function generateGatewayKeyValue(): string {
   return 'gw_' + base64url(bytes);
 }
 
+/** Generate a Management Key: mgmt_<32 bytes base64url>. */
+export function generateManagementKeyValue(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return 'mgmt_' + base64url(bytes);
+}
+
 /** SHA-256 hash, returned as hex string. */
 export async function sha256Hex(input: string): Promise<string> {
   const data = new TextEncoder().encode(input);

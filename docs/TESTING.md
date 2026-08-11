@@ -12,6 +12,8 @@
 | Worker dry-run | `npm run build` | 前端构建和 Wrangler 打包 |
 | UI E2E | `npx playwright test e2e/journey.spec.ts` | 浏览器管理闭环和 Gateway HTTP |
 | Admin API E2E | `npx playwright test e2e/admin-api.spec.ts` | 渠道、库存、模型、实例和调用错误矩阵 |
+| Management API E2E | `npx playwright test e2e/management-api.spec.ts` | Agent 权限、生命周期、资源管理与凭据不泄漏 |
+| Management UI E2E | `npx playwright test e2e/management-ui.spec.ts` | 管理密钥创建、1 小时恢复与删除 |
 | 可控上游 E2E | `npm run test:e2e:upstream` | 真实 Worker 路由、Fallback、流中断与取消传播 |
 | 真实集成 | `npx playwright test e2e/realtime.spec.ts` | 使用真实 DeepSeek Key 验证上游协议 |
 
@@ -33,6 +35,7 @@
 | `protocol-conversion.test.ts` | Chat / Messages 请求与非流式响应 |
 | `protocol-routing.test.ts` | 原生优先、转换候选和协议不匹配 |
 | `protocol-stream.test.ts` | Chat / Messages SSE 转换 |
+| `provider-localization.test.ts` | 中英文预置名、历史默认名兼容和自定义渠道名保留 |
 | `provider-presets.test.ts` | 预制唯一性、端点和协议能力 |
 | `provider-balance-ui.test.ts` | 跨 isolate `not_queried` 不覆盖浏览器刷新结果 |
 | `server-timing.test.ts` | 稳定计时响应头 |
@@ -103,8 +106,9 @@ E2E 会创建、修改和删除渠道、模型与 Gateway Key。不要指向包�
 6. 创建带精确到期时间的 Gateway Key，验证明文只展示一次，并拒绝创建已过期密钥；
 7. 调用 `/v1/models` 和 Chat 接口，验证认证、错误和 timing Header；
 8. 无 Gateway Key 返回 401；
-9. Dashboard 显示渠道、模型和 Provider Balance；创建 1 小时临时密钥，验证刷新后从
-   `localStorage` 恢复，并在本地到期后自动清除；
+9. Dashboard 显示渠道、首个已创建模型和 Provider Balance；创建服务端标记的 1 小时临时
+   密钥，验证固定到期时间、不可续期 / 重新生成、刷新后从 `localStorage` 恢复，并在本地到期
+   后自动清除；单元测试同时约束列表隐藏与创建 / 删除时的惰性清理 SQL；
 10. 删除渠道显示关联影响，清理失去最后实例的统一模型，并保留仍有备用渠道的模型；
 11. Analytics Usage 页面展示指标卡、模型表和筛选切换；
 12. Analytics Logs 页面展示日志表、游标分页和详情抽屉；日志策略与清空日志仅在系统设置页；
@@ -128,7 +132,26 @@ E2E 会创建、修改和删除渠道、模型与 Gateway Key。不要指向包�
 该套件只使用本地 D1 和不会实际访问的 Provider 地址，适合常规 CI。它不替代下述可控上游与
 真实 Provider 测试。
 
-## 6. 可控上游集成
+## 6. Management API 与 Skill
+
+`e2e/management-api.spec.ts` 使用真实 Worker HTTP 和本地 D1，覆盖 Skill 中声明的只读查询与
+资源写操作、公开能力发现、无凭据拒绝、`read` / `write` 权限、渠道与模型实例创建、Gateway Key
+一次性明文、余额/用量/日志查询，以及
+Management Key 的到期、停用和删除。测试显式断言 Provider Key、hash 和 ciphertext 不会
+出现在响应中。
+
+`e2e/management-ui.spec.ts` 验证 System 页默认展示网站托管地址和安全占位符，创建后配置提示词
+包含一次性 Key，刷新仍可从同源 `localStorage` 恢复，并在 1 小时窗口失效或删除后恢复占位模板。
+API E2E 同时确认 `/skills/index.json`、`/skill.md` 和 `/skill.json` 可由部署网站直接读取，并断言
+入口文件不依赖本地 helper。Skill 可做无凭据发现 smoke test：
+
+```bash
+curl http://localhost:8799/skill.md
+curl http://localhost:8799/management/v1/capabilities
+python3 /home/leon/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/mygateway-admin
+```
+
+## 7. 可控上游集成
 
 `e2e/controlled-upstream.spec.ts` 会由 Playwright 进程在随机 loopback 端口启动本地假 Provider，
 不读取或发送真实 Provider Key。请求仍经过正在运行的 Worker、D1 路由和真实 HTTP fetch，当前覆盖：
@@ -161,7 +184,7 @@ E2E_UPSTREAM_TIMEOUT_MS=300 npm run test:e2e:upstream
 这里的短超时只用于测试，不应照搬到生产配置。假 Provider 对慢请求最长等待 5 秒，避免使用默认
 30 秒超时拖慢常规测试。
 
-## 7. 真实 DeepSeek 集成
+## 8. 真实 DeepSeek 集成
 
 `e2e/realtime.spec.ts` 在缺少 `DEEPSEEK_TEST_KEY` 时整套跳过。当前 10 个串行用例：
 
@@ -185,7 +208,7 @@ E2E_UPSTREAM_TIMEOUT_MS=300 npm run test:e2e:upstream
 npx playwright test e2e/realtime.spec.ts
 ```
 
-## 8. SSE Fixture 要求
+## 9. SSE Fixture 要求
 
 协议或流式逻辑变化时至少覆盖：
 
@@ -199,7 +222,7 @@ npx playwright test e2e/realtime.spec.ts
 - finalizer 最多写入一次；
 - 工具参数跨多个增量事件。
 
-## 9. 发布前检查
+## 10. 发布前检查
 
 ```bash
 npm test
@@ -207,6 +230,7 @@ npm run typecheck
 npm run build
 npx playwright test e2e/journey.spec.ts
 npx playwright test e2e/admin-api.spec.ts
+npx playwright test e2e/management-api.spec.ts e2e/management-ui.spec.ts
 npm run test:e2e:upstream
 npx playwright test e2e/realtime.spec.ts  # 有真实测试 Key 时
 git diff --check
@@ -220,7 +244,7 @@ git diff --check
 - 日志、trace 和失败报告不含 Key、Prompt 或 Response；
 - 生产 smoke test 只读取健康页和公开资源，除非明确授权使用生产凭据。
 
-## 10. 尚未自动化的验证
+## 11. 尚未自动化的验证
 
 - 1KB、100KB、1MB 非流式响应的 CPU 基线；
 - 长 SSE 和慢客户端压力测试；
