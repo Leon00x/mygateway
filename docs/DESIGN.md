@@ -462,6 +462,15 @@ TTFT 的历史桶；界面必须据样本数计算覆盖率。
 白名单，不复用管理员 Session。开放渠道、余额、模型、Gateway Key、Usage、日志元数据和系统
 状态；不开放账号、日志策略、清空日志、价格库或 Management Key 的签发。
 
+`GET /management/v1/overview` 是 Management Key 保护的 Agent 初始化快照。它批量读取渠道与协议、
+统一模型及实例和 Gateway Key，并只合并当前 isolate 已有的余额缓存，不主动请求 Provider。响应不含
+Base URL、Key 前缀、Provider Key、密文或日志上下文；模型实例只标记是否已定价和币种，不在初始化
+摘要中展开单价。服务端按可调用链路返回状态：无渠道为 `needs_channel`；没有由活动模型、活动实例和
+活动渠道组成的链路为 `needs_model`；没有未过期活动 Gateway Key 为 `needs_gateway_key`；否则为
+`ready`。响应中的 `authorization.permission` 来自已完成鉴权的当前 Management Key；公开
+capabilities 中的 `permissions` 仅表示 API 支持的权限类型。该状态用于引导而不是健康监控，不宣称
+跨 isolate 强一致。
+
 渠道输出继续走 `toPublicChannel`；日志详情额外强制删除上下文密文列并将上下文设为 `null`。
 审计记录不包含 query 和 body，防止 Provider Key 或其他一次性凭据进入审计表。
 
@@ -476,9 +485,13 @@ Gateway API 与 Management API 间切换。Management OpenAPI 描述每个操作
 平台的持久化凭据存储；若平台不提供该能力但有持久化本地文件系统，则写入仓库外、目录权限
 `0700`、文件权限 `0600` 的配置文件。后续会话先加载为环境变量，再查询 capabilities 并用 `curl`
 或 Agent 自带的等价 HTTP 工具直接调用 API。密钥不得进入 Skill 源码、代码仓、聊天记忆或输出。
-Skill 不依赖代码仓、Node
-helper 或 Cloudflare 账号；在删除、凭据轮换或批量导入前要求确认，且不得通过 D1、Cloudflare
+Skill 不依赖代码仓或 Node helper；在删除、凭据轮换或批量导入前要求确认，且不得通过 D1、Cloudflare
 Secret 或 Dashboard DOM 绕过 Management API。
+
+首次安装或连接变化后，Skill 只调用一次 Overview 完成体检，先向用户总结供应商、协议、模型、
+实例和客户端 Key，再根据 `setup_state` 引导添加渠道、配置模型或创建 Gateway Key。各资源章节先解释
+产品作用、用户需要准备的输入和字段归属，再列常用 API。渠道预检负责连接和模型发现；价格属于
+统一模型的渠道实例，使用每百万 Token 的整数 micros 和明确币种，未知价格保持未设置且不得估算。
 
 `SKILL.md` 自包含认证规则、API 路径与 `curl` 示例，不引用本地脚本或额外参考文件。Dashboard
 构建会将其发布到网站根路径 `/skill.md`。System 页始终展示同源 Skill

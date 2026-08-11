@@ -6,6 +6,10 @@
 
 ## 未发布：仓库整理与接续开发基线
 
+- `mygateway-admin` Skill 升级至 0.4.0：删除无关的账户凭据说明，按渠道、统一模型、Gateway Key、
+  用量/日志解释各模块用途、所需输入和字段边界；首次安装或连接变化后通过新的脱敏
+  `/management/v1/overview` 一次检查网关，并按四阶段状态总结现状、引导用户完成配置。Overview
+  使用批量查询和余额缓存，不触发上游请求，也不返回 Provider Key、Gateway Key 明文或加密字段。
 - `/v1/api-docs` 现在可切换 Gateway API 与 Management API，新增公开的
   `/management/v1/api-docs`，并为管理接口补齐权限、路径/查询参数、请求体、主要响应与脱敏约束；
   资源操作仍要求 `mgmt_` Bearer 鉴权。`mygateway-admin` Skill 升级至 0.3.0，首次连接必须把网关

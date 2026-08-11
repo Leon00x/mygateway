@@ -219,7 +219,9 @@ Codex 等 AI Agent 通过标准管理 API 完成日常运维。该能力由两�
 - **权限模型**：MVP 提供易理解的 `read` 与 `write` 两档。`read` 只能查询，`write` 可调用开放
   资源的变更接口；修改日志策略、清空日志、管理管理员凭据和签发 Management Key 本身不开放。
 - **API 范围**：为渠道、模型、Gateway Key、用量、请求日志和系统状态提供稳定、版本化、机器可读
-  的管理 API；写操作保持现有校验、重复检测和影响分析，不因调用方是 Skill 而绕过约束。
+  的管理 API；`GET /management/v1/overview` 用一次脱敏查询汇总系统、渠道、统一模型、Gateway Key
+  与余额缓存状态，并返回 `needs_channel` / `needs_model` / `needs_gateway_key` / `ready` 初始化阶段；
+  写操作保持现有校验、重复检测和影响分析，不因调用方是 Skill 而绕过约束。
 - **安全与审计**：鉴权成功的管理请求记录 Management Key ID、Request ID、路径与结果，永不记录
   请求体或 Key 明文；错误响应不得返回 Provider 凭据或加密字段。认证失败限速随管理登录加固
   在后续安全迭代统一实现。
@@ -231,11 +233,16 @@ Codex 等 AI Agent 通过标准管理 API 完成日常运维。该能力由两�
 - **交付形态**：仓库保存可审查、可二次开发的 Skill 源码，每次 Dashboard 构建同时发布到部署
   网站的 `/skill.md` 与 `/skill.json`；用户直接让 Agent 读取自己的网关域名，不依赖代码仓地址
   或额外脚本。Skill
-  只要求配置网关管理地址和 Management Key，不要求提供 Cloudflare 主账号凭据。
+  只要求配置网关管理地址和 Management Key。
 - **首个 Skill**：`mygateway-admin` 将渠道、模型、Gateway Key、余额、用量与只读诊断收敛为
   一个入口，减少安装和权限配置成本；部署、迁移与 Cloudflare 账号操作不在该 Skill 范围内。
 - **交互要求**：读取和诊断可直接执行；删除、清空、凭据轮换等高风险操作必须先展示影响并取得
-  用户明确确认。Skill 必须复用 API 的结构化错误，不通过页面 DOM 自动化管理资源。
+  用户明确确认。首次安装或连接变化后，Skill 必须先读取 Overview，向用户总结供应商渠道、协议、
+  统一模型、实例和 Gateway Key 状态；配置不完整时解释下一步可做什么、需要用户提供什么，再取得
+  同意后写入。首次总结只能依据 Overview，不追加列表/用量/日志探测，也不得报告响应中不存在的
+  状态；Overview 明确返回当前 Key 权限，避免把 capabilities 支持的权限类型当成当前授权。Skill
+  必须先说明渠道、统一模型、Gateway Key、用量与日志各自用途和字段归属，尤其
+  不得把模型实例价格误当作渠道参数；必须复用 API 的结构化错误，不通过页面 DOM 自动化管理资源。
 - **版本与兼容**：每个 Skill 声明支持的 MyGateway API 版本；服务端提供能力发现接口，版本不兼容
   时停止写操作并给出升级建议。控制台提示词只要求 Agent 安装托管 Skill；版本检查由 Skill
   自身负责，每次使用前读取 `/skill.json`，发现新版本后先从 `/skill.md` 更新再执行管理操作。
@@ -252,10 +259,13 @@ Codex 等 AI Agent 通过标准管理 API 完成日常运维。该能力由两�
 
 - Management Key 的权限、到期、停用和删除在 HTTP 集成测试中均不可绕过；
 - Management API 测试完成“创建渠道 → 创建统一模型与实例 → 创建 Gateway Key”的真实旅程；
+- Overview 在上述旅程中依次返回 `needs_channel`、`needs_model`、`needs_gateway_key` 和 `ready`，且
+  不返回 Provider Key、Gateway Key 明文或加密字段；
 - 只读 Key 无法执行写操作，过期、停用或已删除 Key 返回 401，权限不足返回 403；
 - 日志和错误响应中不存在 Management Key、Gateway Key 或 Provider Key 明文；
 - 官方 Skill 提供自包含 HTTP 操作指引、部署站点的 OpenAPI / capabilities 发现入口、示例配置和
-  二次开发入口，不依赖仓库 helper 或 Cloudflare 账号；新会话可从安全持久化配置恢复连接。
+  二次开发入口，不依赖仓库 helper；新会话可从安全持久化配置恢复连接，并能在首次连接后主动总结
+  网关状态和引导下一步配置。
 
 ## 5. 产品边界（当前明确不做）
 

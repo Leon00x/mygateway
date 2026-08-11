@@ -30,6 +30,7 @@ import {
 import { handleKeyItem, handleKeysCollection, handleKeyRegenerate } from '../admin/keys.ts';
 import { handleAnalyticsLogs, handleAnalyticsUsage } from '../admin/analytics.ts';
 import { getLogById } from '../db/analytics.ts';
+import { handleManagementOverview } from './overview.ts';
 
 const API_PREFIX = '/management/v1';
 const managementDocsApp = new Hono<{ Bindings: Env }>();
@@ -52,7 +53,7 @@ function capabilityDocument(env: Env) {
     authentication: 'Authorization: Bearer mgmt_...',
     docs_url: `${API_PREFIX}/api-docs`,
     openapi_url: `${API_PREFIX}/openapi.json`,
-    resources: ['channels', 'models', 'gateway_keys', 'analytics', 'logs', 'balances', 'system'],
+    resources: ['overview', 'channels', 'models', 'gateway_keys', 'analytics', 'logs', 'balances', 'system'],
   };
 }
 
@@ -283,6 +284,33 @@ function openApiDocument(env: Env) {
       '/openapi.json': { get: { tags: ['Discovery'], operationId: 'getOpenApi', summary: 'Read this OpenAPI document', security: [], responses: { '200': { description: 'OpenAPI 3.1 document' } } } },
       '/api-docs': { get: { tags: ['Discovery'], operationId: 'getApiDocs', summary: 'Open interactive API reference', security: [], responses: { '200': { description: 'Scalar HTML documentation', content: { 'text/html': { schema: { type: 'string' } } } } } } },
       '/channels/preflight': { post: operation('Test channel configuration and discover models without saving', 'write', { tag: 'Channels', operationId: 'preflightChannel', requestSchema: channelInput, responseSchema: { type: 'object', additionalProperties: true } }) },
+      '/overview': {
+        get: operation('Summarize deployment readiness for agent onboarding', 'read', {
+          tag: 'System',
+          operationId: 'getOverview',
+          responseSchema: {
+            type: 'object',
+            required: [
+              'system', 'authorization', 'setup_state', 'ready_for_inference',
+              'recommended_action', 'channels', 'models', 'gateway_keys',
+            ],
+            properties: {
+              system: { type: 'object', additionalProperties: true },
+              authorization: {
+                type: 'object', required: ['permission'],
+                properties: { permission: { type: 'string', enum: ['read', 'write'] } },
+              },
+              setup_state: { type: 'string', enum: ['needs_channel', 'needs_model', 'needs_gateway_key', 'ready'] },
+              ready_for_inference: { type: 'boolean' },
+              recommended_action: { type: 'string', enum: ['add_channel', 'configure_model', 'create_gateway_key', 'none'] },
+              channels: { type: 'object', additionalProperties: true },
+              models: { type: 'object', additionalProperties: true },
+              gateway_keys: { type: 'object', additionalProperties: true },
+              balances: { type: 'array', items: { type: 'object', additionalProperties: true } },
+            },
+          },
+        }),
+      },
       '/channels': {
         get: operation('List channels without Provider Keys', 'read', { tag: 'Channels', operationId: 'listChannels', responseSchema: { type: 'array', items: ref('Channel') } }),
         post: operation('Create a channel', 'write', { tag: 'Channels', operationId: 'createChannel', success: 'Created; Provider Key is never returned', successStatus: '201', requestSchema: channelInput, responseSchema: ref('Channel') }),
@@ -346,9 +374,11 @@ async function routeManagementResource(
   url: URL,
   env: Env,
   requestId: string,
+  permission: 'read' | 'write',
 ): Promise<Response> {
   const path = url.pathname.slice(API_PREFIX.length) || '/';
 
+  if (path === '/overview' && request.method === 'GET') return handleManagementOverview(env, permission);
   if (path === '/channels/preflight') return handleChannelPreflight(request, env, requestId);
   if (path === '/channels') return handleChannelsCollection(request, env, requestId);
   if (path === '/balances') return handleChannelBalances(request, url, env);
@@ -469,7 +499,7 @@ export async function handleManagementApi(
 
   let response: Response;
   try {
-    response = await routeManagementResource(request, url, env, requestId);
+    response = await routeManagementResource(request, url, env, requestId, key.permission);
   } catch {
     response = gatewayErrorResponse('gateway_internal_error', 'Management API request failed', requestId);
   }

@@ -1,4 +1,4 @@
 interface:
   display_name: "MyGateway Admin"
-  short_description: "Manage MyGateway resources and diagnostics"
-  default_prompt: "Use $mygateway-admin to load the saved connection, check the hosted skill version, then inspect or manage the MyGateway deployment."
+  short_description: "Inspect and manage a MyGateway deployment"
+  default_prompt: "Use $mygateway-admin to connect, summarize the gateway's setup state, and guide me through the next useful action."

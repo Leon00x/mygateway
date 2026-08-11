@@ -140,6 +140,11 @@ E2E 会创建、修改和删除渠道、模型与 Gateway Key。不要指向包�
 Management Key 的到期、停用和删除。测试显式断言 Provider Key、hash 和 ciphertext 不会
 出现在响应中。
 
+同一旅程还覆盖 Overview 初始化状态机：空网关为 `needs_channel`，仅有渠道为 `needs_model`，形成
+活动模型链路后为 `needs_gateway_key`，创建客户端 Key 后为 `ready`；每一步都断言 Overview 不包含
+Provider Key 或一次性 Gateway Key。Skill 静态断言覆盖首次体检、资源用途、渠道/价格边界和空网关
+引导语义。
+
 `e2e/management-ui.spec.ts` 验证 System 页自动检测网站访问地址、拒绝非 Origin 输入，并将保存后
 的规范地址同步到首页端点与 Agent 提示词；提示词只包含 Skill 安装入口，manifest 版本检查规则
 由托管 `skill.md` 提供。同时验证默认展示安全占位符，创建后配置提示词包含一次性 Key，刷新仍可
@@ -153,6 +158,8 @@ API E2E 同时确认 `/skills/index.json`、`/skill.md` 和 `/skill.json` 可由
 curl http://localhost:8799/skill.md
 curl http://localhost:8799/management/v1/capabilities
 curl http://localhost:8799/management/v1/api-docs
+curl -H "Authorization: Bearer $MYGATEWAY_MANAGEMENT_KEY" \
+  http://localhost:8799/management/v1/overview
 python3 /home/leon/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/mygateway-admin
 ```
 

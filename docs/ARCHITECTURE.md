@@ -248,6 +248,10 @@ Gateway 错误使用稳定 JSON envelope 并附带 Request ID。Provider 已返�
 上下文字段，即使管理员曾开启上下文记录。日志设置、清空日志、管理员账号和 Management Key
 签发不在机器 API 白名单内。
 
+`GET /management/v1/overview` 是需鉴权的只读初始化接口。渠道与协议、模型与实例分别使用批量查询，
+Gateway Key 复用脱敏列表逻辑；余额只读当前 isolate 缓存，避免一次 Agent 连接触发外部请求。接口
+通过 `setup_state` 表达配置阶段，不返回 Provider 端点、任何 Key 明文/前缀或加密材料。
+
 渠道卡片使用 `GET /admin/api/channels/overview`：一次返回脱敏渠道、当前 isolate 的余额缓存，
 以及通过单条索引查询得到的模型数量和最多 3 个预览，避免前端按渠道产生 N+1 请求。
 
