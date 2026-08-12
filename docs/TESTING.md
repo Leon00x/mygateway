@@ -143,7 +143,8 @@ Management Key 的到期、停用和删除。测试显式断言 Provider Key、h
 同一旅程还覆盖 Overview 初始化状态机：空网关为 `needs_channel`，仅有渠道为 `needs_model`，形成
 活动模型链路后为 `needs_gateway_key`，创建客户端 Key 后为 `ready`；每一步都断言 Overview 不包含
 Provider Key 或一次性 Gateway Key。Skill 静态断言覆盖首次体检、资源用途、渠道/价格边界和空网关
-引导语义。
+引导语义，并覆盖渠道/库存/统一模型关系、自动发现操作边界、非文本产品不受数据面支持、最小 API
+选择、`active` 非健康结论，以及 manifest 的 `SKILL.md` / `download_url` 更新约定。
 
 `e2e/management-ui.spec.ts` 验证 System 页自动检测网站访问地址、拒绝非 Origin 输入，并将保存后
 的规范地址同步到首页端点与 Agent 提示词；提示词只包含 Skill 安装入口，manifest 版本检查规则

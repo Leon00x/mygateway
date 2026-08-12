@@ -6,6 +6,12 @@
 
 ## 未发布：仓库整理与接续开发基线
 
+- `mygateway-admin` Skill 升级至 0.5.0：增加渠道、Provider 模型库存、统一模型/实例、Gateway Key
+  和数据面之间的资源图；明确 preflight、发现清单 refresh、手工维护和 import 的区别，refresh 仅更新
+  渠道暂存清单，只有 import 才创建统一模型/实例并进入路由。同时禁止把供应商
+  返回的 Images、Video、Embeddings 等模型误报为网关可调用模型。常规查询改为最小 API 选择，默认
+  不展示内部 ID/Base URL，也不把 `active` 宣称为连接健康。更新仅信任部署站点 manifest，统一
+  `SKILL.md` 本地文件名并通过 `download_url` 指向同源托管文件。
 - `mygateway-admin` Skill 升级至 0.4.0：删除无关的账户凭据说明，按渠道、统一模型、Gateway Key、
   用量/日志解释各模块用途、所需输入和字段边界；首次安装或连接变化后通过新的脱敏
   `/management/v1/overview` 一次检查网关，并按四阶段状态总结现状、引导用户完成配置。Overview

@@ -493,13 +493,26 @@ Secret 或 Dashboard DOM 绕过 Management API。
 产品作用、用户需要准备的输入和字段归属，再列常用 API。渠道预检负责连接和模型发现；价格属于
 统一模型的渠道实例，使用每百万 Token 的整数 micros 和明确币种，未知价格保持未设置且不得估算。
 
+Skill 使用固定资源心智模型：Channel 保存上游连接；Provider model inventory 是自动发现或手工
+登记的渠道暂存清单，不是可调用模型；Unified model 是客户端模型 ID；Channel instance 负责绑定、定价与回退顺序；
+Gateway Key 负责数据面访问。`preflight` 只探测不保存，`models/refresh` 使用已保存连接发现并仅更新渠道
+暂存清单，`models` 集合维护该清单，只有 `models/import` 才创建统一模型/实例并使其进入路由候选。
+清单的 `available` 不代表数据面兼容；
+当前没有 Images、Video、Embeddings 等端点，Skill 不得从模型名称推测能力或建议将其作为可调用模型。
+
+常规查询遵循最小 API 原则：渠道、库存、统一模型、余额、用量和日志各自使用对应接口，除首次总览
+外不先调用 Overview，也不为读取库存自动 refresh。OpenAPI 仅在需要精确 schema 时读取并在当前
+任务内复用。`active` 是配置启用状态而非健康结论；面向用户
+默认隐藏内部 ID、Base URL、auth scheme 和原始 JSON，仅在后续操作需要时使用这些机器字段。
+
 `SKILL.md` 自包含认证规则、API 路径与 `curl` 示例，不引用本地脚本或额外参考文件。Dashboard
 构建会将其发布到网站根路径 `/skill.md`。System 页始终展示同源 Skill
 配置提示词：默认使用 `mgmt_YOUR_MANAGEMENT_KEY` 占位；创建后最多 1 小时替换为真实明文，
 到期、删除或本地缓存失效后自动恢复占位模板。提示词只要求 Agent 使用自身平台的标准方式安装
 Skill；每次使用前读取 `/skill.json`、发现新版本后重新安装 `/skill.md` 的规则封装在 Skill 内，
-不重复写入用户复制的提示词。构建生成的 `/skills/index.json` 同步发布同一个 manifest 版本，
-避免手工维护漂移。
+不重复写入用户复制的提示词。Manifest 用 `entry: SKILL.md` 表示本地标准文件名，`download_url` 指向
+同源托管的 `/skill.md`；部署站点是唯一更新权威源，Agent 不搜索本地代码仓或缓存判断最新版。
+构建生成的 `/skills/index.json` 同步发布同一个 manifest 版本，避免手工维护漂移。
 
 ## 12. 控制台 i18n
 

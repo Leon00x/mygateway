@@ -35,7 +35,7 @@ test.afterAll(async ({ request }) => {
 test('discovery is public while protected routes reject missing and wrong key types', async ({ request }) => {
   const hostedSkills = await request.get('/skills/index.json');
   expect(hostedSkills.status()).toBe(200);
-  expect(await hostedSkills.json()).toMatchObject({ skills: [{ name: 'mygateway-admin', version: '0.4.0', api_version: 'v1' }] });
+  expect(await hostedSkills.json()).toMatchObject({ skills: [{ name: 'mygateway-admin', version: '0.5.0', api_version: 'v1' }] });
   const hostedSkill = await request.get('/skill.md');
   expect(hostedSkill.status()).toBe(200);
   const hostedSkillText = await hostedSkill.text();
@@ -48,6 +48,16 @@ test('discovery is public while protected routes reject missing and wrong key ty
   expect(hostedSkillText).toContain('mygateway/credentials.env');
   expect(hostedSkillText).toContain('chmod 600 "$MYGATEWAY_CREDENTIAL_FILE"');
   expect(hostedSkillText).toContain('### Channels — LLM API providers');
+  expect(hostedSkillText).toContain('## Understand the gateway');
+  expect(hostedSkillText).toContain('## Choose the smallest operation');
+  expect(hostedSkillText).toContain('#### Provider model inventory and discovery');
+  expect(hostedSkillText).toContain('this is **discovery**, not **import**');
+  expect(hostedSkillText).toContain('the only discovery workflow step that promotes selected inventory items');
+  expect(hostedSkillText).toContain('`availability: available` do not prove');
+  expect(hostedSkillText).toContain('It does not expose\nEmbeddings, Images, Video');
+  expect(hostedSkillText).toContain('Do not claim "healthy", "working", or "no errors" from `active` alone');
+  expect(hostedSkillText).toContain('reuse the fetched document throughout\nthe current task');
+  expect(hostedSkillText).toContain('do not search a repository, worktree, package cache');
   expect(hostedSkillText).toContain('Prices do not belong to a channel');
   expect(hostedSkillText).toContain('### Unified models — client-facing routing');
   expect(hostedSkillText).toContain('### Gateway Keys — client access');
@@ -56,7 +66,15 @@ test('discovery is public while protected routes reject missing and wrong key ty
   expect(hostedSkillText).toContain('temporary keys cannot be renewed');
   expect(hostedSkillText).not.toContain('scripts/mygateway');
   expect(hostedSkillText).not.toContain('Cloudflare account credential');
-  expect((await request.get('/skill.json')).status()).toBe(200);
+  const hostedManifest = await request.get('/skill.json');
+  expect(hostedManifest.status()).toBe(200);
+  expect(await hostedManifest.json()).toMatchObject({
+    version: '0.5.0',
+    entry: 'SKILL.md',
+    download_url: '/skill.md',
+    manifest_url: '/skill.json',
+  });
+  expect((await request.get('/skills/mygateway-admin/SKILL.md')).status()).toBe(200);
 
   const capabilities = await request.get('/management/v1/capabilities');
   expect(capabilities.status()).toBe(200);
