@@ -35,7 +35,7 @@ test.afterAll(async ({ request }) => {
 test('discovery is public while protected routes reject missing and wrong key types', async ({ request }) => {
   const hostedSkills = await request.get('/skills/index.json');
   expect(hostedSkills.status()).toBe(200);
-  expect(await hostedSkills.json()).toMatchObject({ skills: [{ name: 'mygateway-admin', version: '0.5.0', api_version: 'v1' }] });
+  expect(await hostedSkills.json()).toMatchObject({ skills: [{ name: 'mygateway-admin', version: '0.6.0', api_version: 'v1' }] });
   const hostedSkill = await request.get('/skill.md');
   expect(hostedSkill.status()).toBe(200);
   const hostedSkillText = await hostedSkill.text();
@@ -59,6 +59,8 @@ test('discovery is public while protected routes reject missing and wrong key ty
   expect(hostedSkillText).toContain('reuse the fetched document throughout\nthe current task');
   expect(hostedSkillText).toContain('do not search a repository, worktree, package cache');
   expect(hostedSkillText).toContain('Prices do not belong to a channel');
+  expect(hostedSkillText).toContain('call `GET /provider-presets`');
+  expect(hostedSkillText).toContain('Do not recreate a known preset as an anonymous custom channel');
   expect(hostedSkillText).toContain('### Unified models — client-facing routing');
   expect(hostedSkillText).toContain('### Gateway Keys — client access');
   expect(hostedSkillText).toContain('### Usage, logs, and balances — diagnostics');
@@ -69,7 +71,7 @@ test('discovery is public while protected routes reject missing and wrong key ty
   const hostedManifest = await request.get('/skill.json');
   expect(hostedManifest.status()).toBe(200);
   expect(await hostedManifest.json()).toMatchObject({
-    version: '0.5.0',
+    version: '0.6.0',
     entry: 'SKILL.md',
     download_url: '/skill.md',
     manifest_url: '/skill.json',
@@ -83,7 +85,7 @@ test('discovery is public while protected routes reject missing and wrong key ty
   expect(openApiResponse.status()).toBe(200);
   const openApi = await openApiResponse.json();
   expect(Object.keys(openApi.paths)).toEqual(expect.arrayContaining([
-    '/channels/{id}/models/import', '/models/{id}/instances',
+    '/provider-presets', '/channels/{id}/models/import', '/models/{id}/instances',
     '/overview', '/gateway-keys/{id}/regenerate', '/analytics/usage', '/logs/{id}',
   ]));
   expect(openApi.paths['/models'].get['x-required-permission']).toBe('read');
@@ -104,6 +106,7 @@ test('discovery is public while protected routes reject missing and wrong key ty
   expect(combinedDocsText).toContain('/management/v1/openapi.json');
 
   expect((await request.get('/management/v1/system/status')).status()).toBe(401);
+  expect((await request.get('/management/v1/provider-presets')).status()).toBe(401);
   expect((await request.get('/management/v1/overview')).status()).toBe(401);
   expect((await request.get('/management/v1/system/status', { headers: auth('sk-not-a-management-key') })).status()).toBe(401);
   expect((await request.get('/admin/api/channels', { headers: auth('mgmt_not-a-real-management-key-value') })).status()).toBe(401);
@@ -116,6 +119,11 @@ test('read keys inspect resources but cannot mutate', async ({ request }) => {
   expect(status.status()).toBe(200);
   expect(status.headers()['x-gateway-request-id']).toBeTruthy();
   expect((await request.get('/management/v1/channels', { headers: auth(key.key) })).status()).toBe(200);
+  const presets = await request.get('/management/v1/provider-presets', { headers: auth(key.key) });
+  expect(presets.status()).toBe(200);
+  expect(await presets.json()).toMatchObject({ presets: expect.arrayContaining([
+    expect.objectContaining({ id: 'deepseek', name: 'DeepSeek' }),
+  ]) });
   expect((await request.get('/management/v1/models', { headers: auth(key.key) })).status()).toBe(200);
   const overview = await request.get('/management/v1/overview', { headers: auth(key.key) });
   expect(overview.status()).toBe(200);

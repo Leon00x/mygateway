@@ -182,6 +182,11 @@ protocol endpoints. Agents can preflight, create, test, edit, disable, inspect d
 channel; they can also discover and maintain its upstream-model inventory.
 
 Creating a channel requires a preset or provider name, a Provider API Key, and enabled protocol endpoints.
+Before creating a channel, call `GET /provider-presets`. When the requested provider matches a preset, include
+its exact `id` as `preset_id` in both preflight and create requests. This preserves provider identity for brand
+icons, localized names, discovery adapters, balance support, and other provider behavior; it does not prevent
+editing the preset's protocol endpoints. Do not recreate a known preset as an anonymous custom channel.
+
 Preset defaults should be kept unless the owner asks to change them. Call `POST /channels/preflight` first;
 preflight checks connectivity and discovers models without saving. Never return or repeat the Provider Key.
 
@@ -192,6 +197,7 @@ micros (`1 USD = 1,000,000 micros`) and retain the stated `USD` or `CNY` currenc
 
 Common routes:
 
+- `GET /provider-presets`
 - `POST /channels/preflight`; `GET|POST /channels`
 - `GET|PATCH|DELETE /channels/{id}`; inspect `/channels/{id}/delete-impact` before delete
 - `POST /channels/{id}/test`

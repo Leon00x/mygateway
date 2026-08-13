@@ -1,4 +1,4 @@
 interface:
   display_name: "MyGateway Admin"
   short_description: "Inspect and manage a MyGateway deployment"
-  default_prompt: "Use $mygateway-admin to understand the gateway resources, select the precise Management API operation, and report the result clearly."
+  default_prompt: "Use $mygateway-admin to understand gateway resources, reuse provider presets when available, select the precise Management API operation, and report the result clearly."

@@ -23,7 +23,7 @@ import { invalidateModelRouteCache } from '../gateway/access-resolver.ts';
 import { channelCircuitBreaker } from '../gateway/passive-circuit-breaker.ts';
 import { isGatewayProtocol, type ChannelProtocol, type GatewayProtocol } from '../gateway/protocols.ts';
 import { invalidateProviderBalanceCache } from './provider-balances.ts';
-import { getPresetById, providerShortCode } from '../shared/provider-presets.ts';
+import { getPresetById, inferProviderPresetId, providerShortCode } from '../shared/provider-presets.ts';
 import { discoverProviderModels, persistDiscoveredProviderModels } from './model-discovery.ts';
 import type { DiscoveredProviderModel } from '../db/provider-models.ts';
 
@@ -90,14 +90,14 @@ interface ChannelInput {
   api_key?: string;
   notes?: string;
   protocols?: unknown;
-  preset_id?: string;
+  preset_id?: string | null;
   detected_models?: unknown;
 }
 
 function resolveChannelInput(body: ChannelInput) {
-  const presetId = body.preset_id?.trim() || null;
-  const preset = presetId ? getPresetById(presetId) : undefined;
-  if (presetId && !preset) throw new Error('Unknown provider preset');
+  const requestedPresetId = typeof body.preset_id === 'string' ? body.preset_id.trim() : null;
+  const preset = requestedPresetId ? getPresetById(requestedPresetId) : undefined;
+  if (requestedPresetId && !preset) throw new Error('Unknown provider preset');
   if (!body.api_key) throw new Error('api_key is required');
   const name = body.name?.trim() || preset?.name || '';
   const providerType = preset?.provider_type ?? body.provider_type;
@@ -110,6 +110,7 @@ function resolveChannelInput(body: ChannelInput) {
   }
   const baseUrl = normalizeBaseUrl(requestedBaseUrl);
   const protocols = normalizeProtocols(body.protocols ?? preset?.protocols, baseUrl);
+  const presetId = requestedPresetId || inferProviderPresetId(protocols);
   return {
     presetId,
     name,

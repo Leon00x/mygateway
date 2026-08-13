@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { localizedChannelName, localizedPresetName } from '../dashboard/src/presets.ts';
+import { localizedChannelName, localizedPresetName, resolvedChannelPresetId } from '../dashboard/src/presets.ts';
 import { getPresetById } from '../src/shared/provider-presets.ts';
 
 describe('provider name localization', () => {
@@ -17,5 +17,16 @@ describe('provider name localization', () => {
   test('does not translate administrator-defined channel names', () => {
     expect(localizedChannelName('Production CN route', 'huawei_cloud_cn', 'zh')).toBe('Production CN route');
     expect(localizedChannelName('内部代理', null, 'en')).toBe('内部代理');
+  });
+
+  test('recovers the provider identity of legacy custom channels from an official API host', () => {
+    expect(resolvedChannelPresetId({
+      preset_id: null,
+      protocols: [{ protocol: 'openai_chat', base_url: 'https://api.deepseek.com/v1' }],
+    })).toBe('deepseek');
+    expect(resolvedChannelPresetId({
+      preset_id: null,
+      protocols: [{ protocol: 'openai_chat', base_url: 'https://gateway.internal.example/v1' }],
+    })).toBeNull();
   });
 });

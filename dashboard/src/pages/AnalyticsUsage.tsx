@@ -347,7 +347,7 @@ export default function AnalyticsUsage() {
       </Show>
 
       <Show when={!loading() && !error() && data()}>
-        {/* QwenCloud-style metric cards: requests / avg latency / avg TTFT / success rate */}
+        {/* QwenCloud-style metric cards: requests / request duration / TTFT / success / cache hit rate */}
         <div class="analytics-metrics-grid">
           <div class="analytics-metric-card">
             <small>{t('usage.requests')}</small>
@@ -365,6 +365,11 @@ export default function AnalyticsUsage() {
           <div class="analytics-metric-card">
             <small>{t('usage.successRate')}</small>
             <strong>{successRate() !== null ? `${successRate()}%` : '-'}</strong>
+          </div>
+          <div class="analytics-metric-card">
+            <small>{t('usage.avgCacheHitRate')}</small>
+            <strong>{pct(cachedTokens(), summary()?.input_tokens ?? 0)}</strong>
+            <p>{t('usage.cacheHitRateHint')}</p>
           </div>
         </div>
 

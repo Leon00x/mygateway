@@ -133,6 +133,11 @@ Messages → Chat 生成标准 `chat.completion.chunk`，并以 `data: [DONE]` �
 Worker 与 Dashboard 共用 `src/shared/provider-presets.ts`。该文件是供应商名称、Base URL、
 文档链接和协议端点的代码权威来源；本文只记录能力概览。
 
+Management API 通过 `GET /management/v1/provider-presets` 返回这份清单。Agent 必须优先选择预置并在
+preflight/create 中传 `preset_id`，协议端点仍可编辑。为兼容旧 Agent 和已有数据，服务端创建渠道及
+Dashboard 展示可按“协议类型 + 官方 API Host”做唯一匹配；只匹配 Host 而不锁死 Path，以兼容区域
+和兼容层路径差异。匹配不到或出现歧义时不得猜测，继续按自定义渠道展示。
+
 预置的 `name` 是写入新渠道的英文规范名，`name_zh` 是可选中文展示名。Dashboard 只在渠道名
 仍等于英文或中文预置默认值时按当前语言本地化；已被管理员修改的名称不翻译。这样无需 migration
 即可兼容历史 D1 中保存的中文默认名。
@@ -312,10 +317,11 @@ Analytics
 
 - 筛选：今日 / 7 天 / 30 天、统一模型、Gateway Key、按小时 / 天聚合；筛选变化后一次请求
   返回摘要、趋势和模型明细，避免前端并发请求多个统计接口。
-- 首屏参考 QwenCloud：左侧高卡展示总 Token、输入/输出构成和预估费用；右侧 2×2 展示请求量、
-  平均延迟、平均首 Token 延迟和成功率。首 Token 延迟仅统计流式请求；无流式样本时显示 `—`，
+- 首屏指标卡展示请求量、平均请求用时、平均首 Token 延迟、成功率和平均缓存命中率。
+  平均请求用时是完整请求处理时长，不表示 TTFB；平均缓存命中率是缓存输入 Token 占总输入 Token 的汇总比例。
+  首 Token 延迟仅统计流式请求；无流式样本时显示 `—`，
   不显示假 0。
-- 下方模型表展示模型、平均 TPM/RPM、请求、成功率、平均首 Token 延迟、平均延迟、Token 与费用；
+- 下方模型表展示模型、平均 TPM/RPM、请求、成功率、平均首 Token 延迟、平均请求用时、Token 与费用；
   空、加载、错误状态使用与最终布局同尺寸的骨架和面板。
 
 **Logs**

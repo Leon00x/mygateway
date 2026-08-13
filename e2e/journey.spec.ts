@@ -446,6 +446,10 @@ test('11a. analytics usage page shows metric cards and filters', async ({ page }
   await expect(segmentTabs.getByRole('link', { name: '请求日志' })).toBeVisible();
   expect(await segmentTabs.evaluate((element) => getComputedStyle(element).borderRadius)).toBe('17px');
   await expect(page.locator('.analytics-metrics-grid')).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator('.analytics-metric-card')).toHaveCount(5);
+  await expect(page.locator('.analytics-metric-card', { hasText: '平均请求用时' })).toBeVisible();
+  const cacheMetric = page.locator('.analytics-metric-card', { hasText: '平均缓存命中率' });
+  await expect(cacheMetric.getByText('缓存输入 Token / 总输入 Token', { exact: true })).toBeVisible();
   const ttftMetric = page.locator('.analytics-metric-card', { hasText: '平均首 Token 延迟' });
   await expect(ttftMetric.getByText('仅统计流式请求', { exact: true })).toBeVisible();
   await expect(page.locator('.analytics-axis-y').first()).toBeVisible();
@@ -496,6 +500,8 @@ test('11a. analytics usage page shows metric cards and filters', async ({ page }
     }),
   }));
   await page.getByLabel('趋势粒度').selectOption('');
+  await expect(page.locator('.analytics-metric-card', { hasText: '平均请求用时' })).toContainText('120ms');
+  await expect(cacheMetric).toContainText('10%');
   await expect(page.locator('.token-bar-input')).toHaveCount(47);
   expect(await page.locator('.token-bar-input').evaluateAll((bars) => bars.every((bar) => Number(bar.getAttribute('width')) >= 12))).toBe(true);
   await expect(page.locator('.analytics-trend-svg circle')).toHaveCount(0);

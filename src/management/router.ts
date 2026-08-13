@@ -31,6 +31,7 @@ import { handleKeyItem, handleKeysCollection, handleKeyRegenerate } from '../adm
 import { handleAnalyticsLogs, handleAnalyticsUsage } from '../admin/analytics.ts';
 import { getLogById } from '../db/analytics.ts';
 import { handleManagementOverview } from './overview.ts';
+import { handleProviderPresets } from '../admin/system.ts';
 
 const API_PREFIX = '/management/v1';
 const managementDocsApp = new Hono<{ Bindings: Env }>();
@@ -53,7 +54,7 @@ function capabilityDocument(env: Env) {
     authentication: 'Authorization: Bearer mgmt_...',
     docs_url: `${API_PREFIX}/api-docs`,
     openapi_url: `${API_PREFIX}/openapi.json`,
-    resources: ['overview', 'channels', 'models', 'gateway_keys', 'analytics', 'logs', 'balances', 'system'],
+    resources: ['overview', 'provider_presets', 'channels', 'models', 'gateway_keys', 'analytics', 'logs', 'balances', 'system'],
   };
 }
 
@@ -112,7 +113,7 @@ function openApiDocument(env: Env) {
     type: 'object',
     required: ['api_key'],
     properties: {
-      preset_id: { type: 'string', description: 'Optional provider preset ID.' },
+      preset_id: { type: ['string', 'null'], description: 'Provider identity from GET /provider-presets. Endpoints remain editable.' },
       name: { type: 'string' },
       provider_type: { type: 'string', enum: ['openai', 'openai_compatible'] },
       base_url: { type: 'string', format: 'uri' },
@@ -167,6 +168,16 @@ function openApiDocument(env: Env) {
             auth_scheme: { type: 'string', enum: ['bearer', 'x_api_key'] },
             api_version: { type: ['string', 'null'], description: 'Anthropic API version when applicable.' },
           },
+        },
+        ProviderPreset: {
+          type: 'object', required: ['id', 'name', 'provider_type', 'base_url', 'protocols'],
+          properties: {
+            id: { type: 'string' }, name: { type: 'string' }, name_zh: { type: 'string' },
+            provider_type: { type: 'string', enum: ['openai', 'openai_compatible'] },
+            base_url: { type: 'string', format: 'uri' }, docs_url: { type: 'string', format: 'uri' },
+            description: { type: 'string' }, popular_models: { type: 'array', items: { type: 'string' } },
+            supports_stream_usage: { type: 'boolean' }, protocols: { type: 'array', items: ref('ChannelProtocol') },
+          }, additionalProperties: true,
         },
         DetectedModel: {
           type: 'object', required: ['provider_model_id'],
@@ -315,6 +326,12 @@ function openApiDocument(env: Env) {
         get: operation('List channels without Provider Keys', 'read', { tag: 'Channels', operationId: 'listChannels', responseSchema: { type: 'array', items: ref('Channel') } }),
         post: operation('Create a channel', 'write', { tag: 'Channels', operationId: 'createChannel', success: 'Created; Provider Key is never returned', successStatus: '201', requestSchema: channelInput, responseSchema: ref('Channel') }),
       },
+      '/provider-presets': {
+        get: operation('List provider presets and editable protocol defaults', 'read', {
+          tag: 'Channels', operationId: 'listProviderPresets',
+          responseSchema: { type: 'object', properties: { presets: { type: 'array', items: ref('ProviderPreset') } } },
+        }),
+      },
       '/channels/{id}': {
         get: operation('Read a channel without its Provider Key', 'read', { tag: 'Channels', operationId: 'getChannel', parameters: [idParameter()], responseSchema: ref('Channel') }),
         patch: operation('Update a channel or rotate its Provider Key', 'write', { tag: 'Channels', operationId: 'updateChannel', parameters: [idParameter()], requestSchema: ref('ChannelUpdate'), responseSchema: ref('Channel') }),
@@ -377,6 +394,8 @@ async function routeManagementResource(
   permission: 'read' | 'write',
 ): Promise<Response> {
   const path = url.pathname.slice(API_PREFIX.length) || '/';
+
+  if (path === '/provider-presets' && request.method === 'GET') return handleProviderPresets(requestId);
 
   if (path === '/overview' && request.method === 'GET') return handleManagementOverview(env, permission);
   if (path === '/channels/preflight') return handleChannelPreflight(request, env, requestId);

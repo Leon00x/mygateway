@@ -317,6 +317,32 @@ export function getPresetById(id: string): ProviderPreset | undefined {
   return PROVIDER_PRESETS.find((preset) => preset.id === id);
 }
 
+/**
+ * Resolve an official provider identity from configured protocol endpoints.
+ * This is deliberately conservative: every configured protocol must match
+ * the protocol and hostname of one preset, and the result must be unique.
+ * Paths remain editable because providers sometimes publish regional or
+ * compatibility variants under the same official API host.
+ */
+export function inferProviderPresetId(
+  protocols: Array<{ protocol: string; base_url: string }>,
+): string | null {
+  if (protocols.length === 0) return null;
+  const endpoints = protocols.map((entry) => {
+    try {
+      return { protocol: entry.protocol, hostname: new URL(entry.base_url).hostname.toLowerCase() };
+    } catch {
+      return null;
+    }
+  });
+  if (endpoints.some((entry) => entry === null)) return null;
+  const matches = PROVIDER_PRESETS.filter((preset) => endpoints.every((endpoint) =>
+    preset.protocols.some((candidate) => candidate.protocol === endpoint!.protocol
+      && new URL(candidate.base_url).hostname.toLowerCase() === endpoint!.hostname),
+  ));
+  return matches.length === 1 ? matches[0].id : null;
+}
+
 const DEFAULT_MODEL_DISCOVERY: ProviderModelDiscovery = {
   path: '/models', protocol: 'openai_chat', pagination: 'none',
 };

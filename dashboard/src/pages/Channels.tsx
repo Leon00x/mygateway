@@ -3,6 +3,7 @@ import {
   PROVIDER_PRESETS,
   localizedChannelName,
   localizedPresetName,
+  resolvedChannelPresetId,
   type ProviderPreset,
 } from '../presets';
 import { ProviderLogo } from '../components/ProviderLogo';
@@ -129,7 +130,7 @@ const PRESET_DESCRIPTIONS_EN: Record<string, string> = {
 };
 const presetDescription = (preset: ProviderPreset) => locale() === 'en' ? (PRESET_DESCRIPTIONS_EN[preset.id] ?? preset.description) : preset.description;
 const presetName = (preset: ProviderPreset) => localizedPresetName(preset, locale());
-const channelName = (channel: Pick<Channel, 'name' | 'preset_id'>) => localizedChannelName(channel.name, channel.preset_id, locale());
+const channelName = (channel: Pick<Channel, 'name' | 'preset_id' | 'protocols'>) => localizedChannelName(channel.name, resolvedChannelPresetId(channel), locale());
 
 function ProtocolEditor(props: { value: ProtocolDraft[]; onChange: (protocol: string, update: Partial<ProtocolDraft>) => void }) {
   return <div class="protocol-editor"><div class="protocol-editor-head"><strong>{t('channels.nativeProtocols')}</strong><span>{t('channels.protocolPathHint')}</span></div><For each={props.value}>{(entry) => <div class="protocol-editor-row" classList={{ disabled: !entry.enabled }}><label class="protocol-toggle"><input type="checkbox" checked={entry.enabled} onChange={(event) => props.onChange(entry.protocol, { enabled: event.currentTarget.checked })} /><span><strong>{protocolLabel(entry.protocol)}</strong><code>{protocolPath(entry.protocol)}</code></span></label><label class="protocol-url"><span>Base URL</span><input type="url" value={entry.base_url} placeholder="https://api.example.com/v1" disabled={!entry.enabled} required={entry.enabled} onInput={(event) => props.onChange(entry.protocol, { base_url: event.currentTarget.value })} /></label></div>}</For></div>;
@@ -528,7 +529,7 @@ export default function Channels() {
       <For each={channels()}>{(channel) => {
       const summary = () => summaries()[channel.id];
       return <article class="panel channel-card">
-        <header class="channel-card-head"><ProviderLogo presetId={channel.preset_id} name={channelName(channel)} /><div><strong>{channelName(channel)}</strong><span>{providerTypeLabel(channel.provider_type)}</span></div><span class={`badge ${channel.status}`}>{channel.status === 'active' ? t('common.active') : t('common.disabled')}</span></header>
+        <header class="channel-card-head"><ProviderLogo presetId={resolvedChannelPresetId(channel)} name={channelName(channel)} /><div><strong>{channelName(channel)}</strong><span>{providerTypeLabel(channel.provider_type)}</span></div><span class={`badge ${channel.status}`}>{channel.status === 'active' ? t('common.active') : t('common.disabled')}</span></header>
         <div class="channel-card-metrics"><div><span>{t('channels.balance')}</span><strong>{balanceHeadline(channel)}</strong><Show when={supportsBalance(channel)}><button title={t('channels.refreshBalance')} disabled={balanceBusy()[channel.id]} onClick={() => refreshBalance(channel)}>↻</button></Show></div><div><span>{t('channels.plan')}</span><strong class="muted-value">{t('channels.notIntegrated')}</strong></div></div>
         <div class="channel-card-section"><span class="channel-card-label">{t('channels.protocols')}</span><div class="channel-protocol-list"><For each={channel.protocols}>{(protocol) => <span>{protocolLabel(protocol.protocol)}</span>}</For></div></div>
         <div class="channel-card-section channel-model-preview"><div class="channel-card-label"><span>{t('channels.models')}</span><strong>{summary()?.available_count ?? 0}</strong></div><div><Show when={(summary()?.preview.length ?? 0) > 0} fallback={<span class="empty-preview">{summary()?.discovery_status === 'error' ? t('channels.discoveryFailed') : t('channels.notDetected')}</span>}><For each={summary()?.preview}>{(model) => <code>{model.provider_model_id}</code>}</For><Show when={(summary()?.available_count ?? 0) > 3}><span class="more-models">+{(summary()?.available_count ?? 0) - 3}</span></Show></Show></div></div>

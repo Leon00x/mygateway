@@ -1,5 +1,5 @@
 import { createSignal, onMount, For, Show } from 'solid-js';
-import { COMMON_MODEL_TEMPLATES } from '../presets';
+import { COMMON_MODEL_TEMPLATES, resolvedChannelPresetId } from '../presets';
 import { ProviderLogo } from '../components/ProviderLogo';
 import { t } from '../i18n';
 import { useAppDialog } from '../components/AppDialog';
@@ -21,6 +21,7 @@ interface Channel {
   status: string;
   preset_id: string | null;
   short_code: string | null;
+  protocols: Array<{ protocol: string; base_url: string }>;
 }
 
 interface ProviderModel {
@@ -400,7 +401,7 @@ export default function Models() {
                 <div class="model-instance-list">
                   <Show when={sortedInstances(card).length === 0} fallback={<For each={sortedInstances(card)}>{(inst, idx) => (
                     <div class="model-instance-row">
-                      <ProviderLogo presetId={channelOf(inst.channel_id)?.preset_id} name={channelName(inst.channel_id)} />
+                      <ProviderLogo presetId={channelOf(inst.channel_id) ? resolvedChannelPresetId(channelOf(inst.channel_id)!) : null} name={channelName(inst.channel_id)} />
                       <div class="model-instance-copy">
                         <strong>{channelName(inst.channel_id)}</strong>
                         <code><span class="instance-alias">{inst.public_model_alias}</span> → {inst.channel_model_id}</code>

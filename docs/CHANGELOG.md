@@ -6,6 +6,11 @@
 
 ## 未发布：仓库整理与接续开发基线
 
+- Management API 新增 Provider Presets 查询，Skill 创建已知供应商时携带 `preset_id`；服务端和
+  Dashboard 对未标记的官方 Host 渠道进行保守的唯一身份识别，使 Agent 创建及历史渠道恢复品牌
+  图标、名称本地化和 Provider 专属行为，同时保留协议 Path 自定义能力。
+- 用量分析将“平均延迟”更名为语义更准确的“平均请求用时”，并新增平均缓存命中率指标卡，
+  按筛选范围内缓存输入 Token 占总输入 Token 的比例计算。
 - `mygateway-admin` Skill 升级至 0.5.0：增加渠道、Provider 模型库存、统一模型/实例、Gateway Key
   和数据面之间的资源图；明确 preflight、发现清单 refresh、手工维护和 import 的区别，refresh 仅更新
   渠道暂存清单，只有 import 才创建统一模型/实例并进入路由。同时禁止把供应商

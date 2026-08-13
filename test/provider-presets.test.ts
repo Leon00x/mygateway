@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import {
   COMMON_MODEL_TEMPLATES,
   getPresetById,
+  inferProviderPresetId,
   providerModelDiscovery,
   providerShortCode,
   PROVIDER_PRESETS,
@@ -96,6 +97,16 @@ describe('provider presets', () => {
       base_url: 'https://api.mistral.ai/v1',
       auth_scheme: 'bearer',
     });
+  });
+
+  test('infers one provider identity from official protocol hosts without requiring fixed paths', () => {
+    expect(inferProviderPresetId([{
+      protocol: 'openai_chat', base_url: 'https://api.deepseek.com/custom/v1',
+    }])).toBe('deepseek');
+    expect(inferProviderPresetId([{
+      protocol: 'openai_chat', base_url: 'https://proxy.example.com/v1',
+    }])).toBeNull();
+    expect(inferProviderPresetId([])).toBeNull();
   });
 
   test('provides bounded common templates and documented discovery exceptions', () => {
