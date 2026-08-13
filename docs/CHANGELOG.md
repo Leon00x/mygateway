@@ -8,6 +8,9 @@
 
 - 控制台未手动选择主题时会随系统亮暗模式实时切换；从控制台打开的 Gateway / Management API
   文档继承当前主题，避免暗色控制台跳转到亮色文档。
+- `mygateway-admin` Skill 的版本检查改为分层策略：只在首次连接、连接信息变化或遇到版本类错误时
+  读取 `/skill.json` 并自更新，常规会话不再每次检查；写操作前轻量确认 capabilities 版本，自更新
+  时同时替换 `agents/openai.yaml`，避免接口描述与正文版本漂移。
 - 测试规范统一为 L0 静态、L1 单元、L2 API、L3 UI、L4 可控系统集成、L5 SIT 和未来 L6 Agent
   视觉审查；新增稳定的快速、分层、本地发布、完整发布和部署后 Smoke 脚本。真实 Provider 与
   Token 消费归入显式 SIT，普通 E2E 即使存在本地 Key 也不会意外调用或产生费用。

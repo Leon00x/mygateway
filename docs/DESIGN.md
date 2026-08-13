@@ -515,7 +515,8 @@ Gateway Key 负责数据面访问。`preflight` 只探测不保存，`models/ref
 构建会将其发布到网站根路径 `/skill.md`。System 页始终展示同源 Skill
 配置提示词：默认使用 `mgmt_YOUR_MANAGEMENT_KEY` 占位；创建后最多 1 小时替换为真实明文，
 到期、删除或本地缓存失效后自动恢复占位模板。提示词只要求 Agent 使用自身平台的标准方式安装
-Skill；每次使用前读取 `/skill.json`、发现新版本后重新安装 `/skill.md` 的规则封装在 Skill 内，
+Skill；首次连接、连接信息变化或遇到版本类错误时读取 `/skill.json`、发现新版本后重新安装
+`/skill.md` 的规则封装在 Skill 内，常规会话不重复检查版本，
 不重复写入用户复制的提示词。Manifest 用 `entry: SKILL.md` 表示本地标准文件名，`download_url` 指向
 同源托管的 `/skill.md`；部署站点是唯一更新权威源，Agent 不搜索本地代码仓或缓存判断最新版。
 构建生成的 `/skills/index.json` 同步发布同一个 manifest 版本，避免手工维护漂移。

@@ -1,6 +1,6 @@
 ---
 name: mygateway-admin
-description: Manage and diagnose a MyGateway deployment through its hosted Management API. Use when an agent has a MyGateway URL and mgmt_ Management Key and needs to inspect onboarding state, manage LLM provider channels and unified models, issue Gateway Keys, check balances or usage, or investigate request metadata.
+description: Manage and diagnose a MyGateway deployment through its hosted Management API. Use whenever the user mentions MyGateway, gateway channels, unified models, Gateway Keys, provider balances, usage, or request logs — even before they provide credentials. If the saved MyGateway URL or mgmt_ Management Key is missing, ask the user for them first, then inspect onboarding state, manage channels and models, issue Gateway Keys, or read balances, usage, and request metadata.
 ---
 
 # MyGateway Admin
@@ -18,8 +18,10 @@ MYGATEWAY_URL="https://your-gateway.example"
 MYGATEWAY_MANAGEMENT_KEY="mgmt_..."
 ```
 
-Persist both values on first use so the Skill still works in a new session. Prefer the agent platform's
-encrypted credential store, exposing the saved values as the two environment variables above. Do not rely on
+Load saved values first. If neither value is already available from the credential store, environment, or
+saved file, ask the owner for them before doing anything else; never guess a URL or probe for the Key. Persist
+both values on first use so the Skill still works in a new session. Prefer the agent platform's encrypted
+credential store, exposing the saved values as the two environment variables above. Do not rely on
 chat history or temporary agent memory.
 
 If the platform has no credential store but has a persistent local filesystem, save the values outside every
@@ -45,22 +47,26 @@ set +a
 Never print, commit, upload, or quote the credential file. If durable storage is unavailable, explain that the
 owner must provide a Management Key again in a later session.
 
-## Start every session
+## Start a session
 
 1. Load the saved connection.
-2. Fetch `$MYGATEWAY_URL/skill.json`. The deployment that provided `MYGATEWAY_URL` is the authoritative update
-   source; do not search a repository, worktree, package cache, or unrelated local copy for a newer version. If
-   the URL is unavailable, ask the owner for it instead of guessing.
-3. Compare the hosted manifest version with the installed manifest. If hosted is newer, download
-   `download_url` (normally `/skill.md`) from the same origin, replace the installed `SKILL.md`, and update the
-   installed manifest. If the platform cannot replace an installed Skill, use the hosted instructions for this
-   session and tell the owner that installation remains outdated.
-4. Read public capabilities. Stop writes if `api_version` is not `v1`; do not guess paths from another release.
+2. Check for a Skill update only on first connection, when the saved URL or Management Key changes, or after a
+   version-related failure. Do not fetch `/skill.json` on every run. The deployment that provided
+   `MYGATEWAY_URL` is the authoritative update source; do not search a repository, worktree, package cache, or
+   unrelated local copy for a newer version. If the URL is unavailable, ask the owner for it instead of guessing.
+3. To update: compare the hosted manifest version with the installed manifest. If hosted is newer, download
+   `download_url` (normally `/skill.md`) from the same origin, replace the installed `SKILL.md`, update the
+   installed manifest, and also replace `agents/openai.yaml` when the platform uses it. If the platform cannot
+   replace an installed Skill, use the hosted instructions for this session and tell the owner that installation
+   remains outdated.
+4. Read capabilities on first connection and once more before the first write operation in a session. Stop writes
+   if `api_version` is not `v1`; do not guess paths from another release. Read-only inspection needs no
+   version re-check.
 5. Perform only the operation the owner requested. Read current state before writes.
 
 ```bash
-curl "$MYGATEWAY_URL/skill.json"
-curl "$MYGATEWAY_URL/management/v1/capabilities"
+curl "$MYGATEWAY_URL/skill.json"                    # first connection / URL change / version failure only
+curl "$MYGATEWAY_URL/management/v1/capabilities"    # first connection and before the first write
 ```
 
 Send the Management Key only to the exact host in `MYGATEWAY_URL` and only under `/management/v1/*`:

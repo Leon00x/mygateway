@@ -45,6 +45,7 @@ test('discovery is public while protected routes reject missing and wrong key ty
   expect(hostedSkillText).toContain('Use this Overview response alone for the initial report');
   expect(hostedSkillText).toContain('`capabilities.permissions` lists permission classes');
   expect(hostedSkillText).toContain('Do not rely on\nchat history or temporary agent memory');
+  expect(hostedSkillText).toContain('ask the owner for them before doing anything else');
   expect(hostedSkillText).toContain('mygateway/credentials.env');
   expect(hostedSkillText).toContain('chmod 600 "$MYGATEWAY_CREDENTIAL_FILE"');
   expect(hostedSkillText).toContain('### Channels — LLM API providers');
@@ -58,6 +59,8 @@ test('discovery is public while protected routes reject missing and wrong key ty
   expect(hostedSkillText).toContain('Do not claim "healthy", "working", or "no errors" from `active` alone');
   expect(hostedSkillText).toContain('reuse the fetched document throughout\nthe current task');
   expect(hostedSkillText).toContain('do not search a repository, worktree, package cache');
+  expect(hostedSkillText).toContain('Do not fetch `/skill.json` on every run');
+  expect(hostedSkillText).toContain('also replace `agents/openai.yaml` when the platform uses it');
   expect(hostedSkillText).toContain('Prices do not belong to a channel');
   expect(hostedSkillText).toContain('call `GET /provider-presets`');
   expect(hostedSkillText).toContain('Do not recreate a known preset as an anonymous custom channel');
