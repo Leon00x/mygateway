@@ -36,9 +36,13 @@ import { handleProviderPresets } from '../admin/system.ts';
 const API_PREFIX = '/management/v1';
 const managementDocsApp = new Hono<{ Bindings: Env }>();
 
-managementDocsApp.get(`${API_PREFIX}/api-docs`, apiReference({
-  spec: { url: `${API_PREFIX}/openapi.json` },
-  pageTitle: 'MyGateway Management API Docs',
+managementDocsApp.get(`${API_PREFIX}/api-docs`, apiReference((c) => {
+  const requestedTheme = c.req.query('theme');
+  return {
+    spec: { url: `${API_PREFIX}/openapi.json` },
+    pageTitle: 'MyGateway Management API Docs',
+    darkMode: requestedTheme === 'dark' ? true : requestedTheme === 'light' ? false : undefined,
+  };
 }));
 
 function withMethod(request: Request, method: string): Request {

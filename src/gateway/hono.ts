@@ -106,12 +106,16 @@ gatewayApp.doc31('/v1/openapi.json', {
 });
 
 // --- Scalar docs page ---
-gatewayApp.get('/v1/api-docs', apiReference({
-  sources: [
-    { title: 'Gateway API', slug: 'gateway', url: '/v1/openapi.json' },
-    { title: 'Management API', slug: 'management', url: '/management/v1/openapi.json' },
-  ],
-  pageTitle: 'MyGateway API Docs',
+gatewayApp.get('/v1/api-docs', apiReference((c) => {
+  const requestedTheme = c.req.query('theme');
+  return {
+    sources: [
+      { title: 'Gateway API', slug: 'gateway', url: '/v1/openapi.json' },
+      { title: 'Management API', slug: 'management', url: '/management/v1/openapi.json' },
+    ],
+    pageTitle: 'MyGateway API Docs',
+    darkMode: requestedTheme === 'dark' ? true : requestedTheme === 'light' ? false : undefined,
+  };
 }));
 
 // --- GET /v1/models ---

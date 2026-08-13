@@ -11,6 +11,27 @@ test.afterEach(async ({ page }) => {
   await resetState(page.request);
 });
 
+test('console follows the system theme until the user overrides it and API docs inherit the active theme', async ({ page }) => {
+  await page.evaluate(() => localStorage.removeItem('mygateway.theme'));
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  const docsLink = page.locator('.topbar-actions a[href^="/v1/api-docs"]');
+  await expect(docsLink).toHaveAttribute('href', '/v1/api-docs?theme=dark');
+  await expect(page.locator('.shortcut-panel a[href^="/v1/api-docs"]'))
+    .toHaveAttribute('href', '/v1/api-docs?theme=dark');
+  expect(await (await page.request.get('/v1/api-docs?theme=dark')).text()).toMatch(/"darkMode":\s*true/);
+
+  await page.getByRole('button', { name: '切换到浅色模式' }).click();
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  await expect(page.locator('.topbar-actions a[href^="/v1/api-docs"]'))
+    .toHaveAttribute('href', '/v1/api-docs?theme=light');
+});
+
 test('system page validates and applies the canonical website URL', async ({ page }) => {
   await page.goto('/system');
   const accountCard = page.locator('.account-settings-card');

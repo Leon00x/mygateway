@@ -104,6 +104,9 @@ test('discovery is public while protected routes reject missing and wrong key ty
   const combinedDocsText = await combinedDocs.text();
   expect(combinedDocsText).toContain('/v1/openapi.json');
   expect(combinedDocsText).toContain('/management/v1/openapi.json');
+  expect(await (await request.get('/v1/api-docs?theme=dark')).text()).toMatch(/"darkMode":\s*true/);
+  expect(await (await request.get('/v1/api-docs?theme=light')).text()).toMatch(/"darkMode":\s*false/);
+  expect(await (await request.get('/management/v1/api-docs?theme=dark')).text()).toMatch(/"darkMode":\s*true/);
 
   expect((await request.get('/management/v1/system/status')).status()).toBe(401);
   expect((await request.get('/management/v1/provider-presets')).status()).toBe(401);

@@ -26,6 +26,11 @@ const shortcuts: { href: string; label: string; note: string; icon: IconName }[]
 const protocols = ['/chat/completions', '/responses', '/messages'];
 const TEMP_KEY_STORAGE = 'mygateway.quickstartTempKey';
 
+function themedShortcutHref(href: string, theme: 'light' | 'dark'): string {
+  if (!href.startsWith('/v1/api-docs')) return href;
+  return `${href}?theme=${theme}`;
+}
+
 interface StoredTempKey {
   key: string;
   expiresAt: number;
@@ -63,6 +68,9 @@ export default function Dashboard() {
   const [tempBusy, setTempBusy] = createSignal(false);
   const [tempCopied, setTempCopied] = createSignal(false);
   const [tempError, setTempError] = createSignal('');
+  const [docsTheme, setDocsTheme] = createSignal<'light' | 'dark'>(
+    document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light',
+  );
   let tempExpiryTimer: ReturnType<typeof setTimeout> | undefined;
 
   const fetchOverview = async () => {
@@ -125,6 +133,13 @@ export default function Dashboard() {
     };
     document.addEventListener('click', closeProtocolPicker);
     onCleanup(() => document.removeEventListener('click', closeProtocolPicker));
+  });
+  onMount(() => {
+    const observer = new MutationObserver(() => {
+      setDocsTheme(document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    onCleanup(() => observer.disconnect());
   });
   onCleanup(() => { if (tempExpiryTimer) clearTimeout(tempExpiryTimer); });
 
@@ -213,7 +228,16 @@ export default function Dashboard() {
     <div class="dashboard-stack">
       <section class="shortcut-panel panel">
         <For each={shortcuts}>{(item) => (
-          <A href={item.href} class="shortcut-item" target={item.href.startsWith('/v1') ? '_blank' : undefined}>
+          <A
+            href={themedShortcutHref(item.href, docsTheme())}
+            class="shortcut-item"
+            target={item.href.startsWith('/v1') ? '_blank' : undefined}
+            onClick={(event) => {
+              if (item.href.startsWith('/v1/api-docs')) {
+                event.currentTarget.href = themedShortcutHref(item.href, docsTheme());
+              }
+            }}
+          >
             <span class="shortcut-icon"><Icon name={item.icon} size={21} /></span>
             <span><strong>{item.label}</strong><small>{item.note}</small></span><b>↗</b>
           </A>

@@ -153,7 +153,19 @@ function AppLayout(props: { children?: JSX.Element }) {
     try { localStorage.setItem('mygateway.sidebarCollapsed', String(next)); } catch { /* storage may be unavailable */ }
   };
 
-  onMount(() => { document.documentElement.dataset.theme = theme(); });
+  onMount(() => {
+    document.documentElement.dataset.theme = theme();
+    const media = window.matchMedia?.('(prefers-color-scheme: dark)');
+    if (!media) return;
+    const syncSystemTheme = (event: MediaQueryListEvent) => {
+      if (hasSavedThemePreference()) return;
+      const next = event.matches ? 'dark' : 'light';
+      setTheme(next);
+      document.documentElement.dataset.theme = next;
+    };
+    media.addEventListener('change', syncSystemTheme);
+    onCleanup(() => media.removeEventListener('change', syncSystemTheme));
+  });
 
   // Keep <html lang> in sync with the active locale (a11y; index.html defaults to en).
   createEffect(() => {
@@ -213,7 +225,7 @@ function AppLayout(props: { children?: JSX.Element }) {
               <Show when={pageSubtitle()}>{(subtitle) => <p>{subtitle()}</p>}</Show>
             </div>
             <div class="topbar-actions">
-              <a class="ghost-button" href="/v1/api-docs" target="_blank"><Icon name="docs" size={16} /> {t('nav.docs')}</a>
+              <a class="ghost-button" href={`/v1/api-docs?theme=${theme()}`} target="_blank"><Icon name="docs" size={16} /> {t('nav.docs')}</a>
               <button class="theme-toggle lang-toggle" aria-label="Switch language" title="中 / EN" onClick={() => toggleLocale()}>
                 {locale() === 'zh' ? 'EN' : '中文'}
               </button>
@@ -234,6 +246,13 @@ function readThemePreference(): 'light' | 'dark' {
     if (saved === 'light' || saved === 'dark') return saved;
   } catch { /* storage may be unavailable */ }
   return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function hasSavedThemePreference(): boolean {
+  try {
+    const saved = localStorage.getItem('mygateway.theme');
+    return saved === 'light' || saved === 'dark';
+  } catch { return false; }
 }
 
 function readSidebarPreference(): boolean {
