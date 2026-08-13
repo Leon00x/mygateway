@@ -14,7 +14,7 @@ This guide covers deployment, upgrades, rollback, troubleshooting, and Cloudflar
 
 ## 2. How deployment works
 
-The Deploy button lets Cloudflare read `wrangler.jsonc`, create or update the Worker and D1 database, run the deployment command, and upload `dashboard/dist` as Static Assets.
+The Deploy button lets Cloudflare read `wrangler.jsonc`, create or update the Worker named by its `name` field and the D1 database, run the deployment command, and upload `dashboard/dist` as Static Assets. Forks may choose their own Worker name before deployment.
 
 Important behavior:
 
@@ -50,7 +50,7 @@ Recommended settings:
 
 | Field | Value |
 |---|---|
-| Repository | `Leon00x/mygateway`, or the actual name of your fork |
+| Repository | Your fork, or `Leon00x/mygateway` when deploying the upstream repository |
 | Production branch | `main` |
 | Build command | `npm ci && npm run build:dashboard` |
 | Deploy command | `npm run deploy` |
@@ -114,7 +114,7 @@ The default deployment uses:
 1 daily Cron Trigger
 ```
 
-Cloudflare limits change over time. Check the current [Workers limits](https://developers.cloudflare.com/workers/platform/limits/), [D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/), and [D1 limits](https://developers.cloudflare.com/d1/platform/limits/) before production use.
+Cloudflare limits change over time. The deployment assumptions were last checked on 2026-08-13; verify the current [Workers limits](https://developers.cloudflare.com/workers/platform/limits/), [D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/), and [D1 limits](https://developers.cloudflare.com/d1/platform/limits/) before production use. D1 index maintenance also counts toward rows written, so request volume alone is not a reliable capacity estimate.
 
 MyGateway stays lightweight by:
 

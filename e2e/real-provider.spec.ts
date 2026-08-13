@@ -20,11 +20,17 @@ import { test, expect } from '@playwright/test';
 import { devVar, loginViaApi, loginViaUi, resetState, uniq } from './helpers';
 
 const providerKey = devVar('DEEPSEEK_TEST_KEY');
+const sitRequested = process.env.RUN_SIT === '1';
+
+if (sitRequested && !providerKey) {
+  throw new Error('DEEPSEEK_TEST_KEY is required when RUN_SIT=1. Configure a dedicated, budget-limited SIT key.');
+}
 
 test.describe.configure({ mode: 'serial' });
 
-// Skip whole suite when no real key configured
-test.skip(!providerKey, 'DEEPSEEK_TEST_KEY not set in .dev.vars — skipping real integration test');
+// Real external integrations are opt-in even when a developer happens to have
+// a Provider Key locally. Use the stable `npm run test:sit` entry point.
+test.skip(!sitRequested, 'SIT is opt-in; run it with npm run test:sit');
 
 const upstreamModel = 'deepseek-v4-flash';
 const channelName = 'DeepSeek';
@@ -36,7 +42,7 @@ test.beforeAll(async ({ request }) => {
   await resetState(request);
 });
 
-test('realtime: UI preflight then save and import', async ({ page }) => {
+test('real provider: UI preflight then save and import', async ({ page }) => {
   await loginViaUi(page);
   await page.locator('.sidebar').getByRole('link', { name: /渠道/ }).click();
   await page.getByRole('button', { name: '添加渠道' }).click();
@@ -67,7 +73,7 @@ test('realtime: UI preflight then save and import', async ({ page }) => {
   ]);
 });
 
-test('realtime: channel connection test returns 200', async ({ request }) => {
+test('real provider: channel connection test returns 200', async ({ request }) => {
   await loginViaApi(request);
   const channels = await request.get('/admin/api/channels').then((r) => r.json());
   const ch = channels.find((c: any) => c.name === channelName);
@@ -79,7 +85,7 @@ test('realtime: channel connection test returns 200', async ({ request }) => {
   expect(body.status).toBe(200);
 });
 
-test('realtime: official DeepSeek balance returns exact monetary strings', async ({ request }) => {
+test('real provider: official DeepSeek balance returns exact monetary strings', async ({ request }) => {
   await loginViaApi(request);
   const channels = await request.get('/admin/api/channels').then((r) => r.json());
   const ch = channels.find((c: any) => c.name === channelName);
@@ -99,7 +105,7 @@ test('realtime: official DeepSeek balance returns exact monetary strings', async
   }
 });
 
-test('realtime: preflight inventory was imported without rediscovery', async ({ request }) => {
+test('real provider: preflight inventory was imported without rediscovery', async ({ request }) => {
   await loginViaApi(request);
   const channels = await request.get('/admin/api/channels').then((r) => r.json());
   const ch = channels.find((c: any) => c.name === channelName);
@@ -120,7 +126,7 @@ test('realtime: preflight inventory was imported without rediscovery', async ({ 
   expect(alias).toContain('deepseek-v4-flash');
 });
 
-test('realtime: create gateway key', async ({ request }) => {
+test('real provider: create gateway key', async ({ request }) => {
   await loginViaApi(request);
   const resp = await request.post('/admin/api/keys', {
     data: { name: uniq('e2e-real') },
@@ -130,7 +136,7 @@ test('realtime: create gateway key', async ({ request }) => {
   expect(gwKey).toMatch(/^gw_[A-Za-z0-9_-]{20,}/);
 });
 
-test('realtime: non-streaming chat → real completion + usage', async ({ request }) => {
+test('real provider: non-streaming chat → real completion + usage', async ({ request }) => {
   expect(gwKey).toBeTruthy();
 
   const resp = await request.post('/v1/chat/completions', {
@@ -151,7 +157,7 @@ test('realtime: non-streaming chat → real completion + usage', async ({ reques
   expect(body.usage.total_tokens).toBeGreaterThan(0);
 });
 
-test('realtime: streaming chat → [DONE] + usage chunk', async ({ request }) => {
+test('real provider: streaming chat → [DONE] + usage chunk', async ({ request }) => {
   expect(gwKey).toBeTruthy();
 
   const resp = await request.post('/v1/chat/completions', {
@@ -176,7 +182,7 @@ test('realtime: streaming chat → [DONE] + usage chunk', async ({ request }) =>
   expect(usageChunk, 'final usage chunk should be present').toBeTruthy();
 });
 
-test('realtime: native DeepSeek Anthropic Messages', async ({ request }) => {
+test('real provider: native DeepSeek Anthropic Messages', async ({ request }) => {
   const resp = await request.post('/v1/messages', {
     headers: { 'x-api-key': gwKey, 'anthropic-version': '2023-06-01' },
     data: {
@@ -196,7 +202,7 @@ test('realtime: native DeepSeek Anthropic Messages', async ({ request }) => {
   expect(body.usage.output_tokens).toBeGreaterThan(0);
 });
 
-test('realtime: native DeepSeek Messages stream emits Anthropic events', async ({ request }) => {
+test('real provider: native DeepSeek Messages stream emits Anthropic events', async ({ request }) => {
   const resp = await request.post('/v1/messages', {
     headers: { 'x-api-key': gwKey, 'anthropic-version': '2023-06-01' },
     data: {
@@ -216,7 +222,7 @@ test('realtime: native DeepSeek Messages stream emits Anthropic events', async (
   expect(text).toContain('"type":"text_delta"');
 });
 
-test('realtime: admin usage overview reflects the calls', async ({ request }) => {
+test('real provider: admin usage overview reflects the calls', async ({ request }) => {
   await loginViaApi(request);
 
   const overview = await request.get('/admin/api/usage/overview?range=today').then((r) => r.json());

@@ -24,17 +24,19 @@ npm run dev              # http://localhost:8787
 ## 开发与验证
 
 ```bash
-npm run typecheck        # Worker 与 Dashboard 严格类型检查
-npm test                 # Vitest 单元测试
-npm run test:e2e         # Playwright；部分测试需要真实供应商 Key
-npm run build:dashboard  # 构建 Dashboard 静态资源
+npm run test:fast          # 文档、类型、单测、Dashboard 和 Worker dry-run
+npm run test:e2e:serve     # 在另一个终端启动本地 D1 与 Worker
+npm run test:api           # Admin 与 Management HTTP 契约
+npm run test:ui            # 浏览器用户旅程
+npm run test:system        # 可控上游路由与流式行为
+npm run test:sit           # 显式运行真实集成，会产生 Provider 用量
 ```
 
 提交 Pull Request 前确认：
 
-1. `npm run typecheck` 通过。
-2. `npm test` 通过，并为新增行为补充测试。
-3. Dashboard 可以正常构建。
+1. `npm run test:fast` 通过。
+2. 按测试活动矩阵运行所有受影响层，并为新增行为补充测试。
+3. 发布维护者运行 `npm run test:release`；没有 SIT 凭据的贡献者运行 `test:release:local`。
 4. Schema 变更使用 `migrations/` 中新的连续编号 migration。
 5. 用户可见行为同步到 `docs/PRD.md`；实现细节只写入对应架构或设计文档，不在多个文件复制同一段内容。
 
@@ -48,7 +50,7 @@ npm run build:dashboard  # 构建 Dashboard 静态资源
 | `migrations/` | 按顺序执行的 D1 Schema migrations |
 | `dashboard/` | SolidJS 管理控制台 |
 | `test/` | Vitest 单元测试 |
-| `e2e/` | Playwright UI 与真实供应商测试 |
+| `e2e/` | Playwright UI、API、可控上游与真实供应商测试 |
 
 ## 提交约定
 

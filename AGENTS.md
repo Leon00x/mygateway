@@ -9,6 +9,8 @@
 2. 阅读与任务直接相关的文档：产品改动先看 `docs/PRD.md`，协议 / Provider 改动再看
    `docs/DESIGN.md`，数据面改动看 `docs/ARCHITECTURE.md`。
 3. 用 `rg` 定位实现与测试。不要依据 README 或旧 Changelog 猜测当前行为。
+4. 测试分层、活动门禁和固定命令以 `docs/TESTING.md` 为准。不要为一次改动新增临时测试脚本；
+   优先向已有领域用例补充行为，只有出现新的测试边界时才新增套件。
 
 ## 不可破坏的产品约束
 
@@ -40,14 +42,13 @@
 
 ## 完成标准
 
-至少运行：
+至少运行快速门禁：
 
 ```bash
-npm run typecheck
-npm test
-npm run build
+npm run test:fast
 git diff --check
 ```
 
-涉及控制台主流程时运行 `npx playwright test e2e/journey.spec.ts`；涉及真实协议时按
-`docs/TESTING.md` 运行相应集成测试。最终说明实际运行了哪些验证，以及未运行项的原因。
+再按 `docs/TESTING.md` 的活动矩阵追加受影响层：API 用 `npm run test:api`，控制台用
+`npm run test:ui`，路由/流式用 `npm run test:system`，真实外部集成用 `npm run test:sit`。
+正式版本运行 `npm run test:release`。最终说明实际运行了哪些验证，以及未运行项的原因。

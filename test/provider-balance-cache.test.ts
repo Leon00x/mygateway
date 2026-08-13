@@ -1,5 +1,5 @@
 /**
- * Focused reproduction for the dashboard provider-balance refresh flow.
+ * Provider-balance cache behavior used by the dashboard and management views.
  *
  * Mocks D1 (listChannels / getChannel / summaries), key decryption, and the
  * upstream DeepSeek balance endpoint, then exercises the admin handlers

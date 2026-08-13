@@ -6,12 +6,15 @@
 
 ## 未发布：仓库整理与接续开发基线
 
+- 测试规范统一为 L0 静态、L1 单元、L2 API、L3 UI、L4 可控系统集成、L5 SIT 和未来 L6 Agent
+  视觉审查；新增稳定的快速、分层、本地发布、完整发布和部署后 Smoke 脚本。真实 Provider 与
+  Token 消费归入显式 SIT，普通 E2E 即使存在本地 Key 也不会意外调用或产生费用。
 - Management API 新增 Provider Presets 查询，Skill 创建已知供应商时携带 `preset_id`；服务端和
   Dashboard 对未标记的官方 Host 渠道进行保守的唯一身份识别，使 Agent 创建及历史渠道恢复品牌
   图标、名称本地化和 Provider 专属行为，同时保留协议 Path 自定义能力。
 - 用量分析将“平均延迟”更名为语义更准确的“平均请求用时”，并新增平均缓存命中率指标卡，
   按筛选范围内缓存输入 Token 占总输入 Token 的比例计算。
-- `mygateway-admin` Skill 升级至 0.5.0：增加渠道、Provider 模型库存、统一模型/实例、Gateway Key
+- `mygateway-admin` Skill 升级至 0.6.0：增加渠道、Provider 模型库存、统一模型/实例、Gateway Key
   和数据面之间的资源图；明确 preflight、发现清单 refresh、手工维护和 import 的区别，refresh 仅更新
   渠道暂存清单，只有 import 才创建统一模型/实例并进入路由。同时禁止把供应商
   返回的 Images、Video、Embeddings 等模型误报为网关可调用模型。常规查询改为最小 API 选择，默认
@@ -30,10 +33,6 @@
 - README 改为英文默认入口并新增简体中文镜像，顶部提供语言切换；功能介绍按网关、渠道、
   模型与路由、密钥、Analytics、控制台、Agent 管理和安全分模块概述，不再展开实现细节。
   `docs/` 新增双语导航，并为部署、贡献和安全策略补齐中英文版本。
-- 退役无法在 Cloudflare Worker 出口稳定工作的 ChatGPT Plus / Codex 订阅反代实验：移除控制台、
-  OAuth、路由适配和相关测试；保留已发布 migration，并通过后续 migration 清空 OAuth 凭据、
-  隐藏实验渠道及没有其他实例的实验模型。
-
 - System 页在管理员账号卡片旁新增网站访问域名设置：默认检测当前 Origin，显式保存规范
   HTTP(S) 地址，并同步用于首页接入地址、curl 命令与 Agent Skill 提示词；服务端拒绝包含路径、
   查询、锚点或凭据的输入，UI 与 API E2E 覆盖校验和传播行为。
@@ -161,13 +160,7 @@
 - 项目标准开源化：MIT License、CONTRIBUTING、SECURITY、GitHub Actions CI。
 - 单元测试 93 例。
 
-本文只记录已经合入并部署的用户可见变化。产品特性与 Roadmap 见
-[PRD](PRD.md)；技术细节分别见[架构](ARCHITECTURE.md)、
-[详细设计](DESIGN.md)、[部署](DEPLOY.md)和[测试](TESTING.md)。
-
 ## 2026-08-05：控制台侧边栏与暗黑模式
-
-状态：已合入 `main`，已部署到 Cloudflare Worker `mygatewaydemo`。
 
 - 左侧栏底部按钮改为桌面端展开/收缩控制，收起后保留图标导航并记忆用户选择。
 - 退出登录保留在管理员信息行，不再与侧边栏控制混用。
@@ -176,8 +169,6 @@
 - UI E2E 增加侧边栏切换、主题切换和刷新后主题持久化验证。
 
 ## 2026-08-04：多协议路由、供应商预制与 DeepSeek 余额
-
-状态：已合入 `main`，已部署到 Cloudflare Worker `mygatewaydemo`。
 
 - 对外新增 `POST /v1/responses` 和 `POST /v1/messages`，保留现有 Chat 接口。
 - 新增 `channel_protocols`，一个供应商渠道可用一份 Key 配置多个原生协议。
@@ -200,8 +191,6 @@
   的非流式、SSE 和 usage。
 
 ## 2026-08-04：MVP 可部署性、控制台与数据面增强
-
-状态：已合入 `main`，已部署到 Cloudflare Worker `mygatewaydemo`。
 
 ### API 与管理能力
 
@@ -258,22 +247,9 @@
   成本。
 - 更新渠道或连接测试成功时，立即清除当前 isolate 的相关熔断状态。
 
-### 验证
-
-- 41 个单元测试通过，包括 usage 时区、Token 校验、SSE fixtures、终态幂等、
-  TTL/LRU、D1 batch 和被动熔断。
-- 10 个无需真实 Provider Key 的 Playwright UI E2E 用例通过。
-- TypeScript 检查、Dashboard 生产构建和 Worker dry-run 通过。
-- 生产健康页、控制台资源和网关计时响应头完成 smoke test。
-
-生产部署记录：
-
-- Git 提交：`1b22eda`
-- Worker 版本：`e9bf7091-33ec-4fc5-8f10-6e67d1d22c7c`
-- 地址：<https://mygatewaydemo.leonguo08.workers.dev>
-
 ## 更新记录维护规则
 
 - 只记录已经合入的变化，不把提案写成已实现能力。
 - 每次发布列出用户影响、免费档成本变化、迁移/Secret 影响和验证结果。
 - 涉及破坏性配置、数据库 migration 或 Secret 轮换时必须单独标注。
+- 单次部署地址、提交号、测试数量和实验过程写入 `internal/`，不作为公开发布状态。

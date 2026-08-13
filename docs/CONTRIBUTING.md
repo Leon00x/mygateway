@@ -32,17 +32,19 @@ Admin login on first run uses the bootstrap credentials documented in
 ## Development loop
 
 ```bash
-npm run typecheck        # Worker + Dashboard strict TypeScript
-npm test                 # vitest unit tests
-npm run test:e2e         # Playwright (some suites need DEEPSEEK_TEST_KEY)
-npm run build:dashboard  # rebuild dashboard static assets into dist/
+npm run test:fast          # docs, types, unit tests, Dashboard, Worker dry-run
+npm run test:e2e:serve     # local D1 + Worker in a separate terminal
+npm run test:api           # Admin and Management HTTP contracts
+npm run test:ui            # browser user journeys
+npm run test:system        # controlled-upstream routing and streaming
+npm run test:sit           # opt-in real integrations; consumes Provider usage
 ```
 
 Before opening a PR make sure:
 
-1. `npm run typecheck` is clean.
-2. `npm test` passes (all unit tests, including new coverage for your change).
-3. The dashboard builds (`npm run build:dashboard`).
+1. `npm run test:fast` passes.
+2. Run every affected layer from the testing activity matrix.
+3. Release maintainers run `npm run test:release`; contributors without SIT credentials use `test:release:local`.
 4. Database schema changes are a new numbered migration in `migrations/`.
 5. New user-visible behavior is documented in `docs/PRD.md`; implementation
    details go in the relevant architecture or design document without copying
@@ -58,7 +60,7 @@ Before opening a PR make sure:
 | `migrations/` | D1 schema migrations (applied in order) |
 | `dashboard/` | SolidJS admin console (static assets served by the Worker) |
 | `test/` | Vitest unit tests |
-| `e2e/` | Playwright UI / real-provider suites |
+| `e2e/` | Playwright UI, API, controlled-upstream, and real-provider suites |
 
 ## Commit conventions
 

@@ -23,7 +23,7 @@ Workers Builds 持续更新。
 `deploy.workers.cloudflare.com/?url=<repo>` → Cloudflare Dash 读取仓库 `wrangler.jsonc`：
 
 1. 读取 Wrangler 配置（识别 Worker / D1 / Assets 绑定）
-2. 创建或更新 Worker（模板默认名为 `mygatewaydemo`，部署页面可以自定义）
+2. 按 `wrangler.jsonc` 中的 `name` 创建或更新 Worker；Fork 后可在部署前改成自己的名称
 3. 自动创建 D1 —— `database_id` 可选，缺失时 wrangler 自动 provision
 4. 执行 Deploy 命令（默认 `npx wrangler deploy`，可自定义）
 5. `wrangler deploy` 自动上传 `assets.directory`（`./dashboard/dist`）作为 Static Assets
@@ -67,7 +67,7 @@ push 代码 → GitHub → Cloudflare Workers Builds
 
 | 字段 | 值 |
 |---|---|
-| Git 存储库 | `Leon00x/mygateway`（或你 fork 后的真实仓库名，不是 Worker 名） |
+| Git 存储库 | 你 Fork 后的真实仓库；使用上游仓库时为 `Leon00x/mygateway`（不是 Worker 名） |
 | 生产分支 | `main` |
 | 构建命令 | `npm ci && npm run build:dashboard` |
 | 部署命令 | `npm run deploy` |
@@ -143,19 +143,19 @@ npm run deploy
 1 个每日 Cron Trigger
 ```
 
-与本项目最相关的官方 Free 限制（额度可能变化，部署前应查看
+与本项目最相关的官方 Free 限制（2026-08-13 核对；额度可能变化，部署前应查看
 [Workers Limits](https://developers.cloudflare.com/workers/platform/limits/)、
 [D1 Pricing](https://developers.cloudflare.com/d1/platform/pricing/) 和
 [D1 Limits](https://developers.cloudflare.com/d1/platform/limits/)）：
 
 | 项目 | Free 限制 | MyGateway 的控制方式 |
 |---|---:|---|
-| Worker 请求 | 100,000/天 | 建议轻量使用不超过约 10,000 次网关调用/天 |
+| Worker 请求 | 100,000/天 | 管理请求、模型调用和静态资源请求都可能计入，应以账号指标为准 |
 | Worker CPU | 10ms/请求 | 流式转发、有限解析，不缓存完整响应 |
 | 外部子请求 | 50/请求 | 最多尝试 3 个 Provider，候选串行而非广播 |
 | 并发出站连接 | 6/请求 | 单请求顺序尝试渠道 |
 | D1 读取 | 5,000,000 行/天 | 索引、一次 batch、短 TTL isolate 缓存 |
-| D1 写入 | 100,000 行/天 | 每个完成请求一次 Analytics 聚合 + 密钥用量 + 可选日志写入（同一 waitUntil，`batch()` 提交）；轻量使用建议不超过约 30,000 次调用/天 |
+| D1 写入 | 100,000 行/天 | 每个完成请求更新 Analytics、密钥用量和可选日志；索引也会增加写入行数 |
 | D1 存储 | 500MB/数据库、账号总计 5GB | 一个数据库，分钟聚合 30 天、请求日志 1–7 天（控制台可调）、密钥用量 30 天 |
 | Workers Logs | 200,000 事件/天、保留 3 天 | 10% head sampling 和脱敏事件 |
 

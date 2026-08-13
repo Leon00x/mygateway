@@ -1,21 +1,72 @@
 # MyGateway 测试指南
 
-本文说明测试层次、环境准备、运行方法和当前覆盖。测试代码是具体用例行为的权威来源。
+本文是人类和 Agent 维护测试的规范入口，统一定义测试分层、固定脚本、用例归属和不同开发活动
+的质量门禁。测试代码是具体行为的权威来源；本文不记录某次运行的用例数量或生产部署结果，
+避免过程快照随代码演进失真。
 
-## 1. 测试层次
+## 1. 测试方法论
 
-| 层次 | 命令 | 目的 |
+采用由快到慢、由确定到外部依赖的分层测试。业务规则优先放在最低且足以证明行为的层级；API
+可以验证的输入组合不在 UI 重复穷举，浏览器测试聚焦关键用户旅程。真实外部系统与确定性 CI
+分开，避免网络、费用和供应商波动掩盖产品回归。
+
+### 1.1 分层、脚本与用例归属
+
+| 层级 | 性质 | 测试内容 | 固定脚本 | 主要用例 |
+|---|---|---|---|---|
+| L0 静态门禁 | 静态 | 文档链接、机器路径、类型、Dashboard 构建、Worker dry-run | `npm run test:fast` 的静态部分 | `scripts/check-docs.mjs`、TypeScript、Vite、Wrangler |
+| L1 单元测试 | 白盒 | 纯函数、数据库语义、协议、缓存、配额、Token、错误边界 | `npm run test:unit` | `test/*.test.ts` |
+| L2 API / 服务测试 | 灰盒 | 真实 Worker HTTP、Admin/Management 契约、D1 结果、权限与凭据脱敏 | `npm run test:api` | `e2e/admin-api.spec.ts`、`e2e/management-api.spec.ts` |
+| L3 UI 功能测试 | 黑盒 | 登录、导航、表单、Dialog、刷新恢复、关键响应式与确定性布局 | `npm run test:ui` | `e2e/journey.spec.ts`、`e2e/management-ui.spec.ts` |
+| L4 可控系统集成 | 黑盒 | 本地假 Provider、路由、Fallback、SSE、超时、流中断和取消传播 | `npm run test:system` | `e2e/controlled-upstream.spec.ts` |
+| L5 SIT 真实集成 | 外部黑盒 | 真实 Provider、真实 Token/usage、余额、SDK 与部署环境集成 | `npm run test:sit` | 当前 `e2e/real-provider.spec.ts`，未来按 Provider/领域拆分 |
+| L6 Agent 视觉审查 | 探索性 | 层级、留白、密度、暗色和整体审美 | 暂不提供，不作为门禁 | 未来由固定截图场景和多模态审查组成 |
+
+L2 通过公开 HTTP 契约观察结果，但会使用测试数据库准备和核对状态，因此称为灰盒；不要把所有
+API 测试称为白盒。L3 只断言用户可观察的行为，少量尺寸、重叠和视口断言用于防止确定性布局
+回归，不承担主观审美判断。
+
+### 1.2 固定命令
+
+| 命令 | 用途 | 前置条件 |
 |---|---|---|
-| 单元测试 | `npm test` | 纯逻辑、边界条件和协议 fixtures |
-| 类型检查 | `npm run typecheck` | Worker 与 Dashboard 严格 TypeScript 类型 |
-| 前端构建 | `npm run build:dashboard` | SolidJS 生产构建 |
-| Worker dry-run | `npm run build` | 前端构建和 Wrangler 打包 |
-| UI E2E | `npx playwright test e2e/journey.spec.ts` | 浏览器管理闭环和 Gateway HTTP |
-| Admin API E2E | `npx playwright test e2e/admin-api.spec.ts` | 渠道、库存、模型、实例和调用错误矩阵 |
-| Management API E2E | `npx playwright test e2e/management-api.spec.ts` | Agent 权限、生命周期、资源管理与凭据不泄漏 |
-| Management UI E2E | `npx playwright test e2e/management-ui.spec.ts` | 管理密钥创建、1 小时恢复与删除 |
-| 可控上游 E2E | `npm run test:e2e:upstream` | 真实 Worker 路由、Fallback、流中断与取消传播 |
-| 真实集成 | `npx playwright test e2e/realtime.spec.ts` | 使用真实 DeepSeek Key 验证上游协议 |
+| `npm run test:fast` | L0 + L1：文档、类型、单元测试和生产构建 | 无外部服务 |
+| `npm run test:api` | L2 API / 服务测试 | 本地测试 Worker 已启动 |
+| `npm run test:ui` | L3 UI 功能测试 | 本地测试 Worker 已启动，Chromium 已安装 |
+| `npm run test:system` | L4 可控系统集成 | 本地测试 Worker 已启动 |
+| `npm run test:sit` | L5 真实集成，显式开启 `RUN_SIT=1` | 本地测试 Worker、专用且限额的 Provider Key |
+| `npm run test:release:local` | L0–L4 的确定性发布门禁 | 本地测试 Worker 已启动 |
+| `npm run test:release` | L0–L5 完整版本发布门禁 | 本地测试 Worker 与 SIT 凭据 |
+| `npm run test:smoke -- <URL>` | 部署后只读健康检查 | 已部署的网站地址；默认检查本地 8799 |
+| `npm run test:e2e:serve` | 构建 Dashboard、迁移本地 D1 并启动测试 Worker | `.dev.vars` |
+
+这些名称是长期入口。新增行为应扩充对应现有用例；只有出现新的测试边界或外部系统时才新增套件，
+并同步更新固定脚本。不要在文档、CI 或聊天中拼接一次性测试命令替代这些入口。
+
+### 1.3 不同活动的测试门禁
+
+| 活动 | 必须执行 | 按影响追加 |
+|---|---|---|
+| 开发中的局部反馈 | 对应单元文件或单个 Playwright 用例 | 仅用于快速定位，不代表完成 |
+| 完成一个小功能或 Bug | `npm run test:fast` | API 改动加 `test:api`；UI 加 `test:ui`；路由/流式加 `test:system` |
+| 文档或部署说明 | `npm run docs:check` + `git diff --check` | 命令变化时运行对应脚本的收集或 smoke |
+| Pull Request | `npm run test:fast` + 所有受影响层 | migration 同时验证全新库与已有库升级 |
+| 发布小版本 | `npm run test:release` | 任何层失败都停止发布；不得用重跑掩盖不稳定用例 |
+| 部署完成 | `npm run test:smoke -- https://部署域名` | 只有明确授权时才执行会计费的最小模型调用 |
+
+Bug 修复必须在最低有效层增加回归用例。跨层缺陷可以增加一条高层旅程，但不复制所有低层输入
+组合。Provider、协议、Token/usage 或 SDK 行为变化必须运行 SIT；纯 UI 文案变化无需消费真实 Token。
+
+### 1.4 用例设计与维护
+
+- 测试名描述稳定的产品行为，不使用 `repro`、工单号、Agent 名或一次性故障名称。
+- 使用 Arrange / Act / Assert 组织用例；一个用例聚焦一个行为或一组不可拆分的业务闭环。
+- 优先使用确定性数据和可控时间；禁止依赖测试执行顺序，确需串行旅程时必须在文件内明确说明。
+- UI 使用 `getByRole`、`getByLabel` 等用户可见契约；只有布局回归才读取尺寸或样式。
+- API 用例同时断言 HTTP 状态、稳定错误码和最终资源状态；凭据操作必须断言敏感字段不泄漏。
+- 外部测试必须显式开启并使用专用限额凭据；缺少 SIT 凭据时发布门禁应失败，不能假通过。
+- 不用 retry 把 Flaky 测试变绿。先保留 Trace、定位共享状态或等待条件，再修正用例。
+- 删除产品能力时同步删除或改写对应测试；测试不是只增不减的历史档案。
 
 ## 2. 单元测试
 
@@ -24,7 +75,7 @@
 | 文件 | 覆盖重点 |
 |---|---|
 | `access-resolver.test.ts` | Key 与模型冷请求 batch、缓存状态 |
-| `balance-refresh-repro.test.ts` | 强制刷新、五分钟缓存和概览回读 |
+| `provider-balance-cache.test.ts` | 强制刷新、五分钟缓存、失效竞态和概览回读 |
 | `deepseek-balance.test.ts` | 官方 host、金额精度、鉴权和错误清理 |
 | `key-quota.test.ts` | 密钥到期、RPM 窗口、每日预算台账与成本计算 |
 | `log-policy.test.ts` | 日志总开关、级别策略、合并 batch、TTFT 与上下文写入矩阵 |
@@ -72,9 +123,7 @@ DEEPSEEK_TEST_KEY=<可选，真实集成使用>
 构建前端、初始化本地 D1 并启动测试服务器：
 
 ```bash
-npm run build:dashboard
-npm run db:migrate:local
-npx wrangler dev --port 8799
+npm run test:e2e:serve
 ```
 
 另一个终端运行：
@@ -94,7 +143,7 @@ E2E 会创建、修改和删除渠道、模型与 Gateway Key。不要指向包�
 
 ## 4. UI 旅程
 
-`e2e/journey.spec.ts` 当前 13 个串行用例：
+`e2e/journey.spec.ts` 串行覆盖以下管理闭环：
 
 1. 未登录访问跳转登录页；
 2. 错误管理员凭据显示错误；
@@ -119,7 +168,7 @@ E2E 会创建、修改和删除渠道、模型与 Gateway Key。不要指向包�
 
 ## 5. Admin API 与调用边界
 
-`e2e/admin-api.spec.ts` 不使用真实 Provider Key，当前 5 组串行用例：
+`e2e/admin-api.spec.ts` 不使用真实 Provider Key，按以下领域串行组织：
 
 1. 创建自定义三协议渠道，验证空协议、重复协议、非 HTTPS 地址、重复 Provider Key；保存名称、
    协议 Base URL 和启停状态，并验证编辑阶段的重复 Key 冲突；
@@ -162,8 +211,10 @@ curl http://localhost:8799/management/v1/capabilities
 curl http://localhost:8799/management/v1/api-docs
 curl -H "Authorization: Bearer $MYGATEWAY_MANAGEMENT_KEY" \
   http://localhost:8799/management/v1/overview
-python3 /home/leon/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/mygateway-admin
 ```
+
+Skill 的结构、manifest 和托管文件由 Management API E2E 校验。某个 Agent 平台提供的 Skill
+校验器可以作为额外检查，但不能把个人机器上的工具路径写成项目标准命令。
 
 ## 7. 可控上游集成
 
@@ -198,9 +249,11 @@ E2E_UPSTREAM_TIMEOUT_MS=300 npm run test:e2e:upstream
 这里的短超时只用于测试，不应照搬到生产配置。假 Provider 对慢请求最长等待 5 秒，避免使用默认
 30 秒超时拖慢常规测试。
 
-## 8. 真实 DeepSeek 集成
+## 8. SIT 真实集成
 
-`e2e/realtime.spec.ts` 在缺少 `DEEPSEEK_TEST_KEY` 时整套跳过。当前 10 个串行用例：
+SIT 是真实外部集成阶段，DeepSeek 只是当前第一个测试对象。`npm run test:sit` 会显式设置
+`RUN_SIT=1`；缺少 `DEEPSEEK_TEST_KEY` 时直接失败，避免发布门禁把“没有运行”误报为成功。
+当前 `e2e/real-provider.spec.ts` 串行覆盖：
 
 1. 在页面用真实 Key 预检 V4 模型，确认预检不创建渠道，取消一个模型后只导入勾选项；
 2. 渠道连接测试；
@@ -219,8 +272,15 @@ E2E_UPSTREAM_TIMEOUT_MS=300 npm run test:e2e:upstream
 单独运行：
 
 ```bash
-npx playwright test e2e/realtime.spec.ts
+npm run test:sit
 ```
+
+未来真实 Token 消费、Provider usage 与网关 Analytics/每日限额的一致性、OpenAI/Anthropic SDK、
+更多供应商和远程 Cloudflare 环境都归入 SIT。余额扣减可能异步、受套餐或赠金影响，只作为辅助
+观测；准确断言应基于 Provider 响应 usage、网关聚合和请求日志之间的一致性。
+
+SIT 使用专用测试账号、限额 Key、低成本模型和短输出，不得读取个人或生产凭据。测试结束清理
+创建的渠道、模型和密钥，并记录实际请求数；Provider 网络故障应与产品断言失败明确区分。
 
 ## 9. SSE Fixture 要求
 
@@ -239,16 +299,12 @@ npx playwright test e2e/realtime.spec.ts
 ## 10. 发布前检查
 
 ```bash
-npm test
-npm run typecheck
-npm run build
-npx playwright test e2e/journey.spec.ts
-npx playwright test e2e/admin-api.spec.ts
-npx playwright test e2e/management-api.spec.ts e2e/management-ui.spec.ts
-npm run test:e2e:upstream
-npx playwright test e2e/realtime.spec.ts  # 有真实测试 Key 时
+npm run test:release
 git diff --check
 ```
+
+贡献者没有 SIT 凭据时可以运行 `npm run test:release:local` 验证全部确定性层；正式发布维护者必须
+继续运行 `npm run test:sit`，不能把缺少真实凭据解释为完整发布验证。
 
 还应确认：
 

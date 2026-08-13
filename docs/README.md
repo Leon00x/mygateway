@@ -18,6 +18,7 @@ This directory keeps product decisions, engineering constraints, operations, and
 | Security | [English](SECURITY.md) · [中文](SECURITY.zh-CN.md) | EN / 中文 | Private disclosure and deployment responsibilities |
 | Releases | [Changelog](CHANGELOG.md) | 中文 | Released and unreleased changes |
 | Agents | [AGENTS.md](../AGENTS.md) | 中文 | Mandatory repository rules for AI-assisted development |
+| Maintainer notes | [Internal notes](internal/README.md) | 中文 | One-off deployments, experiments, and process records; removable from public distributions |
 
 ## Reading paths
 
@@ -33,3 +34,5 @@ This directory keeps product decisions, engineering constraints, operations, and
 - Architecture documents describe implemented structure. Design documents explain detailed decisions.
 - README files stay concise and link here instead of duplicating implementation details.
 - Update both language versions when changing bilingual public documentation.
+- Keep personal environments, one-off production checks, experiments, and temporary diagnostics under
+  `docs/internal/`. Removing that directory must not affect deployment or further development.
