@@ -40,9 +40,9 @@ export default function PriceFields(props: {
   const set = (patch: Partial<PriceInput>) => props.onChange({ ...props.value, ...patch });
   return (
     <span class={`price-fields ${props.compact ? 'price-fields-compact' : ''}`} onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
-      <span class="price-field"><small>{t('prices.input')}</small><input type="number" min="0" step="0.01" placeholder="—" value={props.value.input} onInput={(e) => set({ input: e.currentTarget.value })} /></span>
-      <span class="price-field"><small>{t('prices.output')}</small><input type="number" min="0" step="0.01" placeholder="—" value={props.value.output} onInput={(e) => set({ output: e.currentTarget.value })} /></span>
-      <span class="price-field"><small>{t('prices.cache')}</small><input type="number" min="0" step="0.01" placeholder="—" value={props.value.cache} onInput={(e) => set({ cache: e.currentTarget.value })} /></span>
+      <span class="price-field"><small>{t('prices.input')}</small><input type="number" min="0" step="0.000001" placeholder="—" value={props.value.input} onInput={(e) => set({ input: e.currentTarget.value })} /></span>
+      <span class="price-field"><small>{t('prices.output')}</small><input type="number" min="0" step="0.000001" placeholder="—" value={props.value.output} onInput={(e) => set({ output: e.currentTarget.value })} /></span>
+      <span class="price-field"><small>{t('prices.cache')}</small><input type="number" min="0" step="0.000001" placeholder="—" value={props.value.cache} onInput={(e) => set({ cache: e.currentTarget.value })} /></span>
       <span class="price-field price-field-currency"><small>{t('prices.currency')}</small><select value={props.value.currency} onChange={(e) => set({ currency: e.currentTarget.value as 'USD' | 'CNY' })}><option value="USD">USD</option><option value="CNY">CNY</option></select></span>
     </span>
   );

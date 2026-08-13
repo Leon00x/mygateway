@@ -176,6 +176,64 @@ test('4. add channel via preset modal', async ({ page }) => {
   await editModal.getByRole('button', { name: '×' }).click();
 });
 
+test('4b. high-precision preflight baseline (0.0028 $/M) does not block save and import', async ({ page }) => {
+  // Regression for gh#3: prices are stored as integer micros per million, so a
+  // real baseline like 2800µ = 0.0028 $/M must not be rejected by the number
+  // input. The preflight is mocked so this is deterministic and needs no real
+  // Provider key.
+  await loginViaUi(page);
+  await page.locator('.sidebar').getByRole('link', { name: /渠道/ }).click();
+  await expect(page).toHaveURL(/\/channels/);
+  await page.getByRole('button', { name: '添加渠道' }).click();
+  await page.getByRole('button', { name: /DeepSeek/ }).first().click();
+
+  const channelsBefore = await page.request.get('/admin/api/channels').then((r) => r.json());
+  await page.route('**/admin/api/channels/preflight', (route) => route.fulfill({
+    contentType: 'application/json',
+    body: JSON.stringify({
+      ok: true,
+      models: [{
+        provider_model_id: 'deepseek-v4-flash',
+        display_name: 'DeepSeek V4 Flash',
+        capabilities: ['chat'],
+        baseline_price: { input: 2800, output: 9200, cache: 1400, currency: 'USD' },
+      }],
+    }),
+  }));
+  await page.getByPlaceholder('sk-...').fill(uniq('sk-e2e-highprec'));
+  await page.getByRole('button', { name: '检测连接与模型' }).click();
+  await expect(page.getByText(/检测成功 · 1/)).toBeVisible({ timeout: 15_000 });
+
+  // Baseline prices are prefilled at micro precision and pass native validation.
+  const priceFields = page.locator('.price-fields input[type="number"]');
+  await expect(priceFields.nth(0)).toHaveValue('0.0028');
+  await expect(priceFields.nth(1)).toHaveValue('0.0092');
+  await expect(priceFields.nth(2)).toHaveValue('0.0014');
+  for (const field of await priceFields.all()) {
+    await expect(field).toHaveAttribute('step', '0.000001');
+    expect(await field.evaluate((el) => (el as HTMLInputElement).checkValidity())).toBe(true);
+  }
+
+  // Negatives stay rejected; server-side validation is unchanged.
+  await priceFields.nth(0).fill('-1');
+  expect(await priceFields.nth(0).evaluate((el) => (el as HTMLInputElement).checkValidity())).toBe(false);
+  await priceFields.nth(0).fill('0.0028');
+
+  // The form must actually submit. Before the step fix the browser blocked it
+  // with a native "Please enter a valid value" error and no channel was created.
+  await page.getByRole('button', { name: /保存并导入.*1/ }).click();
+  const detail = page.locator('.channel-detail-modal');
+  await expect(detail.getByRole('heading', { name: 'DeepSeek' })).toBeVisible({ timeout: 15_000 });
+
+  // Leave the serial journey in the same state test 4 created: remove the
+  // channel this test just saved.
+  const channelsAfter = await page.request.get('/admin/api/channels').then((r) => r.json());
+  const created = channelsAfter.find((channel: any) => !channelsBefore.some((before: any) => before.id === channel.id));
+  expect(created).toBeTruthy();
+  await page.request.delete(`/admin/api/channels/${created.id}`);
+  await expect(page.getByRole('button', { name: /保存并导入.*/ })).toHaveCount(0);
+});
+
 test('5. create model card + add instance via UI', async ({ page, request }) => {
   await loginViaUi(page);
   await loginViaApi(request);

@@ -9,6 +9,8 @@
 - 测试规范统一为 L0 静态、L1 单元、L2 API、L3 UI、L4 可控系统集成、L5 SIT 和未来 L6 Agent
   视觉审查；新增稳定的快速、分层、本地发布、完整发布和部署后 Smoke 脚本。真实 Provider 与
   Token 消费归入显式 SIT，普通 E2E 即使存在本地 Key 也不会意外调用或产生费用。
+- 修复 Provider 高精度模型价格被浏览器原生表单校验阻止的问题：渠道预检、模型实例和系统价格库
+  统一支持整数 micros 数据模型对应的六位小数，并增加无需真实 Provider 的保存导入回归测试。
 - Management API 新增 Provider Presets 查询，Skill 创建已知供应商时携带 `preset_id`；服务端和
   Dashboard 对未标记的官方 Host 渠道进行保守的唯一身份识别，使 Agent 创建及历史渠道恢复品牌
   图标、名称本地化和 Provider 专属行为，同时保留协议 Path 自定义能力。

@@ -461,13 +461,13 @@ export default function Models() {
               </label>
               <div class="model-bind-fields">
                 <label>{t('models.inputPrice')}
-                  <input type="number" min="0" step="0.01" placeholder="-" value={instInputPrice()} onInput={(e) => setInstInputPrice(e.currentTarget.value)} />
+                  <input type="number" min="0" step="0.000001" placeholder="-" value={instInputPrice()} onInput={(e) => setInstInputPrice(e.currentTarget.value)} />
                 </label>
                 <label>{t('models.outputPrice')}
-                  <input type="number" min="0" step="0.01" placeholder="-" value={instOutputPrice()} onInput={(e) => setInstOutputPrice(e.currentTarget.value)} />
+                  <input type="number" min="0" step="0.000001" placeholder="-" value={instOutputPrice()} onInput={(e) => setInstOutputPrice(e.currentTarget.value)} />
                 </label>
                 <label>{t('models.cachePrice')}
-                  <input type="number" min="0" step="0.01" placeholder="-" value={instCachePrice()} onInput={(e) => setInstCachePrice(e.currentTarget.value)} />
+                  <input type="number" min="0" step="0.000001" placeholder="-" value={instCachePrice()} onInput={(e) => setInstCachePrice(e.currentTarget.value)} />
                 </label>
                 <label>{t('models.currency')}
                   <select value={instCurrency()} onChange={(e) => setInstCurrency(e.currentTarget.value as 'USD' | 'CNY')}>
@@ -490,13 +490,13 @@ export default function Models() {
             <div class="modal-title"><div><span class="eyebrow">{t('models.eyebrowPricing')}</span><h3>{t('models.pricing')}</h3><p>{target().instance.public_model_alias} · {target().card.unified_model_id}</p></div><button type="button" onClick={() => setEditInst(null)}>×</button></div>
             <div class="model-bind-fields">
               <label>{t('models.inputPrice')}
-                <input type="number" min="0" step="0.01" placeholder="-" value={editInstInput()} onInput={(e) => setEditInstInput(e.currentTarget.value)} />
+                <input type="number" min="0" step="0.000001" placeholder="-" value={editInstInput()} onInput={(e) => setEditInstInput(e.currentTarget.value)} />
               </label>
               <label>{t('models.outputPrice')}
-                <input type="number" min="0" step="0.01" placeholder="-" value={editInstOutput()} onInput={(e) => setEditInstOutput(e.currentTarget.value)} />
+                <input type="number" min="0" step="0.000001" placeholder="-" value={editInstOutput()} onInput={(e) => setEditInstOutput(e.currentTarget.value)} />
               </label>
               <label>{t('models.cachePrice')}
-                <input type="number" min="0" step="0.01" placeholder="-" value={editInstCache()} onInput={(e) => setEditInstCache(e.currentTarget.value)} />
+                <input type="number" min="0" step="0.000001" placeholder="-" value={editInstCache()} onInput={(e) => setEditInstCache(e.currentTarget.value)} />
               </label>
               <label>{t('models.currency')}
                 <select value={editInstCurrency()} onChange={(e) => setEditInstCurrency(e.currentTarget.value as 'USD' | 'CNY')}>

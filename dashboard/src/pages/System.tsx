@@ -552,9 +552,9 @@ export default function System() {
             return (
               <div class="price-library-row">
                 <span class="price-library-model"><strong>{row.display_name}</strong><code>{row.provider_model_id}</code></span>
-                <input type="number" min="0" step="0.01" value={draft().input} onInput={(e) => setDrafts((cur) => ({ ...cur, [row.provider_model_id]: { ...draft(), input: e.currentTarget.value } }))} />
-                <input type="number" min="0" step="0.01" value={draft().output} onInput={(e) => setDrafts((cur) => ({ ...cur, [row.provider_model_id]: { ...draft(), output: e.currentTarget.value } }))} />
-                <input type="number" min="0" step="0.01" value={draft().cache} onInput={(e) => setDrafts((cur) => ({ ...cur, [row.provider_model_id]: { ...draft(), cache: e.currentTarget.value } }))} />
+                <input type="number" min="0" step="0.000001" value={draft().input} onInput={(e) => setDrafts((cur) => ({ ...cur, [row.provider_model_id]: { ...draft(), input: e.currentTarget.value } }))} />
+                <input type="number" min="0" step="0.000001" value={draft().output} onInput={(e) => setDrafts((cur) => ({ ...cur, [row.provider_model_id]: { ...draft(), output: e.currentTarget.value } }))} />
+                <input type="number" min="0" step="0.000001" value={draft().cache} onInput={(e) => setDrafts((cur) => ({ ...cur, [row.provider_model_id]: { ...draft(), cache: e.currentTarget.value } }))} />
                 <select value={draft().currency} onChange={(e) => setDrafts((cur) => ({ ...cur, [row.provider_model_id]: { ...draft(), currency: e.currentTarget.value as 'USD' | 'CNY' } }))}>
                   <option value="USD">USD</option>
                   <option value="CNY">CNY</option>
