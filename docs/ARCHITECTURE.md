@@ -121,7 +121,11 @@ Analytics 趋势接口在 30 天保留期内返回完整时间桶（5 分钟粒�
 
 Gateway Key 以 `gw_` 开头，明文只在创建或重新生成时返回一次。数据面计算 SHA-256 后与
 D1 中的 hash 比较。短 prefix 只用于控制台辨认。`expires_at` 使用 Unix 秒存入 D1；数据面在
-执行 RPM 与每日预算检查前判断到期时间，过期请求返回 401，控制台也会将其排除出有效密钥计数。
+执行 RPM 与周期预算检查前判断到期时间，过期请求返回 401，控制台也会将其排除出有效密钥计数。
+请求与 Token 预算共用 `limit_period`，按 UTC 自然日、ISO 周（周一开始）、自然月或自然年重置。
+完成请求仍只写 `key_daily_usage` 一条日聚合；检查时利用 `(key_id, date)` 主键做当前周期范围
+SUM，不维护重复的周/月/年表。年度预算要求该台账至少保留 370 天，与 Analytics 默认 30 天
+保留期分离。
 
 首页快速调用是唯一的明文暂存例外：用户主动创建临时密钥后，服务端设置
 `is_temporary = 1` 并强制 `expires_at = now + 1h`，不接受续期、限额修改或重新生成。列表查询
@@ -216,11 +220,16 @@ usage 写入失败只记录脱敏错误，不修改已经返回的模型响应�
 | 无效 Gateway Key | 5 秒 | 共用 Key 容量 |
 | 成功模型路由 | 60 秒 | 200 |
 | 不存在/不可用模型 | 5 秒 | 共用路由容量 |
+| Key 周期预算快照 | 30 秒（可配置） | 5,000 |
 | DeepSeek 余额 | 5 分钟 | 200 |
 | 被动熔断状态 | 冷却 30 秒 | 500 |
 
-缓存不是权威存储，isolate 回收后自动回源 D1。Gateway Key 撤销跨 isolate 最长约 30 秒，
-渠道和模型变更最长约 60 秒收敛。全局即时失效或强一致限流需要新的共享状态设计。
+只有配置了请求或 Token 预算的 Key 才创建预算快照；每个 Key、每个 isolate 在刷新窗口内最多执行
+一次 D1 范围查询，冷缓存并发查询会合并，并把本 isolate 已完成请求追加到本地账本。其他 isolate
+在窗口内完成的用量要到下次刷新才可见，因此可能发生有界超额。缓存不是权威存储，isolate 回收后
+自动回源 D1。Gateway
+Key 撤销跨 isolate 最长约 30 秒，渠道和模型变更最长约 60 秒收敛。全局即时失效或强一致限流
+需要新的共享状态设计。
 
 ## 10. HTTP 与管理 API
 
@@ -289,6 +298,7 @@ Cloudflare 预算与 Free Tier 容量规划见 [DEPLOY](DEPLOY.md)。
 | `MAX_REQUEST_BYTES` | `2097152` | Gateway JSON 请求体上限 |
 | `MAX_CHANNEL_ATTEMPTS` | `3` | 单请求最多尝试渠道数 |
 | `UPSTREAM_HEADER_TIMEOUT_MS` | `30000` | 每候选等待响应头上限 |
+| `KEY_QUOTA_REFRESH_MS` | `30000` | 有限额 Key 每 isolate 刷新 D1 周期预算快照的间隔 |
 | `USAGE_RETENTION_DAYS` | `30` | 用量保留天数 |
 
 Secrets：`MASTER_KEY`、`INITIAL_ADMIN_PASSWORD`，以及仅用于旧部署迁移的 `ADMIN_TOKEN`。

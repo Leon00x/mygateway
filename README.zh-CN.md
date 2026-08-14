@@ -44,7 +44,7 @@ MyGateway Worker ── 鉴权与限额 ── 路由与 Fallback ── AI 供�
 | **网关接口** | OpenAI Chat、OpenAI Responses、Anthropic Messages 和模型发现接口 |
 | **供应商渠道** | 供应商预制、自定义端点、连接检测、模型发现和凭据加密 |
 | **模型与路由** | 统一模型 ID、直达别名、有序渠道实例、Fallback 和被动熔断 |
-| **API 密钥** | 到期时间、模型权限、RPM、每日请求限额和 Token 预算 |
+| **API 密钥** | 到期时间、模型权限、RPM，以及按日、周、月或年计算的请求 / Token 预算 |
 | **用量分析** | 请求与 Token 趋势、延迟、首 Token 延迟、成功率、预估费用和请求日志 |
 | **管理控制台** | 中英双语、明暗主题、渠道、模型、价格、密钥、日志和系统设置 |
 | **Agent 管理** | 独立只读/可写 Management Key，以及同源托管的 `/skill.md` |
@@ -109,7 +109,7 @@ Management Key 与模型调用使用的 Gateway Key 相互隔离，Management AP
 ## 当前边界
 
 - Fallback 只能发生在响应内容开始发送前；流式输出开始后不能切换供应商。
-- RPM 和熔断状态是 isolate 内尽力控制；每日请求和 Token 预算以 D1 为权威数据。
+- RPM 和熔断状态是 isolate 内尽力控制；日 / 周 / 月 / 年请求和 Token 预算以 D1 每日台账为权威数据。
 - Token 和费用依赖供应商上报，预估费用不等同于供应商账单。
 - 费用聚合目前没有币种维度，同一部署应统一使用一种记账币种。
 - 暂不支持 Embeddings、Images、Audio、Realtime、Batch、Files、多用户和 RBAC。

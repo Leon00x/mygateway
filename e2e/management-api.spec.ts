@@ -35,7 +35,7 @@ test.afterAll(async ({ request }) => {
 test('discovery is public while protected routes reject missing and wrong key types', async ({ request }) => {
   const hostedSkills = await request.get('/skills/index.json');
   expect(hostedSkills.status()).toBe(200);
-  expect(await hostedSkills.json()).toMatchObject({ skills: [{ name: 'mygateway-admin', version: '0.6.0', api_version: 'v1' }] });
+  expect(await hostedSkills.json()).toMatchObject({ skills: [{ name: 'mygateway-admin', version: '0.7.0', api_version: 'v1' }] });
   const hostedSkill = await request.get('/skill.md');
   expect(hostedSkill.status()).toBe(200);
   const hostedSkillText = await hostedSkill.text();
@@ -66,6 +66,8 @@ test('discovery is public while protected routes reject missing and wrong key ty
   expect(hostedSkillText).toContain('Do not recreate a known preset as an anonymous custom channel');
   expect(hostedSkillText).toContain('### Unified models — client-facing routing');
   expect(hostedSkillText).toContain('### Gateway Keys — client access');
+  expect(hostedSkillText).toContain('`request_limit` and `token_limit` use one `limit_period`');
+  expect(hostedSkillText).toContain('natural UTC calendar periods');
   expect(hostedSkillText).toContain('### Usage, logs, and balances — diagnostics');
   expect(hostedSkillText).toContain('Custom usage ranges use Unix-second `start` and `end`');
   expect(hostedSkillText).toContain('temporary keys cannot be renewed');
@@ -74,7 +76,7 @@ test('discovery is public while protected routes reject missing and wrong key ty
   const hostedManifest = await request.get('/skill.json');
   expect(hostedManifest.status()).toBe(200);
   expect(await hostedManifest.json()).toMatchObject({
-    version: '0.6.0',
+    version: '0.7.0',
     entry: 'SKILL.md',
     download_url: '/skill.md',
     manifest_url: '/skill.json',
@@ -94,6 +96,8 @@ test('discovery is public while protected routes reject missing and wrong key ty
   expect(openApi.paths['/models'].get['x-required-permission']).toBe('read');
   expect(openApi.paths['/models'].post['x-required-permission']).toBe('write');
   expect(openApi.paths['/channels'].post.requestBody.content['application/json'].schema.properties.api_key.writeOnly).toBe(true);
+  expect(openApi.components.schemas.GatewayKeyInput.properties.limit_period.enum).toEqual(['day', 'week', 'month', 'year']);
+  expect(openApi.components.schemas.GatewayKeyInput.properties.daily_token_limit.deprecated).toBe(true);
   expect(openApi.paths['/analytics/usage'].get.parameters.map((parameter: any) => parameter.name)).toEqual(
     expect.arrayContaining(['range', 'start', 'end', 'model_id', 'key_id', 'granularity']),
   );
@@ -219,11 +223,18 @@ test('write keys manage common resources without ever returning Provider Keys', 
   });
 
   const gatewayKey = await request.post('/management/v1/gateway-keys', {
-    headers, data: { name: `Agent-created ${run}` },
+    headers,
+    data: {
+      name: `Agent-created ${run}`,
+      request_limit: 500,
+      token_limit: 2_000_000,
+      limit_period: 'month',
+    },
   });
   expect(gatewayKey.status(), await gatewayKey.text()).toBe(201);
   const gatewayKeyBody = await gatewayKey.json();
   expect(gatewayKeyBody.key).toMatch(/^gw_/);
+  expect(gatewayKeyBody).toMatchObject({ request_limit: 500, token_limit: 2_000_000, limit_period: 'month' });
   const readyOverviewResponse = await request.get('/management/v1/overview', { headers });
   const readyOverviewText = await readyOverviewResponse.text();
   expect(JSON.parse(readyOverviewText)).toMatchObject({
@@ -235,7 +246,15 @@ test('write keys manage common resources without ever returning Provider Keys', 
   expect(readyOverviewText).not.toContain(gatewayKeyBody.key);
   expect(readyOverviewText).not.toContain(providerSecret);
   const gatewayKeyList = await request.get('/management/v1/gateway-keys', { headers });
-  expect(await gatewayKeyList.text()).not.toContain(gatewayKeyBody.key);
+  const gatewayKeyListText = await gatewayKeyList.text();
+  expect(gatewayKeyListText).not.toContain(gatewayKeyBody.key);
+  expect(JSON.parse(gatewayKeyListText)[0]).toMatchObject({
+    request_limit: 500,
+    token_limit: 2_000_000,
+    limit_period: 'month',
+    daily_request_limit: null,
+    daily_token_limit: null,
+  });
 
   expect((await request.get('/management/v1/balances', { headers })).status()).toBe(200);
   expect((await request.delete(`/management/v1/gateway-keys/${gatewayKeyBody.id}`, { headers })).status()).toBe(204);

@@ -32,6 +32,35 @@ export async function readKeyDailyUsage(
   };
 }
 
+/**
+ * Sum the daily authority rows for one half-open UTC calendar window.
+ * The `(key_id, date)` primary key makes this a bounded range scan.
+ */
+export async function readKeyPeriodUsage(
+  db: D1Database,
+  keyId: string,
+  startDate: string,
+  endDate: string,
+): Promise<KeyDailyUsage> {
+  const row = await db
+    .prepare(
+      `SELECT COALESCE(SUM(requests), 0) AS requests,
+              COALESCE(SUM(input_tokens), 0) AS input_tokens,
+              COALESCE(SUM(output_tokens), 0) AS output_tokens,
+              COALESCE(SUM(cost_micros), 0) AS cost_micros
+       FROM key_daily_usage
+       WHERE key_id = ? AND date >= ? AND date < ?`,
+    )
+    .bind(keyId, startDate, endDate)
+    .first<{ requests: number; input_tokens: number; output_tokens: number; cost_micros: number }>();
+  return {
+    requests: Number(row?.requests ?? 0),
+    inputTokens: Number(row?.input_tokens ?? 0),
+    outputTokens: Number(row?.output_tokens ?? 0),
+    costMicros: Number(row?.cost_micros ?? 0),
+  };
+}
+
 export async function upsertKeyDailyUsage(
   db: D1Database,
   keyId: string,

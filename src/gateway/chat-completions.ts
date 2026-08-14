@@ -13,7 +13,7 @@ import { decryptProviderKey } from '../crypto/provider-key.ts';
 import { SseDecoder, extractNonStreamUsage, Usage } from '../streaming/sse-decoder.ts';
 import { onceAsync } from '../streaming/once-async.ts';
 import { logEvent } from '../shared/log.ts';
-import { checkDailyQuota, checkRpm, configureKeyQuota, keyIsExpired } from './key-quota.ts';
+import { checkQuota, checkRpm, configureKeyQuota, keyIsExpired } from './key-quota.ts';
 import { recordRejectedRequest, recordRequestCompletion, type UsageRecordContext } from './usage-recorder.ts';
 import { readLogPolicy, type LogPolicy } from './log-policy.ts';
 import {
@@ -224,18 +224,19 @@ async function handleProtocolCompletion(
     )), { status: 429, headers: respHeaders }));
   }
 
-  // 2d. Daily budget (authoritative, D1)
-  const quota = await checkDailyQuota(env.DB, key);
+  // 2d. Natural-period budget (authoritative daily rows in D1, cached per isolate)
+  const quota = await checkQuota(env.DB, key);
   if (!quota.allowed) {
-    const isTokens = quota.reason === 'daily_tokens';
+    const isTokens = quota.reason === 'token_limit';
+    const period = ({ day: 'Daily', week: 'Weekly', month: 'Monthly', year: 'Yearly' } as const)[key.limitPeriod];
     ctx.waitUntil(recordRejectedRequest(env, {
       model: unifiedModelId, modelCardId, keyId: key.id, keyName: key.name, requestId, requestedProtocol,
     }, 'budget_exceeded', elapsedMs(requestStartedAt), logPolicy, quota.reason));
     return timed(gatewayErrorResponse(
       'budget_exceeded',
       isTokens
-        ? 'Daily token budget exceeded for this API key'
-        : 'Daily request budget exceeded for this API key',
+        ? `${period} token budget exceeded for this API key`
+        : `${period} request budget exceeded for this API key`,
       requestId,
     ));
   }

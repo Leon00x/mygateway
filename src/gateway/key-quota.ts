@@ -3,7 +3,8 @@
  *
  * - RPM is a per-isolate sliding-minute window (best effort, like the passive
  *   circuit breaker — losing isolate state is safe).
- * - Daily budgets are authoritative in D1 (key_daily_usage). To avoid a D1
+ * - Period budgets are authoritative in D1 (daily authority rows summed over
+ *   the current natural UTC day/week/month/year). To avoid a D1
  *   read on every request, each isolate keeps a small ledger per key: a D1
  *   base snapshot refreshed every `quotaRefreshMs` plus the requests this
  *   isolate completed since the snapshot (bumped by the usage recorder).
@@ -13,34 +14,37 @@
  */
 
 import { TtlLruCache } from '../cache/ttl-lru.ts';
-import { readKeyDailyUsage, utcDateString, type KeyDailyUsage } from '../db/requests.ts';
+import { readKeyPeriodUsage, type KeyDailyUsage } from '../db/requests.ts';
+import { quotaWindow } from '../shared/key-limits.ts';
 import type { GatewayKeyIdentity } from './access-resolver.ts';
 
 const RPM_WINDOW_MS = 70_000;
 const rpmWindow = new TtlLruCache<string, { minute: number; count: number }>(10_000);
 
 interface QuotaLedgerEntry {
-  date: string;
+  windowKey: string;
   base: KeyDailyUsage;
   local: KeyDailyUsage;
 }
 
 const quotaLedger = new TtlLruCache<string, QuotaLedgerEntry>(5_000);
-let quotaRefreshMs = 5_000;
+const quotaReads = new Map<string, Promise<KeyDailyUsage>>();
+let quotaRefreshMs = 30_000;
 
-export type QuotaReason = 'expired' | 'rpm' | 'daily_requests' | 'daily_tokens';
+export type QuotaReason = 'expired' | 'rpm' | 'request_limit' | 'token_limit';
 
 export type QuotaDecision = { allowed: true } | { allowed: false; reason: QuotaReason };
 
 /** Configure the D1 refresh interval (from KEY_QUOTA_REFRESH_MS). */
 export function configureKeyQuota(refreshMs: number): void {
-  quotaRefreshMs = refreshMs > 0 ? refreshMs : 5_000;
+  quotaRefreshMs = refreshMs > 0 ? refreshMs : 30_000;
 }
 
 /** Test-only reset of per-isolate quota state. */
 export function resetKeyQuota(): void {
   rpmWindow.clear();
   quotaLedger.clear();
+  quotaReads.clear();
 }
 
 /** Key expired (expires_at set and passed). */
@@ -94,32 +98,45 @@ export function bumpKeyQuotaLedger(keyId: string, delta: KeyDailyUsage): void {
 }
 
 /**
- * Authoritative daily budget check. Reads D1 at most once per refresh window
- * per key; between refreshes it adds the isolate's own completed requests.
+ * Authoritative period budget check. Limited keys read one indexed D1 range
+ * at most once per refresh window per isolate; between refreshes the isolate
+ * adds its own completed requests to the cached snapshot.
  */
-export async function checkDailyQuota(
+export async function checkQuota(
   db: D1Database,
   key: GatewayKeyIdentity,
-  date: string = utcDateString(),
+  nowMs: number = Date.now(),
 ): Promise<QuotaDecision> {
-  const hasRequestLimit = key.dailyRequestLimit !== null && key.dailyRequestLimit !== undefined;
-  const hasTokenLimit = key.dailyTokenLimit !== null && key.dailyTokenLimit !== undefined;
+  const hasRequestLimit = key.requestLimit !== null && key.requestLimit !== undefined;
+  const hasTokenLimit = key.tokenLimit !== null && key.tokenLimit !== undefined;
   if (!hasRequestLimit && !hasTokenLimit) return { allowed: true };
 
+  const window = quotaWindow(key.limitPeriod, nowMs);
+  const windowKey = `${window.period}:${window.startDate}:${window.endDate}`;
   let entry = quotaLedger.get(key.id);
-  if (!entry || entry.date !== date) {
-    const base = await readKeyDailyUsage(db, key.id, date);
-    entry = { date, base, local: emptyUsage() };
-    quotaLedger.set(key.id, entry, quotaRefreshMs + 10_000);
+  if (!entry || entry.windowKey !== windowKey) {
+    const readKey = `${key.id}:${windowKey}`;
+    let pending = quotaReads.get(readKey);
+    if (!pending) {
+      pending = readKeyPeriodUsage(db, key.id, window.startDate, window.endDate)
+        .finally(() => quotaReads.delete(readKey));
+      quotaReads.set(readKey, pending);
+    }
+    const base = await pending;
+    entry = quotaLedger.get(key.id);
+    if (!entry || entry.windowKey !== windowKey) {
+      entry = { windowKey, base, local: emptyUsage() };
+      quotaLedger.set(key.id, entry, quotaRefreshMs);
+    }
   }
 
   const usage = addUsage(entry.base, entry.local);
-  if (hasRequestLimit && usage.requests >= (key.dailyRequestLimit as number)) {
-    return { allowed: false, reason: 'daily_requests' };
+  if (hasRequestLimit && usage.requests >= (key.requestLimit as number)) {
+    return { allowed: false, reason: 'request_limit' };
   }
   const totalTokens = usage.inputTokens + usage.outputTokens;
-  if (hasTokenLimit && totalTokens >= (key.dailyTokenLimit as number)) {
-    return { allowed: false, reason: 'daily_tokens' };
+  if (hasTokenLimit && totalTokens >= (key.tokenLimit as number)) {
+    return { allowed: false, reason: 'token_limit' };
   }
   return { allowed: true };
 }

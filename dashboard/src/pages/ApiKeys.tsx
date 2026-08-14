@@ -10,24 +10,28 @@ interface ApiKey {
   status: string;
   created_at: number;
   rpm_limit: number | null;
-  daily_request_limit: number | null;
-  daily_token_limit: number | null;
+  request_limit: number | null;
+  token_limit: number | null;
+  limit_period: LimitPeriod;
   expires_at: number | null;
   model_allowlist: string[];
   is_temporary: boolean;
 }
 
+type LimitPeriod = 'day' | 'week' | 'month' | 'year';
+
 interface KeyForm {
   name: string;
   rpm: string;
-  dailyRequests: string;
-  dailyTokens: string;
+  requestLimit: string;
+  tokenLimit: string;
+  limitPeriod: LimitPeriod;
   expiresAt: string;
   allowlist: string;
 }
 
 const emptyForm = (): KeyForm => ({
-  name: '', rpm: '', dailyRequests: '', dailyTokens: '', expiresAt: '', allowlist: '',
+  name: '', rpm: '', requestLimit: '', tokenLimit: '', limitPeriod: 'day', expiresAt: '', allowlist: '',
 });
 
 const toDateTimeLocal = (timestampSeconds: number): string => {
@@ -47,8 +51,9 @@ const minExpiry = () => toDateTimeLocal(Math.floor(Date.now() / 1000) + 60);
 const fromKey = (key: ApiKey): KeyForm => ({
   name: key.name,
   rpm: key.rpm_limit ? String(key.rpm_limit) : '',
-  dailyRequests: key.daily_request_limit ? String(key.daily_request_limit) : '',
-  dailyTokens: key.daily_token_limit ? String(key.daily_token_limit) : '',
+  requestLimit: key.request_limit !== null ? String(key.request_limit) : '',
+  tokenLimit: key.token_limit !== null ? String(key.token_limit) : '',
+  limitPeriod: key.limit_period,
   expiresAt: key.expires_at ? toDateTimeLocal(key.expires_at) : '',
   allowlist: key.model_allowlist.join(', '),
 });
@@ -57,10 +62,11 @@ const intOrNull = (value: string) => (value.trim() === '' ? null : Number(value.
 
 function limitsSummary(key: ApiKey): string {
   const parts: string[] = [];
+  const period = t(`keys.period.${key.limit_period}`);
   if (key.is_temporary) parts.push(t('keys.temporaryOneHour'));
   if (key.rpm_limit) parts.push(`≤${key.rpm_limit} ${t('keys.perMinute')}`);
-  if (key.daily_request_limit) parts.push(`≤${key.daily_request_limit} ${t('keys.perDay')}`);
-  if (key.daily_token_limit) parts.push(`≤${(key.daily_token_limit / 1_000_000).toLocaleString()}M ${t('keys.tokensPerDay')}`);
+  if (key.request_limit !== null) parts.push(`≤${key.request_limit.toLocaleString()} ${t('keys.requests')}/${period}`);
+  if (key.token_limit !== null) parts.push(`≤${key.token_limit.toLocaleString()} Token/${period}`);
   if (key.model_allowlist.length) parts.push(`${key.model_allowlist.length} ${t('keys.models')}`);
   if (key.expires_at) parts.push(`${t('keys.expiresLabel')} ${new Date(key.expires_at * 1000).toLocaleString()}`);
   return parts.length ? parts.join(' · ') : t('keys.unlimited');
@@ -98,8 +104,9 @@ export default function ApiKeys() {
     const body = {
       name: form.name.trim(),
       rpm_limit: intOrNull(form.rpm),
-      daily_request_limit: intOrNull(form.dailyRequests),
-      daily_token_limit: intOrNull(form.dailyTokens),
+      request_limit: intOrNull(form.requestLimit),
+      token_limit: intOrNull(form.tokenLimit),
+      limit_period: form.limitPeriod,
       expires_at: expiresAt,
       model_allowlist: form.allowlist.split(',').map((s) => s.trim()).filter(Boolean),
     };
@@ -138,8 +145,9 @@ export default function ApiKeys() {
     const body = {
       name: form.name.trim() || key.name,
       rpm_limit: intOrNull(form.rpm),
-      daily_request_limit: intOrNull(form.dailyRequests),
-      daily_token_limit: intOrNull(form.dailyTokens),
+      request_limit: intOrNull(form.requestLimit),
+      token_limit: intOrNull(form.tokenLimit),
+      limit_period: form.limitPeriod,
       expires_at: expiresAt,
       model_allowlist: form.allowlist.split(',').map((s) => s.trim()).filter(Boolean),
     };
@@ -177,13 +185,23 @@ export default function ApiKeys() {
         <input type="number" min="0" placeholder="—" value={form().rpm}
           onInput={(e) => setForm({ ...form(), rpm: e.currentTarget.value })} />
       </label>
-      <label>{t('keys.dailyRequests')}
-        <input type="number" min="0" placeholder="—" value={form().dailyRequests}
-          onInput={(e) => setForm({ ...form(), dailyRequests: e.currentTarget.value })} />
+      <label>{t('keys.limitPeriod')}
+        <select value={form().limitPeriod}
+          onChange={(e) => setForm({ ...form(), limitPeriod: e.currentTarget.value as LimitPeriod })}>
+          <option value="day">{t('keys.period.day')}</option>
+          <option value="week">{t('keys.period.week')}</option>
+          <option value="month">{t('keys.period.month')}</option>
+          <option value="year">{t('keys.period.year')}</option>
+        </select>
+        <small>{t('keys.limitPeriodHint')}</small>
       </label>
-      <label>{t('keys.dailyTokens')}
-        <input type="number" min="0" placeholder="—" value={form().dailyTokens}
-          onInput={(e) => setForm({ ...form(), dailyTokens: e.currentTarget.value })} />
+      <label>{t('keys.requestLimit')}
+        <input type="number" min="0" placeholder="—" value={form().requestLimit}
+          onInput={(e) => setForm({ ...form(), requestLimit: e.currentTarget.value })} />
+      </label>
+      <label>{t('keys.tokenLimit')}
+        <input type="number" min="0" placeholder="—" value={form().tokenLimit}
+          onInput={(e) => setForm({ ...form(), tokenLimit: e.currentTarget.value })} />
       </label>
       <Show when={includeExpiry}><label>{t('keys.expires')}
           <input type="datetime-local" min={minExpiry()} value={form().expiresAt}

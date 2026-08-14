@@ -120,7 +120,8 @@ MyGateway stays lightweight by:
 
 - caching bounded hot configuration in isolate memory and batching cold D1 reads;
 - committing usage, key usage, and optional logs in one `waitUntil()` batch without delaying the model response;
-- skipping quota reads when a key has no daily budget;
+- skipping quota reads when a key has no period budget, while limited keys perform at most one indexed range
+  read per isolate every 30 seconds by default;
 - using one daily Cron only for retention cleanup, not provider polling or health checks;
 - keeping passive circuit breakers and RPM windows in isolate memory instead of KV or Durable Objects.
 

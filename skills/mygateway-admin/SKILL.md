@@ -258,8 +258,11 @@ Gateway Keys authenticate applications and SDKs calling `/v1/chat/completions`, 
 `/v1/messages`, and `/v1/models`. They are different from Management Keys and Provider Keys.
 
 Agents can create, list, update, disable, or delete Gateway Keys. Ask the owner about the key name, expiry,
-allowed unified models, RPM, daily request limit, and daily Token limit; unspecified limits remain unlimited.
-Plaintext is returned only once by create or regenerate, so show it once and do not log it.
+allowed unified models, RPM, request limit, Token limit, and the shared budget period; unspecified limits remain
+unlimited. `request_limit` and `token_limit` use one `limit_period`: `day`, `week`, `month`, or `year`. These are
+natural UTC calendar periods (weeks start Monday), not rolling windows. Use the generic fields for new writes;
+`daily_request_limit` and `daily_token_limit` are deprecated day-only compatibility aliases. Plaintext is returned
+only once by create or regenerate, so show it once and do not log it.
 
 Common routes:
 

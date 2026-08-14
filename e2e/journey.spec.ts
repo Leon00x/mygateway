@@ -324,6 +324,10 @@ test('6. create gateway key with expiration → plaintext shown once', async ({ 
   expect(Math.abs((nameBox!.y + nameBox!.height) - (expiryBox!.y + expiryBox!.height))).toBeLessThan(2);
   expect(Math.abs((nameBox!.y + nameBox!.height) - (createButtonBox!.y + createButtonBox!.height))).toBeLessThan(2);
   await expirySelect.selectOption('1');
+  await page.getByRole('button', { name: '限额设置' }).click();
+  await page.getByLabel('预算周期').selectOption('year');
+  await page.getByLabel('周期请求上限').fill('100');
+  await page.getByLabel('周期 Token 上限').fill('1000000');
   await page.getByRole('button', { name: /创建密钥/ }).click();
 
   const reveal = page.locator('.secret-reveal');
@@ -338,6 +342,9 @@ test('6. create gateway key with expiration → plaintext shown once', async ({ 
   const nowSeconds = Math.floor(Date.now() / 1000);
   expect(created.expires_at).toBeGreaterThan(nowSeconds + 86_300);
   expect(created.expires_at).toBeLessThanOrEqual(nowSeconds + 86_400);
+  expect(created).toMatchObject({ request_limit: 100, token_limit: 1_000_000, limit_period: 'year' });
+  await expect(page.locator('.key-row', { hasText: keyName })).toContainText('≤100 次/年');
+  await expect(page.locator('.key-row', { hasText: keyName })).toContainText('≤1,000,000 Token/年');
 
   const invalidExpiry = await page.request.post('/admin/api/keys', {
     data: { name: 'expired-e2e', expires_at: Math.floor(Date.now() / 1000) - 60 },
@@ -415,7 +422,13 @@ test('9. dashboard shows channel and model', async ({ page }) => {
   const listedKeys = await page.request.get('/admin/api/keys').then((response) => response.json());
   const temporary = listedKeys.find((key: any) => key.key_prefix === stored.key.slice(0, 11));
   const nowSeconds = Math.floor(Date.now() / 1000);
-  expect(temporary).toMatchObject({ is_temporary: true, rpm_limit: null, daily_request_limit: null, daily_token_limit: null });
+  expect(temporary).toMatchObject({
+    is_temporary: true,
+    rpm_limit: null,
+    request_limit: null,
+    token_limit: null,
+    limit_period: 'day',
+  });
   expect(temporary.expires_at).toBeGreaterThan(nowSeconds + 3_500);
   expect(temporary.expires_at).toBeLessThanOrEqual(nowSeconds + 3_600);
   expect((await page.request.put(`/admin/api/keys/${temporary.id}`, {

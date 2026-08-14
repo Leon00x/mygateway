@@ -20,6 +20,7 @@ import {
   toPublicKey,
 } from '../db/keys.ts';
 import { invalidateGatewayKeyCache } from '../gateway/access-resolver.ts';
+import { isLimitPeriod, type LimitPeriod } from '../shared/key-limits.ts';
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -35,6 +36,24 @@ function parseOptionalInt(value: unknown): number | null {
     throw new Error('Limit must be a non-negative integer');
   }
   return parsed;
+}
+
+function parseLimitPeriod(value: unknown): LimitPeriod {
+  if (!isLimitPeriod(value)) {
+    throw new Error('limit_period must be one of: day, week, month, year');
+  }
+  return value;
+}
+
+function resolveLimitValue(current: unknown, legacyDaily: unknown, field: string): number | null {
+  if (current !== undefined && legacyDaily !== undefined) {
+    const parsed = parseOptionalInt(current);
+    if (parsed !== parseOptionalInt(legacyDaily)) {
+      throw new Error(`${field} conflicts with its deprecated daily field`);
+    }
+    return parsed;
+  }
+  return parseOptionalInt(current !== undefined ? current : legacyDaily);
 }
 
 function parseOptionalExpiry(value: unknown): number | null {
@@ -80,6 +99,10 @@ export async function handleKeysCollection(
       const body = (await request.json()) as {
         name?: string;
         rpm_limit?: unknown;
+        request_limit?: unknown;
+        token_limit?: unknown;
+        limit_period?: unknown;
+        /** Deprecated aliases retained for API compatibility. */
         daily_request_limit?: unknown;
         daily_token_limit?: unknown;
         expires_at?: unknown;
@@ -95,6 +118,7 @@ export async function handleKeysCollection(
       const prefix = gatewayKeyPrefix(rawKey);
       const id = generateId();
       const isTemporary = body.temporary === true;
+      const limitPeriod = body.limit_period === undefined ? 'day' : parseLimitPeriod(body.limit_period);
 
       await createGatewayKey(env.DB, {
         id,
@@ -102,8 +126,9 @@ export async function handleKeysCollection(
         key_prefix: prefix,
         key_hash: keyHash,
         rpm_limit: isTemporary ? null : parseOptionalInt(body.rpm_limit),
-        daily_request_limit: isTemporary ? null : parseOptionalInt(body.daily_request_limit),
-        daily_token_limit: isTemporary ? null : parseOptionalInt(body.daily_token_limit),
+        request_limit: isTemporary ? null : resolveLimitValue(body.request_limit, body.daily_request_limit, 'request_limit'),
+        token_limit: isTemporary ? null : resolveLimitValue(body.token_limit, body.daily_token_limit, 'token_limit'),
+        limit_period: isTemporary ? 'day' : limitPeriod,
         expires_at: isTemporary ? Math.floor(Date.now() / 1000) + 3600 : parseOptionalExpiry(body.expires_at),
         model_allowlist: isTemporary ? null : serializeModelAllowlist(parseModelAllowlistInput(body.model_allowlist)),
         is_temporary: isTemporary,
@@ -139,6 +164,9 @@ export async function handleKeyItem(
         name?: string;
         status?: string;
         rpm_limit?: unknown;
+        request_limit?: unknown;
+        token_limit?: unknown;
+        limit_period?: unknown;
         daily_request_limit?: unknown;
         daily_token_limit?: unknown;
         expires_at?: unknown;
@@ -146,6 +174,9 @@ export async function handleKeyItem(
       };
       if (current.is_temporary === 1 && [
         body.rpm_limit,
+        body.request_limit,
+        body.token_limit,
+        body.limit_period,
         body.daily_request_limit,
         body.daily_token_limit,
         body.expires_at,
@@ -160,11 +191,17 @@ export async function handleKeyItem(
 
       const limitUpdates: Parameters<typeof updateGatewayKeyLimits>[2] = {};
       if (body.rpm_limit !== undefined) limitUpdates.rpm_limit = parseOptionalInt(body.rpm_limit);
-      if (body.daily_request_limit !== undefined) {
-        limitUpdates.daily_request_limit = parseOptionalInt(body.daily_request_limit);
+      if (body.request_limit !== undefined || body.daily_request_limit !== undefined) {
+        limitUpdates.request_limit = resolveLimitValue(body.request_limit, body.daily_request_limit, 'request_limit');
       }
-      if (body.daily_token_limit !== undefined) {
-        limitUpdates.daily_token_limit = parseOptionalInt(body.daily_token_limit);
+      if (body.token_limit !== undefined || body.daily_token_limit !== undefined) {
+        limitUpdates.token_limit = resolveLimitValue(body.token_limit, body.daily_token_limit, 'token_limit');
+      }
+      if (body.limit_period !== undefined) {
+        limitUpdates.limit_period = parseLimitPeriod(body.limit_period);
+      } else if (body.daily_request_limit !== undefined || body.daily_token_limit !== undefined) {
+        // A legacy caller explicitly setting a daily field keeps daily semantics.
+        limitUpdates.limit_period = 'day';
       }
       if (body.expires_at !== undefined) limitUpdates.expires_at = parseOptionalExpiry(body.expires_at);
       if (body.model_allowlist !== undefined) {
@@ -225,18 +262,27 @@ export async function handleKeyRegenerate(
     // Revoke old key
     await revokeGatewayKey(env.DB, id);
 
-    // Create new key with same name
-    const name = current.name;
-
     const rawKey = generateGatewayKeyValue();
     const keyHash = await hashGatewayKey(rawKey);
     const prefix = gatewayKeyPrefix(rawKey);
     const newId = generateId();
 
-    await createGatewayKey(env.DB, { id: newId, name, key_prefix: prefix, key_hash: keyHash });
+    await createGatewayKey(env.DB, {
+      id: newId,
+      name: current.name,
+      key_prefix: prefix,
+      key_hash: keyHash,
+      rpm_limit: current.rpm_limit,
+      request_limit: current.request_limit === undefined ? current.daily_request_limit : current.request_limit,
+      token_limit: current.token_limit === undefined ? current.daily_token_limit : current.token_limit,
+      limit_period: current.limit_period ?? 'day',
+      expires_at: current.expires_at,
+      model_allowlist: current.model_allowlist,
+    });
     invalidateGatewayKeyCache();
 
-    return json({ id: newId, name, key_prefix: prefix, key: rawKey, status: 'active' }, 201);
+    const created = await getGatewayKey(env.DB, newId);
+    return json({ ...toPublicKey(created!), key: rawKey }, 201);
   } catch (e) {
     return gatewayErrorResponse('invalid_request', (e as Error).message, requestId);
   }

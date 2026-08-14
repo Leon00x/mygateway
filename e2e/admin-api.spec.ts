@@ -233,6 +233,22 @@ test('model import: validates inventory, stays idempotent, and rejects oversized
 
 test('gateway HTTP: enforces key state, allowlist, model availability, and protocol availability', async ({ request }) => {
   await loginViaApi(request);
+  const legacyLimitResponse = await request.post('/admin/api/keys', {
+    data: { name: uniq('legacy-daily'), daily_request_limit: 12, daily_token_limit: 34 },
+  });
+  expect(legacyLimitResponse.status()).toBe(201);
+  const legacyLimitKey = await legacyLimitResponse.json();
+  expect(legacyLimitKey).toMatchObject({
+    request_limit: 12,
+    token_limit: 34,
+    limit_period: 'day',
+    daily_request_limit: 12,
+    daily_token_limit: 34,
+  });
+  expect((await request.post('/admin/api/keys', {
+    data: { name: uniq('invalid-period'), token_limit: 10, limit_period: 'rolling' },
+  })).status()).toBe(400);
+
   const chatBase = `https://chat-only-${run}.example/v1`;
   const chatChannel = await createChannel(request, 'Chat only', chatBase, 'chat-only-key');
   const routedModelId = `chat-only-model-${run}`;
@@ -240,6 +256,18 @@ test('gateway HTTP: enforces key state, allowlist, model availability, and proto
     data: { unified_model_id: routedModelId, display_name: 'Chat only model', channel_id: chatChannel.id, channel_model_id: 'upstream-chat' },
   }).then((response) => response.json());
   expect(routedCard.instances).toHaveLength(1);
+
+  const monthlyBudgetKey = await request.post('/admin/api/keys', {
+    data: { name: uniq('monthly-budget'), request_limit: 0, token_limit: 1_000, limit_period: 'month' },
+  }).then((response) => response.json());
+  const monthlyBudgetCall = await request.post('/v1/chat/completions', {
+    headers: { Authorization: `Bearer ${monthlyBudgetKey.key}` },
+    data: { model: routedModelId, messages: [{ role: 'user', content: 'hi' }] },
+  });
+  expect(monthlyBudgetCall.status()).toBe(403);
+  expect(await monthlyBudgetCall.json()).toMatchObject({
+    error: { code: 'budget_exceeded', message: 'Monthly request budget exceeded for this API key' },
+  });
 
   const restrictedResponse = await request.post('/admin/api/keys', {
     data: { name: uniq('restricted'), model_allowlist: ['another-model'] },

@@ -44,7 +44,7 @@ MyGateway Worker ── authentication & limits ── routing & fallback ──
 | **Gateway** | OpenAI Chat, OpenAI Responses, Anthropic Messages, and model discovery endpoints |
 | **Providers** | Provider presets, custom endpoints, connection checks, model discovery, and encrypted credentials |
 | **Models & routing** | Unified model IDs, direct aliases, ordered provider instances, fallback, and passive circuit breaking |
-| **API keys** | Expiration, model access, RPM limits, daily request limits, and Token budgets |
+| **API keys** | Expiration, model access, RPM, and request/Token budgets by day, week, month, or year |
 | **Analytics** | Request and Token trends, latency, time to first token, success rate, estimated cost, and request logs |
 | **Console** | Bilingual interface, light/dark themes, channel and model management, pricing, keys, logs, and settings |
 | **Agent management** | Separate read/write Management Keys and a self-hosted `/skill.md` management Skill |

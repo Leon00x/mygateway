@@ -246,7 +246,10 @@ function openApiDocument(env: Env) {
         GatewayKeyInput: {
           type: 'object', required: ['name'], properties: {
             name: { type: 'string' }, rpm_limit: { type: ['integer', 'null'], minimum: 0 },
-            daily_request_limit: { type: ['integer', 'null'], minimum: 0 }, daily_token_limit: { type: ['integer', 'null'], minimum: 0 },
+            request_limit: { type: ['integer', 'null'], minimum: 0 }, token_limit: { type: ['integer', 'null'], minimum: 0 },
+            limit_period: { type: 'string', enum: ['day', 'week', 'month', 'year'], default: 'day', description: 'Natural UTC budget period shared by request_limit and token_limit.' },
+            daily_request_limit: { type: ['integer', 'null'], minimum: 0, deprecated: true },
+            daily_token_limit: { type: ['integer', 'null'], minimum: 0, deprecated: true },
             expires_at: { type: ['integer', 'null'], description: 'Future Unix seconds; null means permanent.' },
             model_allowlist: { type: 'array', items: { type: 'string' } }, temporary: { type: 'boolean', default: false },
           },
@@ -255,6 +258,8 @@ function openApiDocument(env: Env) {
           type: 'object', description: 'Plaintext key is absent from list/update responses.',
           properties: {
             id: { type: 'string' }, name: { type: 'string' }, key_prefix: { type: 'string' }, status: { type: 'string' },
+            rpm_limit: { type: ['integer', 'null'] }, request_limit: { type: ['integer', 'null'] },
+            token_limit: { type: ['integer', 'null'] }, limit_period: { type: 'string', enum: ['day', 'week', 'month', 'year'] },
             expires_at: { type: ['integer', 'null'] }, model_allowlist: { type: 'array', items: { type: 'string' } },
             is_temporary: { type: ['boolean', 'integer'] },
           }, additionalProperties: true,
@@ -263,8 +268,11 @@ function openApiDocument(env: Env) {
           type: 'object', minProperties: 1, properties: {
             name: { type: 'string' }, status: { type: 'string', enum: ['active', 'disabled'] },
             rpm_limit: { type: ['integer', 'null'], minimum: 0 },
-            daily_request_limit: { type: ['integer', 'null'], minimum: 0 },
-            daily_token_limit: { type: ['integer', 'null'], minimum: 0 },
+            request_limit: { type: ['integer', 'null'], minimum: 0 },
+            token_limit: { type: ['integer', 'null'], minimum: 0 },
+            limit_period: { type: 'string', enum: ['day', 'week', 'month', 'year'] },
+            daily_request_limit: { type: ['integer', 'null'], minimum: 0, deprecated: true },
+            daily_token_limit: { type: ['integer', 'null'], minimum: 0, deprecated: true },
             expires_at: { type: ['integer', 'null'], description: 'Future Unix seconds; null means permanent.' },
             model_allowlist: { type: 'array', items: { type: 'string' } },
           },

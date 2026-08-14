@@ -1,5 +1,6 @@
 import { TtlLruCache } from '../cache/ttl-lru.ts';
 import { hydrateCandidate, type CandidateQueryRow, type CandidateRow } from '../db/models.ts';
+import type { LimitPeriod } from '../shared/key-limits.ts';
 
 const ACTIVE_KEY_TTL_MS = 30_000;
 const INACTIVE_KEY_TTL_MS = 5_000;
@@ -13,8 +14,9 @@ export interface GatewayKeyIdentity {
   id: string;
   name: string;
   rpmLimit: number | null;
-  dailyRequestLimit: number | null;
-  dailyTokenLimit: number | null;
+  requestLimit: number | null;
+  tokenLimit: number | null;
+  limitPeriod: LimitPeriod;
   expiresAt: number | null;
   modelAllowlist: string[];
 }
@@ -59,7 +61,7 @@ interface RouteQueryRow extends Partial<CandidateQueryRow> {
 }
 
 const KEY_QUERY = `
-  SELECT id, name, rpm_limit, daily_request_limit, daily_token_limit, expires_at, model_allowlist
+  SELECT id, name, rpm_limit, request_limit, token_limit, limit_period, expires_at, model_allowlist
   FROM gateway_api_keys
   WHERE key_hash = ? AND status = 'active' AND revoked_at IS NULL
   LIMIT 1
@@ -114,8 +116,9 @@ const ROUTE_QUERY = `
 function readKeyResult(rows: unknown[]): CachedGatewayKey {
   const row = rows[0] as (GatewayKeyIdentity & {
     rpm_limit: number | null;
-    daily_request_limit: number | null;
-    daily_token_limit: number | null;
+    request_limit: number | null;
+    token_limit: number | null;
+    limit_period: LimitPeriod | null;
     expires_at: number | null;
     model_allowlist: string | null;
   }) | undefined;
@@ -126,8 +129,9 @@ function readKeyResult(rows: unknown[]): CachedGatewayKey {
       id: row.id,
       name: row.name,
       rpmLimit: row.rpm_limit ?? null,
-      dailyRequestLimit: row.daily_request_limit ?? null,
-      dailyTokenLimit: row.daily_token_limit ?? null,
+      requestLimit: row.request_limit ?? null,
+      tokenLimit: row.token_limit ?? null,
+      limitPeriod: row.limit_period ?? 'day',
       expiresAt: row.expires_at ?? null,
       modelAllowlist: parseAllowlist(row.model_allowlist),
     },

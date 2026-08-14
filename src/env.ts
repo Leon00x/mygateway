@@ -36,8 +36,8 @@ export interface Env {
   USAGE_RETENTION_DAYS?: string;
 
   /**
-   * How often a key's daily quota re-reads D1, in ms. Between refreshes the
-   * isolate adds its own completed requests locally. Default: 5000
+   * How often a key's period quota re-reads D1, in ms. Between refreshes the
+   * isolate adds its own completed requests locally. Default: 30000
    */
   KEY_QUOTA_REFRESH_MS?: string;
 }
@@ -60,7 +60,7 @@ const DEFAULTS = {
   maxChannelAttempts: 3,
   upstreamHeaderTimeoutMs: 30_000,
   usageRetentionDays: 30,
-  keyQuotaRefreshMs: 5_000,
+  keyQuotaRefreshMs: 30_000,
 } as const;
 
 /**

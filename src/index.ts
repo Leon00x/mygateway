@@ -87,7 +87,10 @@ export default {
     const deletedRows = await cleanupOldUsage(env.DB, config.usageRetentionDays);
     const deletedAnalytics = await cleanupAnalytics(env.DB, config.usageRetentionDays);
     const deletedLogs = await cleanupRequestLogs(env.DB, settings.requestLogRetentionDays);
-    const deletedKeyUsage = await cleanupKeyDailyUsage(env.DB, config.usageRetentionDays);
+    // Calendar-year budgets need the full current year even when Analytics
+    // retention remains at its Free-Tier-friendly 30-day default.
+    const keyUsageRetentionDays = Math.max(config.usageRetentionDays, 370);
+    const deletedKeyUsage = await cleanupKeyDailyUsage(env.DB, keyUsageRetentionDays);
     const deletedContext = await cleanupContext(env.DB, settings.contextRetentionHours);
     const deletedManagementAudit = await cleanupManagementAudit(env.DB, config.usageRetentionDays);
 
@@ -102,6 +105,7 @@ export default {
       deleted_management_audit: deletedManagementAudit,
       retention_days: config.usageRetentionDays,
       request_log_retention_days: settings.requestLogRetentionDays,
+      key_usage_retention_days: keyUsageRetentionDays,
       context_retention_hours: settings.contextRetentionHours,
     });
   },

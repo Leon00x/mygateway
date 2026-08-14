@@ -1,20 +1,23 @@
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { computeCostMicros, formatUsdMicros } from '../src/shared/cost.ts';
-import { checkDailyQuota, checkRpm, configureKeyQuota, keyIsExpired, resetKeyQuota } from '../src/gateway/key-quota.ts';
+import { checkQuota, checkRpm, configureKeyQuota, keyIsExpired, resetKeyQuota } from '../src/gateway/key-quota.ts';
 import type { GatewayKeyIdentity } from '../src/gateway/access-resolver.ts';
+import { quotaWindow } from '../src/shared/key-limits.ts';
 import {
   cleanupExpiredTemporaryGatewayKeys,
   listGatewayKeys,
   parseModelAllowlist,
   serializeModelAllowlist,
+  toPublicKey,
 } from '../src/db/keys.ts';
 
 const key = (overrides: Partial<GatewayKeyIdentity> = {}): GatewayKeyIdentity => ({
   id: 'key-1',
   name: 'default',
   rpmLimit: null,
-  dailyRequestLimit: null,
-  dailyTokenLimit: null,
+  requestLimit: null,
+  tokenLimit: null,
+  limitPeriod: 'day',
   expiresAt: null,
   modelAllowlist: [],
   ...overrides,
@@ -43,6 +46,8 @@ describe('cost math', () => {
 });
 
 describe('key quota', () => {
+  const now = Date.UTC(2026, 7, 5, 12);
+
   beforeEach(() => {
     resetKeyQuota();
     configureKeyQuota(5_000);
@@ -66,38 +71,53 @@ describe('key quota', () => {
     expect(checkRpm('unlimited-key', null)).toBe(true);
   });
 
-  test('daily quota reads D1 and blocks at the configured limits', async () => {
+  test('natural UTC windows cover day, ISO week, month, and year boundaries', () => {
+    expect(quotaWindow('day', now)).toEqual({ period: 'day', startDate: '2026-08-05', endDate: '2026-08-06' });
+    expect(quotaWindow('week', now)).toEqual({ period: 'week', startDate: '2026-08-03', endDate: '2026-08-10' });
+    expect(quotaWindow('month', now)).toEqual({ period: 'month', startDate: '2026-08-01', endDate: '2026-09-01' });
+    expect(quotaWindow('year', now)).toEqual({ period: 'year', startDate: '2026-01-01', endDate: '2027-01-01' });
+  });
+
+  test('period quota reads one indexed D1 range and blocks at configured limits', async () => {
     const usage: Record<string, unknown> = {};
+    let statement = '';
+    let bindings: unknown[] = [];
     const db = {
-      prepare: (sql: string) => ({
-        bind: (...params: unknown[]) => ({
-          first: async () => {
-            return usage[`${params[0]}:${params[1]}`] ?? null;
+      prepare: (sql: string) => {
+        statement = sql;
+        return {
+          bind: (...params: unknown[]) => {
+            bindings = params;
+            return {
+              first: async () => usage[`${params[0]}:${params[1]}:${params[2]}`] ?? null,
+              all: async () => ({ results: [] }),
+              run: async () => ({ meta: { changes: 1 } }),
+            };
           },
-          all: async () => ({ results: [] }),
-          run: async () => ({ meta: { changes: 1 } }),
-        }),
-      }),
+        };
+      },
     } as unknown as D1Database;
 
-    const blocked = await checkDailyQuota(db, key({
-      id: 'limited', dailyRequestLimit: 1,
-    }), '2026-08-05');
+    const blocked = await checkQuota(db, key({
+      id: 'limited', requestLimit: 1, limitPeriod: 'week',
+    }), now);
     expect(blocked).toEqual({ allowed: true });
+    expect(statement).toContain('WHERE key_id = ? AND date >= ? AND date < ?');
+    expect(bindings).toEqual(['limited', '2026-08-03', '2026-08-10']);
 
-    usage['limited:2026-08-05'] = { requests: 1, input_tokens: 0, output_tokens: 0, cost_micros: 0 };
+    usage['limited:2026-08-03:2026-08-10'] = { requests: 1, input_tokens: 0, output_tokens: 0, cost_micros: 0 };
     resetKeyQuota(); // simulate the refresh window elapsing → re-read D1
-    const blocked2 = await checkDailyQuota(db, key({
-      id: 'limited', dailyRequestLimit: 1,
-    }), '2026-08-05');
-    expect(blocked2).toEqual({ allowed: false, reason: 'daily_requests' });
+    const blocked2 = await checkQuota(db, key({
+      id: 'limited', requestLimit: 1, limitPeriod: 'week',
+    }), now);
+    expect(blocked2).toEqual({ allowed: false, reason: 'request_limit' });
 
-    usage['tokens:2026-08-05'] = { requests: 0, input_tokens: 1_000, output_tokens: 500, cost_micros: 0 };
+    usage['tokens:2026-01-01:2027-01-01'] = { requests: 0, input_tokens: 1_000, output_tokens: 500, cost_micros: 0 };
     resetKeyQuota();
-    const tokenBlocked = await checkDailyQuota(db, key({
-      id: 'tokens', dailyTokenLimit: 1_000,
-    }), '2026-08-05');
-    expect(tokenBlocked).toEqual({ allowed: false, reason: 'daily_tokens' });
+    const tokenBlocked = await checkQuota(db, key({
+      id: 'tokens', tokenLimit: 1_000, limitPeriod: 'year',
+    }), now);
+    expect(tokenBlocked).toEqual({ allowed: false, reason: 'token_limit' });
   });
 
   test('ledger reuses the D1 snapshot and counts local bumps between refreshes', async () => {
@@ -117,20 +137,38 @@ describe('key quota', () => {
     } as unknown as D1Database;
     const { bumpKeyQuotaLedger } = await import('../src/gateway/key-quota.ts');
 
-    const identity = key({ id: 'busy', dailyRequestLimit: 3 });
-    expect(await checkDailyQuota(db, identity, '2026-08-05')).toEqual({ allowed: true });
+    const identity = key({ id: 'busy', requestLimit: 3 });
+    expect(await checkQuota(db, identity, now)).toEqual({ allowed: true });
     expect(reads).toBe(1);
 
     // Completed requests bump the local ledger — no extra D1 reads.
     bumpKeyQuotaLedger('busy', { requests: 1, inputTokens: 0, outputTokens: 0, costMicros: 0 });
     bumpKeyQuotaLedger('busy', { requests: 1, inputTokens: 0, outputTokens: 0, costMicros: 0 });
-    expect(await checkDailyQuota(db, identity, '2026-08-05')).toEqual({ allowed: true }); // 2 < 3
+    expect(await checkQuota(db, identity, now)).toEqual({ allowed: true }); // 2 < 3
     bumpKeyQuotaLedger('busy', { requests: 1, inputTokens: 0, outputTokens: 0, costMicros: 0 });
-    expect(await checkDailyQuota(db, identity, '2026-08-05')).toEqual({ allowed: false, reason: 'daily_requests' }); // 3 >= 3
+    expect(await checkQuota(db, identity, now)).toEqual({ allowed: false, reason: 'request_limit' }); // 3 >= 3
     expect(reads).toBe(1); // still the single D1 read
   });
 
-  test('daily quota skips the D1 read when no limits are set', async () => {
+  test('coalesces concurrent cold-cache checks into one D1 read', async () => {
+    let reads = 0;
+    const db = {
+      prepare: () => ({
+        bind: () => ({
+          first: async () => {
+            reads++;
+            await Promise.resolve();
+            return { requests: 0, input_tokens: 0, output_tokens: 0, cost_micros: 0 };
+          },
+        }),
+      }),
+    } as unknown as D1Database;
+    const identity = key({ id: 'concurrent', tokenLimit: 1_000, limitPeriod: 'month' });
+    await Promise.all([checkQuota(db, identity, now), checkQuota(db, identity, now)]);
+    expect(reads).toBe(1);
+  });
+
+  test('period quota skips the D1 read when no limits are set', async () => {
     let reads = 0;
     const db = {
       prepare: () => ({
@@ -141,7 +179,7 @@ describe('key quota', () => {
         }),
       }),
     } as unknown as D1Database;
-    const decision = await checkDailyQuota(db, key(), '2026-08-05');
+    const decision = await checkQuota(db, key(), now);
     expect(decision).toEqual({ allowed: true });
     expect(reads).toBe(0);
   });
@@ -159,6 +197,21 @@ describe('model allowlist parsing', () => {
     expect(serializeModelAllowlist(undefined)).toBeNull();
     expect(parseModelAllowlist(null)).toEqual([]);
     expect(parseModelAllowlist('not-json')).toEqual([]);
+  });
+});
+
+test('an explicitly cleared migrated budget does not fall back to stale legacy values', () => {
+  const publicKey = toPublicKey({
+    id: 'cleared', name: 'cleared', key_prefix: 'gw_clear', key_hash: 'hash', status: 'active',
+    rpm_limit: null, request_limit: null, token_limit: null, limit_period: 'day',
+    daily_request_limit: 100, daily_token_limit: 1_000, expires_at: null, model_allowlist: null,
+    created_at: 1, updated_at: 1, revoked_at: null, is_temporary: 0,
+  });
+  expect(publicKey).toMatchObject({
+    request_limit: null,
+    token_limit: null,
+    daily_request_limit: null,
+    daily_token_limit: null,
   });
 });
 

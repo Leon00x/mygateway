@@ -2,6 +2,8 @@
  * Gateway API Key database operations, including virtual-key limits.
  */
 
+import type { LimitPeriod } from '../shared/key-limits.ts';
+
 export interface GatewayKeyRow {
   id: string;
   name: string;
@@ -11,6 +13,9 @@ export interface GatewayKeyRow {
   rpm_limit: number | null;
   daily_request_limit: number | null;
   daily_token_limit: number | null;
+  request_limit: number | null;
+  token_limit: number | null;
+  limit_period: LimitPeriod;
   expires_at: number | null;
   model_allowlist: string | null;
   created_at: number;
@@ -21,8 +26,9 @@ export interface GatewayKeyRow {
 
 export interface GatewayKeyLimits {
   rpmLimit: number | null;
-  dailyRequestLimit: number | null;
-  dailyTokenLimit: number | null;
+  requestLimit: number | null;
+  tokenLimit: number | null;
+  limitPeriod: LimitPeriod;
   expiresAt: number | null;
   modelAllowlist: string[];
 }
@@ -34,7 +40,12 @@ export interface GatewayKeyPublic {
   key_prefix: string;
   status: 'active' | 'disabled';
   rpm_limit: number | null;
+  request_limit: number | null;
+  token_limit: number | null;
+  limit_period: LimitPeriod;
+  /** @deprecated Use request_limit with limit_period='day'. */
   daily_request_limit: number | null;
+  /** @deprecated Use token_limit with limit_period='day'. */
   daily_token_limit: number | null;
   expires_at: number | null;
   model_allowlist: string[];
@@ -44,14 +55,20 @@ export interface GatewayKeyPublic {
 }
 
 export function toPublicKey(row: GatewayKeyRow): GatewayKeyPublic {
+  const requestLimit = row.request_limit === undefined ? row.daily_request_limit ?? null : row.request_limit;
+  const tokenLimit = row.token_limit === undefined ? row.daily_token_limit ?? null : row.token_limit;
+  const limitPeriod = row.limit_period ?? 'day';
   return {
     id: row.id,
     name: row.name,
     key_prefix: row.key_prefix,
     status: row.status,
     rpm_limit: row.rpm_limit,
-    daily_request_limit: row.daily_request_limit,
-    daily_token_limit: row.daily_token_limit,
+    request_limit: requestLimit,
+    token_limit: tokenLimit,
+    limit_period: limitPeriod,
+    daily_request_limit: limitPeriod === 'day' ? requestLimit : null,
+    daily_token_limit: limitPeriod === 'day' ? tokenLimit : null,
     expires_at: row.expires_at,
     model_allowlist: parseModelAllowlist(row.model_allowlist),
     created_at: row.created_at,
@@ -95,8 +112,9 @@ export async function createGatewayKey(
     key_prefix: string;
     key_hash: string;
     rpm_limit?: number | null;
-    daily_request_limit?: number | null;
-    daily_token_limit?: number | null;
+    request_limit?: number | null;
+    token_limit?: number | null;
+    limit_period?: LimitPeriod;
     expires_at?: number | null;
     model_allowlist?: string | null;
     is_temporary?: boolean;
@@ -105,9 +123,9 @@ export async function createGatewayKey(
   await db
     .prepare(
       `INSERT INTO gateway_api_keys
-        (id, name, key_prefix, key_hash, rpm_limit, daily_request_limit, daily_token_limit,
+        (id, name, key_prefix, key_hash, rpm_limit, request_limit, token_limit, limit_period,
          expires_at, model_allowlist, is_temporary)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       key.id,
@@ -115,8 +133,9 @@ export async function createGatewayKey(
       key.key_prefix,
       key.key_hash,
       key.rpm_limit ?? null,
-      key.daily_request_limit ?? null,
-      key.daily_token_limit ?? null,
+      key.request_limit ?? null,
+      key.token_limit ?? null,
+      key.limit_period ?? 'day',
       key.expires_at ?? null,
       key.model_allowlist ?? null,
       key.is_temporary ? 1 : 0,
@@ -167,8 +186,9 @@ export async function updateGatewayKeyLimits(
   id: string,
   limits: {
     rpm_limit?: number | null;
-    daily_request_limit?: number | null;
-    daily_token_limit?: number | null;
+    request_limit?: number | null;
+    token_limit?: number | null;
+    limit_period?: LimitPeriod;
     expires_at?: number | null;
     model_allowlist?: string | null;
   },
@@ -181,13 +201,17 @@ export async function updateGatewayKeyLimits(
     fields.push('rpm_limit = ?');
     values.push(limits.rpm_limit);
   }
-  if (limits.daily_request_limit !== undefined) {
-    fields.push('daily_request_limit = ?');
-    values.push(limits.daily_request_limit);
+  if (limits.request_limit !== undefined) {
+    fields.push('request_limit = ?');
+    values.push(limits.request_limit);
   }
-  if (limits.daily_token_limit !== undefined) {
-    fields.push('daily_token_limit = ?');
-    values.push(limits.daily_token_limit);
+  if (limits.token_limit !== undefined) {
+    fields.push('token_limit = ?');
+    values.push(limits.token_limit);
+  }
+  if (limits.limit_period !== undefined) {
+    fields.push('limit_period = ?');
+    values.push(limits.limit_period);
   }
   if (limits.expires_at !== undefined) {
     fields.push('expires_at = ?');

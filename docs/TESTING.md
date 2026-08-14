@@ -77,7 +77,7 @@ Bug 修复必须在最低有效层增加回归用例。跨层缺陷可以增加�
 | `access-resolver.test.ts` | Key 与模型冷请求 batch、缓存状态 |
 | `provider-balance-cache.test.ts` | 强制刷新、五分钟缓存、失效竞态和概览回读 |
 | `deepseek-balance.test.ts` | 官方 host、金额精度、鉴权和错误清理 |
-| `key-quota.test.ts` | 密钥到期、RPM 窗口、每日预算台账与成本计算 |
+| `key-quota.test.ts` | 密钥到期、RPM 窗口、日 / 周 / 月 / 年预算边界、台账缓存与成本计算 |
 | `log-policy.test.ts` | 日志总开关、级别策略、合并 batch、TTFT 与上下文写入矩阵 |
 | `fallback-policy.test.ts` | HTTP / Provider 错误分类 |
 | `model-discovery.test.ts` | OpenAI / Gemini / Anthropic 模型列表、分页和 ID 规范化 |
@@ -152,7 +152,8 @@ E2E 会创建、修改和删除渠道、模型与 Gateway Key。不要指向包�
    降级保存、完成动效、自动余额查询、手工库存、勾选导入、批量摘要和竖向渠道卡片；并通过
    Admin API 验证相同供应商 + Provider Key 再次创建返回 `409 resource_in_use` 且不会重复导入；
 5. 通过模态表单创建统一模型和渠道实例，并验证同一模型重复绑定相同渠道返回 409；
-6. 创建带精确到期时间的 Gateway Key，验证明文只展示一次，并拒绝创建已过期密钥；
+6. 创建带到期时间和年度请求 / Token 预算的 Gateway Key，验证周期表单、明文只展示一次，并拒绝
+   创建已过期密钥；单元测试覆盖日 / 周 / 月 / 年 UTC 边界、周期范围汇总与缓存窗口内单次 D1 查询；
 7. 调用 `/v1/models` 和 Chat 接口，验证认证、错误和 timing Header；
 8. 无 Gateway Key 返回 401；
 9. Dashboard 显示渠道、首个已创建模型和 Provider Balance；创建服务端标记的 1 小时临时
