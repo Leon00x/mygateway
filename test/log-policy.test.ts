@@ -196,8 +196,8 @@ describe('usage recorder level gating', () => {
       { inputTokens: 100, outputTokens: 50 },
       200,
     );
-    // analytics_minutes and key_daily_usage always written; usage_minutes no longer written separately
-    // Batch contains analytics + key_daily_usage = 2 statements (no log, no usage_minutes)
+    // analytics_minutes and key_daily_usage are always written.
+    // Batch contains analytics + key_daily_usage = 2 statements (no request log).
     expect(statements.length).toBe(2);
     expect(statements.some((s) => s.sql.includes('INSERT INTO analytics_minutes'))).toBe(true);
     expect(statements.some((s) => s.sql.includes('INSERT INTO key_daily_usage'))).toBe(true);

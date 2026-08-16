@@ -15,7 +15,7 @@ MyGateway 当前是 `0.1.x` 公测版本。安全修复只面向最新 `main`；
 ## 部署方责任
 
 - 首次登录后立即替换初始管理员凭据。
-- 将 `MASTER_KEY` 备份到密码管理器，不要提交到仓库或随意轮换；丢失后无法恢复已加密的 Provider Key。
+- 将 `MASTER_KEY` 视为内部 Worker Secret，控制台用户日常无需查看或备份；已有加密数据后不要删除、替换、提交或轮换。若 Worker Secret 丢失，已有 Provider Key 无法解密，只能重新录入。
 - 不要在 Issue、日志、截图、Trace 或测试产物中暴露 Provider Key 和 Gateway Key。
 - 上下文日志默认关闭；只在确有需要时开启，并使用尽可能短的保留期。
 - 管理登录目前没有跨 isolate 的持久防暴力破解机制，不应无必要地公开控制台地址；加固状态以 [PRD](PRD.md) 为准。

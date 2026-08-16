@@ -54,7 +54,7 @@ MyGateway Worker ── 鉴权与限额 ── 路由与 Fallback ── AI 供�
 
 ## 一键部署
 
-点击 **部署到 Cloudflare**，连接或 Fork 仓库，并保留自动识别的构建和部署命令。部署流程会创建 Worker、Static Assets、D1 数据库，执行迁移并初始化必要 Secrets。
+直接点击 **部署到 Cloudflare**。Cloudflare 会在你的 GitHub 或 GitLab 账号下创建独立仓库，使用预填的 `mygateway` 名称创建 Worker 和 D1、执行 migration，并自动生成内部加密 Secret；无需提前 Fork。部署时唯一展示的应用配置是初始管理员密码，默认 `mygateway123`，用户可以在部署前修改。
 
 首次登录凭据：
 
@@ -63,25 +63,23 @@ MyGateway Worker ── 鉴权与限额 ── 路由与 Fallback ── AI 供�
 密码：mygateway123
 ```
 
-首次登录后必须修改。请妥善保存 `MASTER_KEY`：丢失或替换后，已有 Provider 凭据将无法解密。
+首次登录后必须修改。`MASTER_KEY` 由 MyGateway 自动创建并作为内部 Cloudflare Secret 保存，日常无需管理；存入 Provider 凭据后请勿删除或轮换。
 
 升级、回滚、排障和免费额度规划见[部署指南](docs/DEPLOY.md)。
 
-## 本地开发
+## 本地运行
 
 需要 Node.js 22 或更高版本。
 
 ```bash
 git clone https://github.com/Leon00x/mygateway.git
 cd mygateway
-npm install
-cp .dev.vars.example .dev.vars
-# 设置 MASTER_KEY，例如：openssl rand -base64 32
-npm run dev:setup
-npm run dev
+npm run local
 ```
 
-浏览器打开 <http://localhost:8787>。提交改动前运行：
+该命令会在需要时安装锁定依赖、创建仅供本地使用的 Secret、构建控制台、执行 D1 migration，并在 <http://localhost:8787> 启动 MyGateway。本地数据保存在 Wrangler 的本地状态中。使用 `admin` / `mygateway123` 登录并修改凭据。
+
+手工开发流程和测试命令见[贡献指南](docs/CONTRIBUTING.zh-CN.md)。提交改动前运行：
 
 ```bash
 npm run typecheck

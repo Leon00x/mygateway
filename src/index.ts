@@ -78,13 +78,11 @@ export default {
    */
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
     const config = parseConfig(env);
-    const { cleanupOldUsage } = await import('./db/usage.ts');
     const { cleanupRequestLogs, cleanupKeyDailyUsage } = await import('./db/requests.ts');
     const { cleanupAnalytics, cleanupContext, readAnalyticsSettings } = await import('./db/analytics.ts');
     const { cleanupManagementAudit } = await import('./db/management-keys.ts');
 
     const settings = await readAnalyticsSettings(env.DB);
-    const deletedRows = await cleanupOldUsage(env.DB, config.usageRetentionDays);
     const deletedAnalytics = await cleanupAnalytics(env.DB, config.usageRetentionDays);
     const deletedLogs = await cleanupRequestLogs(env.DB, settings.requestLogRetentionDays);
     // Calendar-year budgets need the full current year even when Analytics
@@ -97,7 +95,6 @@ export default {
     logEvent({
       event: 'cron_cleanup_completed',
       timestamp: new Date().toISOString(),
-      deleted_rows: deletedRows,
       deleted_analytics: deletedAnalytics,
       deleted_logs: deletedLogs,
       deleted_key_usage: deletedKeyUsage,

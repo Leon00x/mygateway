@@ -54,7 +54,7 @@ The complete implementation status and roadmap are maintained in the [PRD](docs/
 
 ## Deploy
 
-Click **Deploy to Cloudflare**, connect or fork the repository, and keep the detected build and deploy commands. The deployment creates the Worker, Static Assets, D1 database, migrations, and required secrets.
+Click **Deploy to Cloudflare**. Cloudflare creates a repository in your GitHub or GitLab account, provisions the prefilled `mygateway` Worker and D1 database, applies migrations, and generates the internal encryption secret. You do not need to fork first. The only application setting shown during deployment is the initial administrator password; it defaults to `mygateway123` and can be changed before deployment.
 
 Initial administrator credentials:
 
@@ -63,25 +63,23 @@ Username: admin
 Password: mygateway123
 ```
 
-You must change them after the first sign-in. Keep `MASTER_KEY` safe: replacing or losing it makes existing encrypted provider credentials unreadable.
+You must change them after the first sign-in. MyGateway creates `MASTER_KEY` as an internal Cloudflare Secret; it needs no routine management and must not be deleted or rotated after provider credentials are stored.
 
 See the [deployment guide](docs/DEPLOY.en.md) for upgrades, rollback, troubleshooting, and Free Tier planning.
 
-## Local development
+## Run locally
 
 Requires Node.js 22 or later.
 
 ```bash
 git clone https://github.com/Leon00x/mygateway.git
 cd mygateway
-npm install
-cp .dev.vars.example .dev.vars
-# Set MASTER_KEY, for example: openssl rand -base64 32
-npm run dev:setup
-npm run dev
+npm run local
 ```
 
-Open <http://localhost:8787>. Before submitting a change, run:
+The command installs locked dependencies when needed, creates local-only secrets, builds the console, applies D1 migrations, and starts MyGateway at <http://localhost:8787>. Local data persists in Wrangler's local state. Sign in with `admin` / `mygateway123`, then change the credentials.
+
+For the manual development loop and test commands, see the [contributing guide](docs/CONTRIBUTING.md). Before submitting a change, run:
 
 ```bash
 npm run typecheck

@@ -15,7 +15,7 @@
 | 层级 | 性质 | 测试内容 | 固定脚本 | 主要用例 |
 |---|---|---|---|---|
 | L0 静态门禁 | 静态 | 文档链接、机器路径、类型、Dashboard 构建、Worker dry-run | `npm run test:fast` 的静态部分 | `scripts/check-docs.mjs`、TypeScript、Vite、Wrangler |
-| L1 单元测试 | 白盒 | 纯函数、数据库语义、协议、缓存、配额、Token、错误边界 | `npm run test:unit` | `test/*.test.ts` |
+| L1 单元与数据库基线 | 白盒 | 纯函数、数据库语义、初始 Schema、种子、协议、缓存、配额、Token、错误边界 | `npm run test:unit`、`npm run test:migrations` | `test/*.test.ts`、`scripts/test-migrations.mjs` |
 | L2 API / 服务测试 | 灰盒 | 真实 Worker HTTP、Admin/Management 契约、D1 结果、权限与凭据脱敏 | `npm run test:api` | `e2e/admin-api.spec.ts`、`e2e/management-api.spec.ts` |
 | L3 UI 功能测试 | 黑盒 | 登录、导航、表单、Dialog、刷新恢复、关键响应式与确定性布局 | `npm run test:ui` | `e2e/journey.spec.ts`、`e2e/management-ui.spec.ts` |
 | L4 可控系统集成 | 黑盒 | 本地假 Provider、路由、Fallback、SSE、超时、流中断和取消传播 | `npm run test:system` | `e2e/controlled-upstream.spec.ts` |
@@ -31,6 +31,8 @@ API 测试称为白盒。L3 只断言用户可观察的行为，少量尺寸、�
 | 命令 | 用途 | 前置条件 |
 |---|---|---|
 | `npm run test:fast` | L0 + L1：文档、类型、单元测试和生产构建 | 无外部服务 |
+| `npm run test:migrations` | 在隔离的临时 D1 验证全新 Schema、种子及重复执行 | 无外部服务 |
+| `npm run test:deploy-config` | 检查 Deploy Button 只展示初始密码，不暴露内部 Secret 或调优变量 | 无外部服务 |
 | `npm run test:api` | L2 API / 服务测试 | 本地测试 Worker 已启动 |
 | `npm run test:ui` | L3 UI 功能测试 | 本地测试 Worker 已启动，Chromium 已安装 |
 | `npm run test:system` | L4 可控系统集成 | 本地测试 Worker 已启动 |
@@ -309,8 +311,12 @@ git diff --check
 
 还应确认：
 
-- migration 能在全新和已有本地数据库上增量执行；
-- 价格基线 migration 在全新数据库中得到 30 条记录，且不会覆盖管理员已修改的旧价格；
+- 在不预先创建 `.dev.vars` 的干净源码副本中，`npm run local` 能生成本地 Secret、执行 migration、
+  启动健康页且不向终端输出 `MASTER_KEY` 明文；再次运行复用原有 Secret 和 D1 状态；
+- `npm run test:deploy-config` 确认 Secret 示例只含带默认值的初始管理员密码、Wrangler 不暴露运行时
+  默认变量或重复环境资源、`MASTER_KEY` 没有进入表单，部署脚本仍包含 D1 migration 和内部 Secret 初始化；
+- `npm run test:migrations` 验证全新数据库得到完整表、6 条设置和 30 条价格基线，重复执行不改变
+  migration ledger；新增 migration 时还需用上一发布版本的数据库快照验证增量升级；
 - Dashboard 生产资源可加载；
 - 日志、trace 和失败报告不含 Key、Prompt 或 Response；
 - 生产 smoke test 只读取健康页和公开资源，除非明确授权使用生产凭据。

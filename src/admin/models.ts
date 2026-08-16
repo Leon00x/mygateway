@@ -166,7 +166,7 @@ export async function handleModelItem(
   if (request.method === 'DELETE') {
     // Soft-delete card + instances + identifiers, and FREE the unified_model_id
     // (rename to a deleted:<ts> placeholder) so the same ID can be recreated.
-    // usage_minutes rows FK to model_cards, so we keep the row around.
+    // Keep a tombstone so historical analytics and request logs retain a stable model identity.
     const now = Math.floor(Date.now() / 1000);
     await env.DB.prepare('DELETE FROM model_identifiers WHERE model_card_id = ?').bind(id).run();
     await env.DB.prepare('UPDATE model_cards SET deleted_at = ?, updated_at = ?, unified_model_id = ? WHERE id = ?')

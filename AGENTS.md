@@ -32,8 +32,8 @@
 
 ## 修改规则
 
-- Schema 变更只能新增下一个编号 migration；已发布 migration 不得重写。若尚未发布的 migration
-  是否可改不明确，也默认新增 migration。
+- `migrations/0001_initial.sql` 是首个公开版本的不可变基线。对外发布后的 Schema 变更只能新增
+  下一个编号 migration，任何已发布 migration 都不得重写。
 - Provider 预制只在 `src/shared/provider-presets.ts` 维护；不要在 Dashboard 复制一份。
 - 新增用户可见行为时同步更新 PRD；实现细节同步到架构或详细设计；不要在多个文档重复整段内容。
 - 保留稳定错误码、Request ID、Secret 脱敏和客户端取消传播。

@@ -21,13 +21,14 @@ prioritizes "simple to run and understand" over enterprise features.
 ## Setting up
 
 ```bash
-npm install
-npm run dev:setup        # apply D1 migrations locally
-npm run dev              # wrangler dev on http://localhost:8787
+npm run local            # install, initialize, build, migrate, and serve on http://localhost:8787
 ```
 
 Admin login on first run uses the bootstrap credentials documented in
 [README.md](../README.md) (change them after login).
+
+For a faster manual loop after setup, run `npm run build:dashboard`, `npm run dev:setup`, and `npm run dev`
+separately. The one-command entry intentionally reuses these same project scripts.
 
 ## Development loop
 

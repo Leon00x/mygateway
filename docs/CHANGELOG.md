@@ -6,6 +6,18 @@
 
 ## 未发布：仓库整理与接续开发基线
 
+- 收敛 Deploy to Cloudflare 首次配置：Worker 名统一为 `mygateway`，资源名称提供默认值，移除已有
+  源码默认值的 Wrangler 变量和未使用的 `env.local` D1。表单只保留初始管理员密码并说明默认值；
+  `MASTER_KEY` 由部署脚本内部生成。新增 `test:deploy-config` 防止多余填空回归。
+- 首次公开发布前将 16 个原型期 D1 migration 收敛为不可变的 `0001_initial.sql`：新安装一次建立
+  当前最终 Schema、6 条系统设置和 30 条价格基线，不再创建已放弃的 Codex OAuth 对象、旧
+  `usage_minutes` 表或已被周期限额替代的数据库列。新增固定 `npm run test:migrations`，在隔离 D1
+  验证全新初始化、Schema 清单、种子和重复执行；首发后的数据库变化只新增后续编号 migration。
+- 新增源码本地单命令入口 `npm run local`：需要时从 lockfile 安装依赖，自动生成不回显的本地
+  `MASTER_KEY`、构建 Dashboard、迁移本地 D1 并启动 Wrangler；重复运行复用已有 Secret 和状态。
+  README、贡献指南、部署与测试规范同步明确本地运行和 Cloudflare 生产部署的边界。
+- System 页将“管理密钥与 Skill”前置到日志设置之前；底部统一为“关于 MyGateway”，说明内部
+  `MASTER_KEY` 和 Cloudflare 托管边界，并移除会把用户直接带离控制台的 Dashboard 按钮。
 - Gateway Key 请求与 Token 预算由每日扩展为共享的日 / 周 / 月 / 年 UTC 自然周期；旧每日字段保持
   API 兼容。预算检查复用每日权威台账和索引范围汇总，仅为有限额 Key 每 isolate 最多 30 秒读取
   一次 D1，并累加本地已完成请求；年度台账独立保留至少 370 天。控制台、Management OpenAPI 与
@@ -222,7 +234,7 @@
 
 ### 部署与命名
 
-- Worker 名称、部署文档和命令统一为 `mygatewaydemo`。
+- Worker 名称、部署文档和命令统一为 `mygateway`。
 - 完成 GitHub → Cloudflare Workers Builds 自动部署验证。
 - D1、Static Assets、migration 和 Secret 初始化流程同步到部署文档。
 - 固定初始密码只用于首次登录；现有密码、Provider Key 和 `MASTER_KEY` 不会在

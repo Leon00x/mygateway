@@ -30,7 +30,7 @@ This directory keeps product decisions, engineering constraints, operations, and
 ## Maintenance rules
 
 - `PRD.md` is the authority for user-visible behavior and roadmap status.
-- Migrations are the authority for the database schema; published migrations are immutable.
+- Migrations are the authority for the database schema; `0001_initial.sql` is the public baseline and published migrations are immutable.
 - Architecture documents describe implemented structure. Design documents explain detailed decisions.
 - README files stay concise and link here instead of duplicating implementation details.
 - Update both language versions when changing bilingual public documentation.

@@ -417,6 +417,44 @@ export default function System() {
         </div>
       </section>
 
+      <section class="panel settings-card wide management-card">
+        <div class="management-heading-row">
+          <div class="settings-copy management-heading">
+            <span class="eyebrow">{t('management.eyebrow')}</span>
+            <h2>{t('management.title')}</h2>
+            <p>{t('management.body')}</p>
+          </div>
+          <Show when={!managementCreateOpen()}><button class="primary-button" onClick={() => setManagementCreateOpen(true)}>{t('management.create')}</button></Show>
+        </div>
+        <Show when={managementCreateOpen()}><div class="management-create-panel">
+          <div class="management-create">
+            <label><span>{t('management.name')}</span><input value={managementName()} onInput={(event) => setManagementName(event.currentTarget.value)} /></label>
+            <label><span>{t('management.permission')}</span><select value={managementPermission()} onChange={(event) => setManagementPermission(event.currentTarget.value as 'read' | 'write')}><option value="read">{t('management.read')}</option><option value="write">{t('management.write')}</option></select></label>
+            <label><span>{t('management.expiry')}</span><select value={managementExpiry()} onChange={(event) => setManagementExpiry(event.currentTarget.value)}><option value="1">1 {t('usage.days')}</option><option value="7">7 {t('usage.days')}</option><option value="30">30 {t('usage.days')}</option><option value="90">90 {t('usage.days')}</option><option value="permanent">{t('management.permanent')}</option></select></label>
+          </div>
+          <div class="management-create-actions"><button class="ghost-button" disabled={managementBusy()} onClick={() => setManagementCreateOpen(false)}>{t('common.cancel')}</button><button class="primary-button" disabled={managementBusy() || !managementName().trim()} onClick={createManagementKey}>{managementBusy() ? t('common.saving') : t('management.create')}</button></div>
+        </div></Show>
+        <Show when={managementError()}><div class="form-error">{managementError()}</div></Show>
+        <div class="management-reveal" classList={{ active: Boolean(revealedManagementKey()) }}>
+            <div><strong>{t('management.agentPrompt')}</strong><small>{revealedManagementKey() ? t('management.revealHint') : t('management.defaultPromptHint')}</small></div>
+            <pre>{agentPrompt()}</pre>
+            <button class="secondary-button" onClick={copyAgentPrompt}>{copied() ? t('management.copied') : t('management.copyPrompt')}</button>
+        </div>
+        <div class="management-list">
+          <For each={visibleManagementKeys()} fallback={<div class="management-empty">{t('management.empty')}</div>}>{(row) => (
+            <article class="management-key-row">
+              <div class="management-key-main"><strong>{row.name}</strong><code>{row.key_prefix}••••••••</code></div>
+              <div><small>{t('management.permission')}</small><span>{row.permission === 'write' ? t('management.write') : t('management.read')}</span></div>
+              <div><small>{t('management.expiry')}</small><span>{formatExpiry(row.expires_at)}</span></div>
+              <div><small>{t('management.lastUsed')}</small><span>{formatTimestamp(row.last_used_at)}</span></div>
+              <span class={`management-status ${row.status}`}><i aria-hidden="true" />{row.status === 'active' ? t('common.active') : t('common.disabled')}</span>
+              <div class="management-actions"><button class="ghost-button" disabled={managementBusy()} onClick={() => updateManagementKeyStatus(row)}>{row.status === 'active' ? t('management.disable') : t('management.enable')}</button><button class="danger-button" disabled={managementBusy()} onClick={() => deleteManagementKey(row)}>{t('management.delete')}</button></div>
+            </article>
+          )}</For>
+        </div>
+        <Show when={managementKeys().length > 3}><button class="management-list-toggle" onClick={() => setManagementExpanded(!managementExpanded())}>{managementExpanded() ? t('management.collapse') : t('management.showAll').replace('{count}', String(managementKeys().length))}</button></Show>
+      </section>
+
       <section class="panel settings-card wide log-settings-card">
         <div class="settings-copy">
           <span class="eyebrow">{t('system.eyebrowLogging')}</span>
@@ -491,44 +529,6 @@ export default function System() {
         <div class="log-maintenance-row"><div><strong>{t('logs.maintenance')}</strong><small>{t('logs.clearHint')}</small><Show when={clearLogsResult()}>{(result) => <span role="status" class={result().kind}>{result().text}</span>}</Show></div><button class="danger-button" disabled={clearLogsBusy()} onClick={clearAllLogs}>{clearLogsBusy() ? t('logs.clearing') : t('logs.clear')}</button></div>
       </section>
 
-      <section class="panel settings-card wide management-card">
-        <div class="management-heading-row">
-          <div class="settings-copy management-heading">
-            <span class="eyebrow">{t('management.eyebrow')}</span>
-            <h2>{t('management.title')}</h2>
-            <p>{t('management.body')}</p>
-          </div>
-          <Show when={!managementCreateOpen()}><button class="primary-button" onClick={() => setManagementCreateOpen(true)}>{t('management.create')}</button></Show>
-        </div>
-        <Show when={managementCreateOpen()}><div class="management-create-panel">
-          <div class="management-create">
-            <label><span>{t('management.name')}</span><input value={managementName()} onInput={(event) => setManagementName(event.currentTarget.value)} /></label>
-            <label><span>{t('management.permission')}</span><select value={managementPermission()} onChange={(event) => setManagementPermission(event.currentTarget.value as 'read' | 'write')}><option value="read">{t('management.read')}</option><option value="write">{t('management.write')}</option></select></label>
-            <label><span>{t('management.expiry')}</span><select value={managementExpiry()} onChange={(event) => setManagementExpiry(event.currentTarget.value)}><option value="1">1 {t('usage.days')}</option><option value="7">7 {t('usage.days')}</option><option value="30">30 {t('usage.days')}</option><option value="90">90 {t('usage.days')}</option><option value="permanent">{t('management.permanent')}</option></select></label>
-          </div>
-          <div class="management-create-actions"><button class="ghost-button" disabled={managementBusy()} onClick={() => setManagementCreateOpen(false)}>{t('common.cancel')}</button><button class="primary-button" disabled={managementBusy() || !managementName().trim()} onClick={createManagementKey}>{managementBusy() ? t('common.saving') : t('management.create')}</button></div>
-        </div></Show>
-        <Show when={managementError()}><div class="form-error">{managementError()}</div></Show>
-        <div class="management-reveal" classList={{ active: Boolean(revealedManagementKey()) }}>
-            <div><strong>{t('management.agentPrompt')}</strong><small>{revealedManagementKey() ? t('management.revealHint') : t('management.defaultPromptHint')}</small></div>
-            <pre>{agentPrompt()}</pre>
-            <button class="secondary-button" onClick={copyAgentPrompt}>{copied() ? t('management.copied') : t('management.copyPrompt')}</button>
-        </div>
-        <div class="management-list">
-          <For each={visibleManagementKeys()} fallback={<div class="management-empty">{t('management.empty')}</div>}>{(row) => (
-            <article class="management-key-row">
-              <div class="management-key-main"><strong>{row.name}</strong><code>{row.key_prefix}••••••••</code></div>
-              <div><small>{t('management.permission')}</small><span>{row.permission === 'write' ? t('management.write') : t('management.read')}</span></div>
-              <div><small>{t('management.expiry')}</small><span>{formatExpiry(row.expires_at)}</span></div>
-              <div><small>{t('management.lastUsed')}</small><span>{formatTimestamp(row.last_used_at)}</span></div>
-              <span class={`management-status ${row.status}`}><i aria-hidden="true" />{row.status === 'active' ? t('common.active') : t('common.disabled')}</span>
-              <div class="management-actions"><button class="ghost-button" disabled={managementBusy()} onClick={() => updateManagementKeyStatus(row)}>{row.status === 'active' ? t('management.disable') : t('management.enable')}</button><button class="danger-button" disabled={managementBusy()} onClick={() => deleteManagementKey(row)}>{t('management.delete')}</button></div>
-            </article>
-          )}</For>
-        </div>
-        <Show when={managementKeys().length > 3}><button class="management-list-toggle" onClick={() => setManagementExpanded(!managementExpanded())}>{managementExpanded() ? t('management.collapse') : t('management.showAll').replace('{count}', String(managementKeys().length))}</button></Show>
-      </section>
-
       <section class="panel settings-card wide price-library-card">
         <div class="price-library-toggle-row">
           <div class="settings-copy">
@@ -583,10 +583,12 @@ export default function System() {
         <div class="settings-copy">
           <span class="eyebrow">{t('system.eyebrowAbout')}</span>
           <h2>{t('system.about')}</h2>
-          <p>{t('system.securityBody')}</p>
+          <div class="system-about-notes">
+            <p>{t('system.securityBody')}</p>
+            <p>{t('system.deploymentNote')}</p>
+          </div>
           <div class="system-note-meta">
-            <span class="system-version"><strong>{t('system.version')}</strong>v{status()?.version ?? '—'}</span>
-            <a href="https://dash.cloudflare.com" target="_blank" class="ghost-button">{t('system.cloudflare')}</a>
+            <span class="system-version"><strong>{t('system.version')}</strong>v{status()?.version ?? '--'}</span>
           </div>
         </div>
       </section>

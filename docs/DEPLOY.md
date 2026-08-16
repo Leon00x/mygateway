@@ -28,26 +28,28 @@ Workers Builds 持续更新。
 4. 执行 Deploy 命令（默认 `npx wrangler deploy`，可自定义）
 5. `wrangler deploy` 自动上传 `assets.directory`（`./dashboard/dist`）作为 Static Assets
 
+用户无需提前 Fork。Deploy Button 会在用户授权的 GitHub / GitLab 账号下创建独立仓库；Worker 与
+D1 名称分别预填为 `mygateway` 和 `mygateway-db`。唯一展示的应用 Secret 是
+`INITIAL_ADMIN_PASSWORD`，默认值为 `mygateway123`，用户可在部署前修改；没有其他应用变量填空。
+
 ### 2.2 关键设计
 
 - 生产 `wrangler.jsonc` 的 D1 **不填 `database_id`** → 首次部署自动创建；若要固化，`wrangler d1 list` 拿 ID 回填
 - 升级时的 Deploy 脚本顺序：`build:dashboard → db:migrate:remote → wrangler deploy → secrets:init`。必须先让 D1 具备新代码需要的兼容结构，再切换 Worker
-- `secrets:init` 通过当前 Wrangler 配置定位 Worker，仅在 Secret 不存在时设置
-  `INITIAL_ADMIN_PASSWORD` 与 `MASTER_KEY`，已有值永不覆盖；Fork 后修改 Worker 名也无需改脚本
-- 管理员初始密码固定为 `mygateway123`；Master Key 随机生成且只在部署日志显示一次，用户必须立即保存
-- `.dev.vars.example` 提供公开的固定初始密码；真实 `MASTER_KEY` 永不入库
+- Deploy Button 将用户确认的初始密码保存为 Worker Secret；`secrets:init` 仅在缺失时补充默认值，
+  已有值永不覆盖
+- 管理员初始密码默认 `mygateway123`；`MASTER_KEY` 由 `secrets:init` 随机生成并只保存为内部
+  Worker Secret，部署日志不输出明文，用户日常无需管理
 - `wrangler.jsonc` 启用 Workers Logs，并使用 10% head sampling；性能响应头不依赖额外服务
 - 渠道被动熔断只使用 isolate 内存（3 次故障、冷却 30 秒），不需要新增 Cloudflare Binding
 
 首次部署输出示例：
 
 ```text
-INITIAL_ADMIN_USERNAME=admin
-INITIAL_ADMIN_PASSWORD=mygateway123
-MASTER_KEY=<base64 备份值>
+Initialized Worker Secrets: MASTER_KEY.
 ```
 
-使用初始账号登录后，控制台会强制进入凭据修改页。修改完成后密码摘要保存到 D1，`INITIAL_ADMIN_PASSWORD` 不再参与正常登录。旧版部署若尚未初始化管理员表，可使用原 `ADMIN_TOKEN` 作为一次性初始密码迁移。
+使用初始账号登录后，控制台会强制进入凭据修改页。修改完成后密码摘要保存到 D1，`INITIAL_ADMIN_PASSWORD` 不再参与正常登录。`MASTER_KEY` 用于加密 Provider Key 和可选的敏感日志上下文；不要删除或轮换，否则已有加密数据将无法读取。旧版部署若尚未初始化管理员表，可使用原 `ADMIN_TOKEN` 作为一次性初始密码迁移。
 
 生产排障时优先在响应的 `X-Gateway-Timing` 查看缓存命中、D1、上游首包和网关首包耗时；标准 `Server-Timing` 也会写入，但可能被 Cloudflare 的平台指标覆盖。Cloudflare 日志只保留抽样的脱敏结构化事件，不应依赖它做精确请求计数。
 
@@ -90,7 +92,7 @@ main 更新 → Workers Builds → D1 migration → Worker / Assets → Secret �
 
 - migration 必须保持向后兼容，已经执行的 migration 不会重复执行。若 migration 失败，部署命令会停止，新 Worker 不会上线。
 - 普通升级不会重置管理员密码，也不会轮换 `MASTER_KEY` 或 Provider Key。
-- 升级前应确认已安全备份首次部署日志中的 `MASTER_KEY`。
+- `MASTER_KEY` 由 Worker Secret 保留，日常升级无需读取或重新设置；不要删除或轮换。
 - 生产变更完成后按[测试指南](TESTING.md)执行最小发布检查。
 
 ### 4.2 回滚边界

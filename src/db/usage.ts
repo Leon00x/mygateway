@@ -69,15 +69,3 @@ function startOfDayInTimeZone(nowMs: number, timeZone: string): number {
 
   return candidate;
 }
-
-export async function cleanupOldUsage(
-  db: D1Database,
-  retentionDays: number,
-): Promise<number> {
-  const cutoff = Math.floor((Date.now() - retentionDays * 86_400_000) / 60_000) * 60;
-  const result = await db
-    .prepare('DELETE FROM usage_minutes WHERE timestamp_minute < ?')
-    .bind(cutoff)
-    .run();
-  return result.meta?.changes ?? 0;
-}

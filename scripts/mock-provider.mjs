@@ -1,6 +1,6 @@
 // Dev-only mock provider for testing channel import without a real API key.
 // Serves OpenAI-style GET /v1/models with models that exist in the price
-// library (migrations/0009_model_prices.sql) so baseline prefill shows.
+// library (migrations/0001_initial.sql) so baseline prefill shows.
 import { createServer } from 'node:http';
 
 const MODELS = [

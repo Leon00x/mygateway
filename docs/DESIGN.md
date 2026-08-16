@@ -410,7 +410,7 @@ TTFT 的历史桶；界面必须据样本数计算覆盖率。
 
 ### 10.1 数据模型
 
-- `model_prices`（迁移 0009）：以 `provider_model_id` 为主键的模型基准价，包含输入 / 输出
+- `model_prices`：以 `provider_model_id` 为主键的模型基准价，包含输入 / 输出
   价格（`*_price_micros_per_million`，整数 micro-USD 或 micro-CNY 每百万 Token）、可选缓存
   命中价和币种（`currency`：USD / CNY）。迁移同时为 `channel_models` 增加可选
   `cache_input_price_micros_per_million` 列，使渠道实例价与基准价结构对齐。
@@ -456,8 +456,8 @@ TTFT 的历史桶；界面必须据样本数计算覆盖率。
 
 ### 11.1 身份与生命周期
 
-- migration `0012_management_keys.sql` 新增 `management_keys` 与 `management_audit_logs`；已发布
-  migration 不回写。
+- `management_keys` 与 `management_audit_logs` 分别保存机器凭据摘要和脱敏操作审计；首发 Schema
+  由 `0001_initial.sql` 建立，此后的已发布 migration 不回写。
 - Management Key 使用 `mgmt_` + 32 随机字节，服务端只保存 SHA-256 hash；`expires_at: null`
   表示永久，内部映射为 Unix 秒上限哨兵值；短期 isolate 缓存
   正命中最多 30 秒、负命中 5 秒，并受密钥到期时间约束。

@@ -74,12 +74,21 @@
   手动选择后持久化覆盖系统偏好，API 文档继承控制台当前主题；页面遵循统一的标题、卡片、状态、
   浮层和可访问性规范，详见[详细设计](DESIGN.md#13-控制台视觉与交互规范)。
 - **模块**：概览（Dashboard）、渠道、模型、API Keys、Analytics（用量分析 / 请求日志）、System。
+- **本地运行**：源码仓提供 `npm run local` 单命令入口；首次运行自动安装锁定依赖、生成仅供本地
+  使用的 Secret、构建控制台、迁移本地 D1 并启动 Worker，后续运行复用本地状态。该入口用于体验、
+  开发和测试，不宣称为独立于 Cloudflare Workers Runtime 的生产服务器。
+- **一键部署**：Cloudflare Deploy Button 自动在用户授权的 GitHub / GitLab 账号下创建独立仓库，
+  使用 `mygateway` / `mygateway-db` 预填资源名称，provision Worker 与 D1，并执行 migration 和内部
+  Secret 初始化；用户无需提前 Fork。唯一展示的应用配置是初始管理员密码，默认 `mygateway123`
+  且允许部署前修改；不向用户索取 `MASTER_KEY` 或运行时调优变量。
 - **网站访问地址**：System 页自动检测当前浏览器 Origin，管理员确认保存后作为部署的规范访问
   地址；只接受不含路径、查询、凭据和锚点的 HTTP(S) Origin。该设置用于首页接入地址、复制命令
   和 Agent Skill 提示词，不代替 Cloudflare 自定义域名或 DNS 配置；未保存时回退到当前访问地址。
 - **快速调用**：控制台概览页可创建 1 小时有效的临时 Gateway Key，并把已生成的调用命令复制到剪贴板。
   明文只缓存在当前站点的浏览器 `localStorage`，刷新页面后在到期前仍可继续复制；到期时自动
   清除并恢复为未创建状态，不通过管理 API 再次读取明文。
+- **系统设置**：账号与访问地址之后优先展示 Agent 管理，再展示日志和价格设置；底部“关于”只说明
+  版本、Cloudflare 托管边界及内部 `MASTER_KEY` 用途，不提供跳转 Cloudflare 控制台的操作按钮。
 
 ### 3.2 渠道
 
@@ -295,6 +304,8 @@ Codex 等 AI Agent 通过标准管理 API 完成日常运维。该能力由两�
 ### P1：近期体验
 
 - 根据社区反馈扩展 Management API 的分页与批量操作；
+- 评估发布可选的 npm CLI，为不想克隆源码的本地体验提供稳定入口；在包名、升级、配置目录和
+  长期兼容承诺明确前，不把 `npx` 命令作为首个公开版本的安装方式；
 - 评估是否拆分垂直 Skills；部署升级 Skill 在稳定版发布流程确定后再设计；
 - 完善自定义渠道协议端点编辑校验和变更影响提示；
 - 完善 Anthropic 错误 envelope 和图片内容公共子集；

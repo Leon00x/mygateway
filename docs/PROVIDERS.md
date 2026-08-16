@@ -4,7 +4,7 @@
 [详细设计](DESIGN.md)，产品状态见 [PRD](PRD.md)。
 
 价格和供应商能力会变化。这里的结论最后核验于 **2026-08-11**；代码中的端点和模型建议以
-`src/shared/provider-presets.ts` 为准，数据库价格以最新 migration 为准。
+`src/shared/provider-presets.ts` 为准，数据库价格以 `migrations/0001_initial.sql` 中的当前发布基线为准。
 
 ## 1. 重点维护的 10 个预制
 
@@ -81,8 +81,8 @@ Flex、地域、促销、缓存写入和专属套餐可能使用不同价格。C
 - [OpenAI Model Catalog](https://developers.openai.com/api/docs/models)
 - [Claude Pricing](https://platform.claude.com/docs/en/about-claude/pricing)
 
-价格库用于新建渠道实例时预填和网关内费用估算，**不是供应商账单**。管理员编辑过的条目在
-升级 migration 时会保留；当前费用聚合也尚未按币种拆分。
+价格库用于新建渠道实例时预填和网关内费用估算，**不是供应商账单**。未来价格 migration 必须
+保留管理员编辑过的条目；当前费用聚合也尚未按币种拆分。
 
 ## 3. 余额与套餐查询可行性
 

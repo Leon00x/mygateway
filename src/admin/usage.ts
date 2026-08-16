@@ -136,15 +136,12 @@ export async function handleUsageByChannel(
 }
 
 /**
- * DELETE /admin/api/usage — clears both analytics_minutes and usage_minutes.
+ * DELETE /admin/api/usage — clears the current analytics aggregate.
  */
 export async function handleUsageClear(
   env: Env,
   requestId: string,
 ): Promise<Response> {
-  await env.DB.batch([
-    env.DB.prepare('DELETE FROM usage_minutes'),
-    env.DB.prepare('DELETE FROM analytics_minutes'),
-  ]);
+  await env.DB.prepare('DELETE FROM analytics_minutes').run();
   return json({ ok: true });
 }

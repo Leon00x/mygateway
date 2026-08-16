@@ -13,8 +13,8 @@ MyGateway 的控制面和数据面部署在同一个 Cloudflare Worker：
 管理员 ── /admin/api/* ── Session 鉴权 ── D1
 客户端 ── /v1/* ── Gateway Key ── 模型解析 ── AI Provider
                                              └─ usage 聚合 ── D1
-Cron ── 每日清理过期 usage_minutes、analytics_minutes、
-        request_logs、key_daily_usage 与加密上下文预览
+Cron ── 每日清理过期 analytics_minutes、request_logs、
+        key_daily_usage、管理审计与加密上下文预览
 ```
 
 默认只使用一个 Worker（包含 Static Assets）、一个 D1、两个部署 Secret 和一个每日 Cron，
@@ -36,7 +36,7 @@ src/
 
 dashboard/src/   SolidJS 管理控制台
 e2e/             Playwright 测试
-migrations/      D1 增量 migration
+migrations/      D1 初始基线与后续增量 migration
 ```
 
 HTTP 路由调用领域模块，领域模块调用 `db/*` 和基础工具；数据库层不依赖 HTTP；前端不
@@ -73,7 +73,6 @@ HTTP 路由调用领域模块，领域模块调用 `db/*` 和基础工具；数�
 | `model_identifiers` | 统一模型 ID 与别名的全局命名空间 |
 | `gateway_api_keys` | Gateway Key hash、短 prefix 和状态 |
 | `key_daily_usage` | 每密钥每日用量与预算扣减台账 |
-| `usage_minutes` | 按分钟、模型、最终渠道聚合的用量 |
 | `request_logs` | 请求明细日志（可选），含脱敏错误与加密上下文预览 |
 | `analytics_minutes` | 5 分钟聚合桶：密钥、统一模型、最终渠道维度，含输入、缓存命中、输出 Token，以及 TTFT、延迟与回退样本 |
 | `model_prices` | 可编辑模型基准价库：30 个内置 USD 基线，输入 / 输出 / 缓存价（micros / 百万 Token）与币种 |
@@ -92,8 +91,7 @@ HTTP 路由调用领域模块，领域模块调用 `db/*` 和基础工具；数�
 Skill 引导，不参与请求路由，也不会自动配置 Cloudflare DNS。
 
 `analytics_minutes` 每个完成请求至少 UPSERT 一次。5 分钟聚合减少数据行数量，但不减少更新
-次数；新行还会写入索引，因此容量评估必须以 D1 的 `rows_written` 为准。`usage_minutes` 只保留
-为旧版本历史归档，并随保留期清理，不再由网关写入。
+次数；新行还会写入索引，因此容量评估必须以 D1 的 `rows_written` 为准。
 
 Provider 上报的缓存命中 Token 是输入 Token 的子集。聚合层同时保存总输入与缓存命中量；展示
 “输入（非缓存）”时使用 `input_tokens - cache_input_tokens`，总 Token 仍为输入加输出。迁移前的
@@ -303,4 +301,9 @@ Cloudflare 预算与 Free Tier 容量规划见 [DEPLOY](DEPLOY.md)。
 | `USAGE_RETENTION_DAYS` | `30` | 用量保留天数 |
 
 Secrets：`MASTER_KEY`、`INITIAL_ADMIN_PASSWORD`，以及仅用于旧部署迁移的 `ADMIN_TOKEN`。
-生产绑定与初始化见 [DEPLOY](DEPLOY.md)。
+Deploy Button 只展示有默认值且允许用户修改的 `INITIAL_ADMIN_PASSWORD`；部署脚本自动生成内部
+`MASTER_KEY`，它不属于控制台用户需要读取或轮换的日常配置。运行时调优参数使用 `src/env.ts`
+的校验默认值，默认部署不在 `wrangler.jsonc` 暴露变量表单。
+源码本地入口 `scripts/local.mjs` 在缺少依赖时执行锁定安装，安全生成 `.dev.vars`，再复用现有
+Dashboard 构建、D1 migration 和 Wrangler dev 命令；它不实现另一套 Node 数据面。生产绑定与
+初始化见 [DEPLOY](DEPLOY.md)。

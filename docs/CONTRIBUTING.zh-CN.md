@@ -14,12 +14,13 @@
 ## 环境准备
 
 ```bash
-npm install
-npm run dev:setup        # 应用本地 D1 migrations
-npm run dev              # http://localhost:8787
+npm run local            # 安装、初始化、构建、迁移并在 http://localhost:8787 启动
 ```
 
 首次运行使用 [README](../README.zh-CN.md) 中的初始管理员凭据，登录后应立即修改。
+
+完成首次初始化后，追求更快的手工开发循环时可以分别执行 `npm run build:dashboard`、
+`npm run dev:setup` 和 `npm run dev`；单命令入口复用的也是这些项目脚本。
 
 ## 开发与验证
 

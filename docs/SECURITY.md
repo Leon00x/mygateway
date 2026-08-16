@@ -20,8 +20,9 @@ fork-specific modifications are not maintained by this repository.
 ## Deployment responsibilities
 
 - Replace the bootstrap administrator credentials immediately after first login.
-- Back up `MASTER_KEY` in a password manager; never commit or rotate it casually. Existing encrypted Provider
-  Keys cannot be recovered after it is lost.
+- Treat `MASTER_KEY` as an internal Worker Secret. It needs no routine viewing or backup by console users; never
+  delete, replace, commit, or rotate it after encrypted data exists. If the Worker Secret is lost, existing
+  encrypted Provider Keys cannot be recovered and must be entered again.
 - Keep Provider Keys and Gateway Keys out of Issues, logs, screenshots, traces, and test artifacts.
 - Context logging is off by default. Enable it only when needed and use the shortest practical retention.
 - The management login currently has no shared, durable brute-force limiter; do not advertise the console URL

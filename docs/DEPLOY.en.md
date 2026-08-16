@@ -14,26 +14,24 @@ This guide covers deployment, upgrades, rollback, troubleshooting, and Cloudflar
 
 ## 2. How deployment works
 
-The Deploy button lets Cloudflare read `wrangler.jsonc`, create or update the Worker named by its `name` field and the D1 database, run the deployment command, and upload `dashboard/dist` as Static Assets. Forks may choose their own Worker name before deployment.
+The Deploy button lets Cloudflare clone MyGateway into a new repository in the user's authorized GitHub or GitLab account, create the Worker and D1 database, run the deployment command, and upload `dashboard/dist` as Static Assets. The Worker and D1 names are prefilled as `mygateway` and `mygateway-db`. Users do not need to fork first. The only application Secret shown is `INITIAL_ADMIN_PASSWORD`, which defaults to `mygateway123` and can be changed before deployment.
 
 Important behavior:
 
 - Production does not hard-code a D1 `database_id`; Wrangler provisions it on first deployment.
 - Deployment runs in this order: Dashboard build → remote D1 migrations → Worker deployment → initial secret check.
-- `secrets:init` creates `INITIAL_ADMIN_PASSWORD` and `MASTER_KEY` only when they do not exist. Existing values are never overwritten.
-- The initial administrator password is `mygateway123`. `MASTER_KEY` is randomly generated and printed once in deployment logs.
+- Cloudflare stores the submitted initial password as a Secret. `secrets:init` keeps it and supplies the documented default only when it is missing.
+- `MASTER_KEY` is generated automatically when missing and stored only as an internal Worker Secret; its plaintext is not printed and needs no routine management.
 - Workers Logs use 10% head sampling. Gateway timing headers do not require another service.
 - Passive circuit state is held in isolate memory and needs no additional Cloudflare binding.
 
 First-deployment output includes:
 
 ```text
-INITIAL_ADMIN_USERNAME=admin
-INITIAL_ADMIN_PASSWORD=mygateway123
-MASTER_KEY=<base64 backup value>
+Initialized Worker Secrets: MASTER_KEY.
 ```
 
-Save `MASTER_KEY` securely and change the administrator credentials after signing in. Once an administrator record exists in D1, the bootstrap password no longer participates in normal login.
+Change the administrator credentials after signing in. Once an administrator record exists in D1, the bootstrap password no longer participates in normal login. `MASTER_KEY` encrypts provider credentials and optional sensitive log context. Do not delete or rotate it, or existing encrypted data becomes unreadable.
 
 For production troubleshooting, inspect `X-Gateway-Timing` for cache, D1, upstream-first-byte, and gateway-first-byte timing. `Server-Timing` is also emitted but may be combined with Cloudflare platform metrics. Sampled platform logs must not be used as exact request counts.
 
@@ -66,7 +64,7 @@ After a change reaches `main`, Workers Builds creates the Dashboard bundle, appl
 - Migrations must remain backward-compatible and are applied only once.
 - A failed migration stops deployment before the new Worker is published.
 - Normal upgrades do not reset the administrator password or rotate `MASTER_KEY` and provider credentials.
-- Back up the original `MASTER_KEY` before upgrading.
+- Routine upgrades preserve the `MASTER_KEY` Worker Secret; do not read, replace, or rotate it.
 - Run the minimum release checks from the [testing guide](TESTING.md) after a production change.
 
 ### Rollback boundary

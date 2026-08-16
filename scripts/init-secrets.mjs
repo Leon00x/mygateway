@@ -28,28 +28,26 @@ function putSecret(name, value) {
 }
 
 const existing = listSecretNames();
-const generated = [];
+const generated = new Set();
 
 if (!existing.has('MASTER_KEY')) {
   const value = randomBytes(32).toString('base64');
   putSecret('MASTER_KEY', value);
-  generated.push(['MASTER_KEY', value]);
+  generated.add('MASTER_KEY');
 }
 
 if (!existing.has('INITIAL_ADMIN_PASSWORD')) {
   putSecret('INITIAL_ADMIN_PASSWORD', initialAdminPassword);
-  generated.push(['INITIAL_ADMIN_PASSWORD', initialAdminPassword]);
+  generated.add('INITIAL_ADMIN_PASSWORD');
 }
 
-if (generated.length === 0) {
+if (generated.size === 0) {
   console.log('MyGateway secrets already exist; keeping the current values.');
 } else {
-  console.log('\n============================================================');
-  console.log(' MyGateway first-deploy credentials');
-  console.log('============================================================');
-  console.log('INITIAL_ADMIN_USERNAME=admin');
-  for (const [name, value] of generated) console.log(`${name}=${value}`);
-  console.log('Save these values securely. Change the admin credentials after login.');
-  console.log('Never regenerate MASTER_KEY after Provider keys have been stored.');
-  console.log('============================================================\n');
+  console.log(`Initialized Worker Secrets: ${[...generated].join(', ')}.`);
+  if (generated.has('INITIAL_ADMIN_PASSWORD')) {
+    console.log('Initial administrator: admin / mygateway123');
+    console.log('Change these credentials after the first sign-in.');
+  }
+  console.log('MASTER_KEY is an internal encryption secret. Do not delete or rotate it.');
 }

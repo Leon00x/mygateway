@@ -11,8 +11,8 @@ export interface GatewayKeyRow {
   key_hash: string;
   status: 'active' | 'disabled';
   rpm_limit: number | null;
-  daily_request_limit: number | null;
-  daily_token_limit: number | null;
+  daily_request_limit?: number | null;
+  daily_token_limit?: number | null;
   request_limit: number | null;
   token_limit: number | null;
   limit_period: LimitPeriod;

@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "local": "node scripts/local.mjs",
     "dev": "wrangler dev",
     "dev:setup": "npm run db:migrate:local",
     "deploy": "npm run build:dashboard && npm run db:migrate:remote && wrangler deploy --env=\"\" && npm run secrets:init",
@@ -14,6 +15,8 @@
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote --env=\"\"",
     "test": "vitest run",
     "test:unit": "vitest run",
+    "test:migrations": "node scripts/test-migrations.mjs",
+    "test:deploy-config": "node scripts/check-deploy-config.mjs",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:serve": "npm run build:dashboard && npm run db:migrate:local && wrangler dev --port 8799",
@@ -22,7 +25,7 @@
     "test:system": "playwright test e2e/controlled-upstream.spec.ts",
     "test:sit": "node scripts/run-sit.mjs",
     "test:smoke": "node scripts/smoke.mjs",
-    "test:fast": "npm run docs:check && npm run typecheck && npm run test:unit && npm run build",
+    "test:fast": "npm run docs:check && npm run typecheck && npm run test:unit && npm run test:migrations && npm run test:deploy-config && npm run build",
     "test:release:local": "npm run test:fast && npm run test:api && npm run test:ui && npm run test:system",
     "test:release": "npm run test:release:local && npm run test:sit",
     "test:e2e:upstream": "playwright test e2e/controlled-upstream.spec.ts",
@@ -49,5 +52,12 @@
     "@scalar/hono-api-reference": "^0.11.12",
     "hono": "^4.13.0",
     "zod": "^4.4.3"
+  },
+  "cloudflare": {
+    "bindings": {
+      "INITIAL_ADMIN_PASSWORD": {
+        "description": "Initial password for the admin account. Defaults to mygateway123; you can change it now, and must change it after the first sign-in."
+      }
+    }
   }
 }

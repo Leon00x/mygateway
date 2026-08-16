@@ -30,7 +30,7 @@
 ## 维护规则
 
 - `PRD.md` 是用户可见行为和 Roadmap 状态的权威来源。
-- migration 是数据库 Schema 的权威来源，已经发布的 migration 不得修改。
+- migration 是数据库 Schema 的权威来源；`0001_initial.sql` 是公开发布基线，已发布 migration 不得修改。
 - 架构文档描述已经实现的系统结构，详细设计文档解释具体决策。
 - README 保持精简，通过链接进入详细文档，不重复实现细节。
 - 修改双语公共文档时，应同步更新两种语言版本。

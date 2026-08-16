@@ -43,6 +43,18 @@ test('system page validates and applies the canonical website URL', async ({ pag
   expect(publicUrlBox).not.toBeNull();
   expect(Math.abs(accountBox!.y - publicUrlBox!.y)).toBeLessThan(2);
 
+  const managementBox = await page.locator('.management-card').boundingBox();
+  const loggingBox = await page.locator('.log-settings-card').boundingBox();
+  expect(managementBox).not.toBeNull();
+  expect(loggingBox).not.toBeNull();
+  expect(managementBox!.y).toBeLessThan(loggingBox!.y);
+
+  const aboutCard = page.locator('.system-note-card');
+  await expect(aboutCard.getByRole('heading', { name: '关于 MyGateway' })).toBeVisible();
+  await expect(aboutCard).toContainText('MASTER_KEY 是系统自动生成的内部密钥');
+  await expect(aboutCard).toContainText('生产环境由 Cloudflare 托管');
+  await expect(aboutCard.locator('a[href*="dash.cloudflare.com"]')).toHaveCount(0);
+
   const invalidResponse = await page.request.put('/admin/api/system/public-url', {
     data: { public_url: 'https://gateway.example.test/admin' },
   });
