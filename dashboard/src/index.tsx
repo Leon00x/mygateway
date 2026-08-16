@@ -12,6 +12,7 @@ import ApiKeys from './pages/ApiKeys';
 import AnalyticsUsage from './pages/AnalyticsUsage';
 import AnalyticsLogs from './pages/AnalyticsLogs';
 import System from './pages/System';
+import Homepage from './homepage/Homepage';
 import Icon, { IconName } from './components/Icon';
 import { t, locale, toggleLocale } from './i18n';
 import { DialogProvider } from './components/AppDialog';
@@ -92,7 +93,7 @@ interface NavigationItem {
 const navigationSections: { label?: string; icon?: IconName; nested?: boolean; collapsible?: boolean; items: NavigationItem[] }[] = [
   {
     items: [
-      { href: '/', label: 'nav.overview', icon: 'home', end: true },
+      { href: '/console', label: 'nav.overview', icon: 'home', end: true },
       { href: '/channels', label: 'nav.channels', icon: 'channels' },
       { href: '/models', label: 'nav.models', icon: 'models' },
       { href: '/keys', label: 'nav.keys', icon: 'keys' },
@@ -112,7 +113,7 @@ const navigationSections: { label?: string; icon?: IconName; nested?: boolean; c
 ];
 
 const titles: Record<string, string> = {
-  '/': 'title.overview',
+  '/console': 'title.overview',
   '/channels': 'title.channels',
   '/models': 'title.models',
   '/keys': 'title.keys',
@@ -134,7 +135,7 @@ document.documentElement.dataset.theme = startupTheme;
 function AppLayout(props: { children?: JSX.Element }) {
   const auth = useAuth();
   const location = useLocation();
-  const pageTitle = () => t(titles[location.pathname] ?? titles['/']);
+  const pageTitle = () => t(titles[location.pathname] ?? titles['/console']);
   const pageSubtitle = () => subtitles[location.pathname] ? t(subtitles[location.pathname]) : '';
   const [theme, setTheme] = createSignal<'light' | 'dark'>(startupTheme);
   const [sidebarCollapsed, setSidebarCollapsed] = createSignal(readSidebarPreference());
@@ -173,10 +174,11 @@ function AppLayout(props: { children?: JSX.Element }) {
   });
 
   return (
+    <Show when={location.pathname !== '/'} fallback={<main class="homepage-shell">{props.children}</main>}>
     <Show when={auth.authenticated()} fallback={<main class="public-shell">{props.children}<button class="theme-toggle lang-toggle public-lang-toggle" aria-label="Switch language" title="中 / EN" onClick={() => toggleLocale()}>{locale() === 'zh' ? 'EN' : '中文'}</button><ThemeToggle theme={theme()} onToggle={toggleTheme} public /></main>}>
       <div class="app-shell" classList={{ 'sidebar-collapsed': sidebarCollapsed() }}>
         <aside class="sidebar">
-          <A href="/" class="brand">
+          <A href="/console" class="brand">
             <img class="brand-logo" src="/logo.png" alt="MyGateway" />
             <span><strong>MyGateway</strong></span>
           </A>
@@ -236,6 +238,7 @@ function AppLayout(props: { children?: JSX.Element }) {
           <main class="page-content">{props.children}</main>
         </section>
       </div>
+    </Show>
     </Show>
   );
 }
@@ -306,7 +309,9 @@ render(() => (
     <Router root={AppLayout}>
       <Route path="/login" component={Login} />
       <Route path="/change-password" component={() => <RequireAuth><ChangeCredentials /></RequireAuth>} />
-      <Route path="/" component={() => <RequireReady><Dashboard /></RequireReady>} />
+      <Route path="/" component={Homepage} />
+      <Route path="/console" component={() => <RequireReady><Dashboard /></RequireReady>} />
+      <Route path="/dashboard" component={() => <Navigate href="/console" />} />
       <Route path="/channels" component={() => <RequireReady><Channels /></RequireReady>} />
       <Route path="/models" component={() => <RequireReady><Models /></RequireReady>} />
       <Route path="/keys" component={() => <RequireReady><ApiKeys /></RequireReady>} />

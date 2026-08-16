@@ -34,7 +34,7 @@ export default function ChangeCredentials() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error?.message ?? t('auth.changeFailed'));
       await auth.check();
-      navigate('/', { replace: true });
+      navigate('/console', { replace: true });
     } catch (cause) {
       setError((cause as Error).message);
     } finally {

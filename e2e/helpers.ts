@@ -44,14 +44,14 @@ export function devVar(name: string): string | undefined {
  * Log in through the UI. Assumes we're on /login or the app redirected us there.
  */
 export async function loginViaUi(page: Page, password: string = activePassword): Promise<void> {
-  await page.goto('/');
-  // Auth guard redirects to /login when unauthenticated
+  await page.goto('/console');
+  // The protected console redirects to /login when unauthenticated.
   await expect(page.getByPlaceholder('用户名')).toBeVisible({ timeout: 10_000 });
   await page.getByPlaceholder('用户名').fill(ADMIN_USERNAME);
   await page.getByPlaceholder('密码').fill(password);
   await page.getByRole('button', { name: '登录', exact: true }).click();
   // After login we land on the dashboard
-  await expect(page).toHaveURL(/\/$/, { timeout: 10_000 });
+  await expect(page).toHaveURL(/\/console$/, { timeout: 10_000 });
 }
 
 /**

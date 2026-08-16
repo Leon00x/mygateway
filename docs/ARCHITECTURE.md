@@ -266,8 +266,9 @@ Gateway Key 复用脱敏列表逻辑；余额只读当前 isolate 缓存，避�
 
 ## 11. 管理前端
 
-管理端使用 SolidJS、Vite 和 Worker Static Assets，包含登录、首次改密、Dashboard、
-Channels、Models、API Keys 和 System。侧边栏可收缩，主题偏好保存在浏览器 localStorage。
+管理端使用 SolidJS、Vite 和 Worker Static Assets。根路径 `/` 是公开项目首页，管理控制台概览位于
+`/console`，并包含登录、首次改密、Channels、Models、API Keys 和 System。侧边栏可收缩，主题偏好
+保存在浏览器 localStorage。
 
 控制台和 Worker 共用 `src/shared/provider-presets.ts`，避免供应商预制漂移。Worker 和
 Dashboard 分别由根 `tsconfig.json` 与 `tsconfig.dashboard.json` 严格检查；前端不接触

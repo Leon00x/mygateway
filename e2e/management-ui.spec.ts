@@ -59,7 +59,7 @@ test('system page validates and applies the canonical website URL', async ({ pag
   await expect(page.locator('.management-reveal pre')).not.toContainText('Before every use');
   await expect(page.locator('.management-reveal pre')).toContainText('MYGATEWAY_URL=https://gateway.example.test');
 
-  await page.goto('/');
+  await page.goto('/console');
   await expect(page.locator('.endpoint-body code').first()).toContainText('https://gateway.example.test/v1');
 });
 

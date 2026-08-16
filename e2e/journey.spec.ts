@@ -28,8 +28,20 @@ test.beforeAll(async ({ request }) => {
   await resetState(request);
 });
 
-test('1. auth guard redirects to login', async ({ page }) => {
+test('1. public homepage introduces the project and leads to the protected console', async ({ page }) => {
   await page.goto('/');
+  await expect(page.getByRole('heading', { name: '一个网关，调用所有 AI 模型' })).toBeVisible();
+  await expect(page.getByRole('link', { name: '部署到 Cloudflare' }).first()).toHaveAttribute(
+    'href',
+    /deploy\.workers\.cloudflare\.com/,
+  );
+  await page.getByRole('button', { name: '本地部署体验' }).first().click();
+  await expect(page.locator('#local-setup')).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'GitHub 连接' })).toHaveAttribute('aria-selected', 'true');
+  await page.getByRole('tab', { name: '部署命令' }).click();
+  await expect(page.getByRole('tab', { name: '部署命令' })).toHaveAttribute('aria-selected', 'true');
+
+  await page.goto('/console');
   await expect(page.getByPlaceholder('用户名')).toBeVisible({ timeout: 10_000 });
   await expect(page).toHaveURL(/\/login/);
 });
@@ -440,7 +452,7 @@ test('9. dashboard shows channel and model', async ({ page }) => {
   const temporaryRow = page.locator('.key-row', { hasText: temporary.key_prefix });
   await expect(temporaryRow.getByText('首页临时密钥 · 固定 1 小时 · 不可续期')).toBeVisible();
   await expect(temporaryRow.getByRole('button', { name: /续期|编辑限额/ })).toHaveCount(0);
-  await page.goto('/');
+  await page.goto('/console');
 
   await page.reload();
   await expect(page.locator('.quickstart-panel pre')).toContainText(stored.key);

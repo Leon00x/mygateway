@@ -12,7 +12,7 @@ export default function Login() {
   const [loading, setLoading] = createSignal(false);
 
   if (auth.authenticated()) {
-    return <Navigate href={auth.mustChangePassword() ? '/change-password' : '/'} />;
+    return <Navigate href={auth.mustChangePassword() ? '/change-password' : '/console'} />;
   }
 
   const handleLogin = async (event: Event) => {
@@ -28,7 +28,7 @@ export default function Login() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error?.message ?? t('auth.loginFailed'));
       await auth.check();
-      navigate(data.must_change_password ? '/change-password' : '/', { replace: true });
+      navigate(data.must_change_password ? '/change-password' : '/console', { replace: true });
     } catch (cause) {
       setError((cause as Error).message);
     } finally {
