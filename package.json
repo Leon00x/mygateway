@@ -1,0 +1,63 @@
+{
+  "name": "mygateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "local": "node scripts/local.mjs",
+    "dev": "wrangler dev",
+    "dev:setup": "npm run db:migrate:local",
+    "deploy": "npm run build:dashboard && npm run db:migrate:remote && wrangler deploy --env=\"\" && npm run secrets:init",
+    "build": "npm run build:dashboard && wrangler deploy --dry-run --env=\"\"",
+    "build:dashboard": "vite build --config dashboard/vite.config.ts",
+    "secrets:init": "node scripts/init-secrets.mjs",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local --env=\"\"",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote --env=\"\"",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "test:migrations": "node scripts/test-migrations.mjs",
+    "test:deploy-config": "node scripts/check-deploy-config.mjs",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:serve": "npm run build:dashboard && npm run db:migrate:local && wrangler dev --port 8799",
+    "test:api": "playwright test e2e/admin-api.spec.ts e2e/management-api.spec.ts",
+    "test:ui": "playwright test e2e/journey.spec.ts e2e/management-ui.spec.ts",
+    "test:system": "playwright test e2e/controlled-upstream.spec.ts",
+    "test:sit": "node scripts/run-sit.mjs",
+    "test:smoke": "node scripts/smoke.mjs",
+    "test:fast": "npm run docs:check && npm run typecheck && npm run test:unit && npm run test:migrations && npm run test:deploy-config && npm run build",
+    "test:release:local": "npm run test:fast && npm run test:api && npm run test:ui && npm run test:system",
+    "test:release": "npm run test:release:local && npm run test:sit",
+    "test:e2e:upstream": "playwright test e2e/controlled-upstream.spec.ts",
+    "test:e2e:headed": "playwright test --headed",
+    "docs:check": "node scripts/check-docs.mjs",
+    "typecheck": "tsc --noEmit && tsc --project tsconfig.dashboard.json --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.18.8",
+    "@cloudflare/workers-types": "^5.20260727.1",
+    "@playwright/test": "^1.62.1",
+    "@solidjs/router": "^0.16.2",
+    "@tailwindcss/vite": "^4.3.3",
+    "solid-js": "^1.9.14",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.1.5",
+    "vite-plugin-solid": "^2.11.13",
+    "vitest": "^4.1.10",
+    "wrangler": "^4.114.0"
+  },
+  "dependencies": {
+    "@hono/zod-openapi": "^1.5.1",
+    "@scalar/hono-api-reference": "^0.11.12",
+    "hono": "^4.13.0",
+    "zod": "^4.4.3"
+  },
+  "cloudflare": {
+    "bindings": {
+      "INITIAL_ADMIN_PASSWORD": {
+        "description": "Initial password for the admin account. Defaults to mygateway123; you can change it now, and must change it after the first sign-in."
+      }
+    }
+  }
+}

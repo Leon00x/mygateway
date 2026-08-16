@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.dev.vars
+.wrangler/
+*.tmp
+test-results/
+.env.local
+ref/

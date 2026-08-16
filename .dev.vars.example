@@ -1,0 +1,4 @@
+# Initial login: admin / mygateway123
+# You may replace this value during deployment. The console requires changing
+# the initial credentials after the first sign-in.
+INITIAL_ADMIN_PASSWORD=mygateway123

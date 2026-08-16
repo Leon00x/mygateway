@@ -1,0 +1,9 @@
+{
+  "name": "mygateway-admin",
+  "version": "0.7.0",
+  "description": "Manage a MyGateway deployment through its Management API.",
+  "entry": "SKILL.md",
+  "download_url": "/skill.md",
+  "manifest_url": "/skill.json",
+  "api_base": "/management/v1"
+}
